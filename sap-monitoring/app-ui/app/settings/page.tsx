@@ -7,16 +7,17 @@ import { Settings } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function SettingsPage() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { font, setFont } = useFont();
   const [mounted, setMounted] = useState(false);
 
+  // Wait for component to mount to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
 
   if (!mounted) {
-    return null;
+    return <div className="min-h-screen bg-background" />; // Show loading state
   }
 
   return (

@@ -150,10 +150,10 @@ export function Sidebar() {
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
-          {!isCollapsed && <div className="text-sm text-muted-foreground mb-4">RetailTech</div>}
+          {!isCollapsed && <div className="text-sm text-muted-foreground mb-4">Demo Sidebar</div>}
 
           <div className="space-y-1 py-2">
-            {!isCollapsed && <div className="text-sm font-medium mb-2">Product Catalogue Maintenance</div>}
+            {!isCollapsed && <div className="text-sm font-medium mb-2">Sidebar</div>}
             <NavItem
               icon={BarChart3}
               label="Dashboard"
@@ -164,14 +164,9 @@ export function Sidebar() {
               <div className="space-y-1 py-1">
                 <div className="max-w-full overflow-hidden">
                   {[
-                    { path: "/dashboard", label: "Product Description Generator" },
-                    { path: "#", label: "Product Attributes Generator" },
-                    { path: "#", label: "Translation & Localization" },
-                    { path: "#", label: "Content Moderation" },
-                    { path: "#", label: "Product Quality Inspection" },
-                    { path: "#", label: "Product Image Enhancer" },
-                    { path: "#", label: "Compliance Validator" },
-                    { path: "#", label: "Generate Product Video" },
+                    { path: "#", label: "Tab 1" },
+                    { path: "#", label: "Tab 2" },
+                    { path: "#", label: "Tab 3" },
                   ].map((item, index) => (
                     <Button
                       key={index}
@@ -185,11 +180,10 @@ export function Sidebar() {
                 </div>
               </div>
             </NavItem>
-            <NavItem icon={Package} label="Product Attributes Generator" isCollapsed={isCollapsed} onExpand={handleExpand} />
           </div>
 
           <div className="space-y-1 py-3">
-            {!isCollapsed && <div className="text-sm font-medium">PRODUCT HIERARCHY</div>}
+            {!isCollapsed && <div className="text-sm font-medium">Menu 2</div>}
             <NavItem icon={Package} label="Products" isCollapsed={isCollapsed} onExpand={handleExpand} />
             <NavItem icon={Grid} label="Subcategories" isCollapsed={isCollapsed} onExpand={handleExpand} />
             <NavItem icon={LayoutGrid} label="Categories" isCollapsed={isCollapsed} onExpand={handleExpand} />
