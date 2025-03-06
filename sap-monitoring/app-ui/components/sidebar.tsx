@@ -21,6 +21,26 @@ import Link from "next/link"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useRouter } from "next/navigation";
 import image from '../public/assets/1.png'
+
+// Add this custom hook at the top level
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = React.useState(false)
+
+  React.useEffect(() => {
+    const media = window.matchMedia(query)
+    const updateMatch = () => setMatches(media.matches)
+    
+    // Initial check
+    updateMatch()
+    
+    // Listen for changes
+    media.addEventListener('change', updateMatch)
+    return () => media.removeEventListener('change', updateMatch)
+  }, [query])
+
+  return matches
+}
+
 interface NavItemProps {
   icon: React.ElementType
   label: string
@@ -100,8 +120,15 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
 }
 
 export function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = React.useState(false)
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [isCollapsed, setIsCollapsed] = React.useState(true) // Default to collapsed
   const router = useRouter();
+
+  // Set initial collapse state based on screen size
+  React.useEffect(() => {
+    setIsCollapsed(isMobile)
+  }, [isMobile])
+
   const handleExpand = () => {
     setIsCollapsed(false)
   }
@@ -111,6 +138,7 @@ export function Sidebar() {
       className={cn(
         "flex h-screen border-r sticky top-0 bg-background transition-all duration-300",
         isCollapsed ? "w-16" : "w-64",
+        "z-50", 
       )}
     >
       <div className="flex w-full flex-col overflow-hidden">
