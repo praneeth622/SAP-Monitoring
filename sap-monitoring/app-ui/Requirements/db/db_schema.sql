@@ -25,6 +25,8 @@ CREATE TABLE systems_dummy (
     polling_status VARCHAR(2) NOT NULL,
     connection_status VARCHAR(2) NOT NULL,
     description TEXT,
+    userID VARCHAR(20) NOT NULL,
+    password VARCHAR(20) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255),
     updated_at TIMESTAMP,
