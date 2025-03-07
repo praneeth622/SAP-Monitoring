@@ -2,6 +2,7 @@
 CREATE TABLE systems (
     ID SERIAL PRIMARY KEY,
     system_id  VARCHAR(4) NOT NULL,
+    client VARCHAR(4) NOT NULL,
     system_name VARCHAR(255) NOT NULL,
     system_url VARCHAR(255) NOT NULL,
     system_type VARCHAR(10) NOT NULL,
