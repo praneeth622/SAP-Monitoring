@@ -36,7 +36,7 @@ CREATE TABLE systems_dummy (
 CREATE TABLE monitoring_kpi (
     id SERIAL PRIMARY KEY,
     system_id VARCHAR(50),
-    client INT,
+    client VARCHAR(4),
     monitoring_area VARCHAR(100),
     kpi_group VARCHAR(100),
     kpi_name VARCHAR(100),
