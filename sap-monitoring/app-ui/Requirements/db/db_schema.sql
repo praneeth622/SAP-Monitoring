@@ -32,6 +32,26 @@ CREATE TABLE systems_dummy (
     updated_at TIMESTAMP,
     updated_by VARCHAR(255)
 );
+
+CREATE TABLE monitoring_kpi (
+    id SERIAL PRIMARY KEY,
+    system_id VARCHAR(50),
+    client VARCHAR(4),
+    monitoring_area VARCHAR(100),
+    kpi_group VARCHAR(100),
+    kpi_name VARCHAR(100),
+    parent_kpi VARCHAR(100),
+    kpi_description TEXT,
+    data_type VARCHAR(50),
+    unit VARCHAR(50),
+    aggregation VARCHAR(50),
+    drilldown BOOLEAN,
+    filter BOOLEAN,
+    second_level_details JSONB,
+    filter_values JSONB,
+    drilldown_condition JSONB
+);
+
 -- Table: Monitoring Areas
 CREATE TABLE monitoring_areas (
     area_id SERIAL PRIMARY KEY,
