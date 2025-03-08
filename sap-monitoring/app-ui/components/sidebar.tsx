@@ -12,6 +12,12 @@ import {
   Settings,
   Users,
   Bell,
+  LayoutTemplate,
+  ChartNetwork,
+  FileWarning,
+  MonitorCog,
+  House,
+  Siren,
 } from "lucide-react"
 import { TbLayoutSidebarLeftCollapse, TbLayoutSidebarRightCollapse } from "react-icons/tb";
 import { cn } from "@/lib/utils"
@@ -50,14 +56,18 @@ interface NavItemProps {
   badge?: number
   isCollapsed?: boolean
   onExpand?: () => void
+  onClick?: () => void
 }
 
-function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, isCollapsed, onExpand }: NavItemProps) {
+function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, isCollapsed, onExpand, onClick }: NavItemProps) {
   const [isOpen, setIsOpen] = React.useState(false)
 
   const handleClick = () => {
     if (isCollapsed && onExpand) {
       onExpand()
+    }
+    if (onClick) {
+      onClick()
     }
   }
 
@@ -67,8 +77,8 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
       className={cn(
         "w-full transition-all duration-200",
         isCollapsible ? "justify-between" : "justify-start",
-        isActive && "bg-accent"
-      )}
+        isActive && "bg-accent text-accent-foreground font-medium",
+      )} 
       onClick={handleClick}
     >
       <div className="flex items-center min-w-0">
@@ -121,12 +131,30 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
 
 export function Sidebar() {
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const [isCollapsed, setIsCollapsed] = React.useState(true) // Default to collapsed
+  // Change the initial state to true (collapsed)
+  const [isCollapsed, setIsCollapsed] = React.useState(true)
   const router = useRouter();
+  const [activeItem, setActiveItem] = React.useState("Dashboard")
+  const [activeSubItem, setActiveSubItem] = React.useState<string>("")
 
-  // Set initial collapse state based on screen size
+  const handleItemClick = (label: string) => {
+    setActiveItem(label)
+    // Remove the auto-expand behavior
+    // if (isCollapsed) {
+    //   handleExpand()
+    // }
+  }
+
+  const handleSubItemClick = (label: string, path: string) => {
+    setActiveSubItem(label)
+    router.push(path)
+  }
+
+  // Update the useEffect to maintain collapsed state except on mobile
   React.useEffect(() => {
-    setIsCollapsed(isMobile)
+    if (isMobile) {
+      setIsCollapsed(true)
+    }
   }, [isMobile])
 
   const handleExpand = () => {
@@ -144,7 +172,7 @@ export function Sidebar() {
       <div className="flex w-full flex-col overflow-hidden">
         <div className={cn("p-4 flex justify-between items-center", isCollapsed && "flex-col items-center")}>
           <div className="flex items-center gap-2 pr-2 mb-2">
-            <div className="relative">
+            {/* <div className="relative">
               {isCollapsed ? (
                 <Image
                   src='/assets/1.png'
@@ -156,7 +184,7 @@ export function Sidebar() {
                 />
               ) : (
                 <Image
-                  src="/assets/2.png"
+                  src="/vercel.svg"
                   alt="Logo2"
                   width={60}
                   height={40}
@@ -164,7 +192,7 @@ export function Sidebar() {
                   priority
                 />
               )}
-            </div>
+            </div> */}
             {!isCollapsed && <span className="font-semibold">QUANTA</span>}
           </div>
           <Button
@@ -177,66 +205,118 @@ export function Sidebar() {
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
-          {!isCollapsed && <div className="text-sm text-muted-foreground mb-4">Demo Sidebar</div>}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar mt-auto">
+          
 
           <div className="space-y-1 py-2">
-            {!isCollapsed && <div className="text-sm font-medium mb-2">Sidebar</div>}
+            {!isCollapsed && <div className="text-sm font-medium">Overview</div>}
+
+            <NavItem 
+              icon={House} 
+              label="Dashboard" 
+              isCollapsed={isCollapsed} 
+              onExpand={handleExpand}
+              isActive={activeItem === "Dashboard"}
+              onClick={() => handleItemClick("Dashboard")}
+            />
+            <NavItem 
+              icon={LayoutTemplate} 
+              label="Templates" 
+              isCollapsed={isCollapsed} 
+              onExpand={handleExpand}
+              isActive={activeItem === "Templates"}
+              onClick={() => handleItemClick("Templates")}
+            />
+            <NavItem 
+              icon={ChartNetwork} 
+              label="System Topology" 
+              isCollapsed={isCollapsed} 
+              onExpand={handleExpand}
+              isActive={activeItem === "System Topology"}
+              onClick={() => handleItemClick("System Topology")}
+            />
+          </div>
+
+          <div className="space-y-1 py-2">
+            {!isCollapsed && <div className="text-sm font-medium mb-2">System Administration</div>}
             <NavItem
-              icon={BarChart3}
-              label="Dashboard"
+              icon={MonitorCog}
+              label="Manage Systems"
               isCollapsible={!isCollapsed}
               isCollapsed={isCollapsed}
               onExpand={handleExpand}
+              isActive={activeItem === "Manage Systems"}
+              onClick={() => handleItemClick("Manage Systems")}
             >
               <div className="space-y-1 py-1">
-                <div className="max-w-full overflow-hidden">
+                <div className="max-w-full overflow-hidden space-y-2">
                   {[
-                    { path: "#", label: "Tab 1" },
-                    { path: "#", label: "Tab 2" },
-                    { path: "#", label: "Tab 3" },
+                  { path: "#", label: "Extarction Config" },
+                  { path: "#", label: "KPI Config" },
+                  { path: "#", label: "Master Filters Config" },
+                  { path: "#", label: "User Access" },
                   ].map((item, index) => (
-                    <Button
-                      key={index}
-                      variant="ghost"
-                      className="w-full justify-start text-sm py-1 px-2 h-auto whitespace-normal text-left"
-                      onClick={() => router.push(item.path)}
-                    >
-                      {item.label}
-                    </Button>
+                  <Button
+                    key={index}
+                    variant="ghost"
+                    className={cn(
+                      "w-full justify-start text-sm py-2 px-2 h-auto whitespace-normal text-left",
+                      activeSubItem === item.label && "bg-accent text-accent-foreground font-medium"
+                    )}
+                    onClick={() => handleSubItemClick(item.label, item.path)}
+                  >
+                    {item.label}
+                  </Button>
                   ))}
                 </div>
               </div>
             </NavItem>
           </div>
 
-          <div className="space-y-1 py-3">
-            {!isCollapsed && <div className="text-sm font-medium">Menu 2</div>}
-            <NavItem icon={Package} label="Products" isCollapsed={isCollapsed} onExpand={handleExpand} />
-            <NavItem icon={Grid} label="Subcategories" isCollapsed={isCollapsed} onExpand={handleExpand} />
-            <NavItem icon={LayoutGrid} label="Categories" isCollapsed={isCollapsed} onExpand={handleExpand} />
-          </div>
-
           <div className="space-y- py-3">
-            {!isCollapsed && <div className="text-sm font-medium">MANAGEMENT</div>}
-            <NavItem icon={Mail} label="Invoices" isCollapsed={isCollapsed} onExpand={handleExpand} />
-            <NavItem icon={Users} label="Team" isCollapsed={isCollapsed} onExpand={handleExpand} />
+            {!isCollapsed && <div className="text-sm font-medium">Alerts</div>}
+
+            <NavItem 
+              icon={Siren} 
+              label="Alert Monitering" 
+              isCollapsed={isCollapsed} 
+              onExpand={handleExpand}
+              isActive={activeItem === "Alert Monitering"}
+              onClick={() => handleItemClick("Alert Monitering")}
+            />
           </div>
         </div>
 
         <div className="border-t p-4 mt-auto">
           <div className="space-y-1">
-            <NavItem icon={Bell} label="Notifications" badge={3} isCollapsed={isCollapsed} onExpand={handleExpand} />
-            <NavItem icon={Settings} label="Settings" isCollapsed={isCollapsed} onExpand={handleExpand} />
+            <NavItem 
+              icon={Bell} 
+              label="Notifications" 
+              badge={3} 
+              isCollapsed={isCollapsed} 
+              onExpand={handleExpand}
+              isActive={activeItem === "Notifications"}
+              onClick={() => handleItemClick("Notifications")}
+            />
+            <NavItem 
+              icon={Settings} 
+              label="Settings" 
+              isCollapsed={isCollapsed} 
+              onExpand={handleExpand}
+              isActive={activeItem === "Settings"}
+              onClick={() => handleItemClick("Settings")}
+            />
           </div>
           {!isCollapsed && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border p-4">
-              <div className="h-8 w-8 rounded-full bg-muted" />
-              <div className="flex-1 truncate">
-                <div className="text-sm font-medium">John Doe</div>
-                <div className="truncate text-xs text-muted-foreground">johndoe@gmail.com</div>
+            <Link href="/profile">
+              <div className="mt-4 flex items-center gap-2 rounded-lg border p-4 cursor-pointer hover:bg-accent">
+                <div className="h-8 w-8 rounded-full bg-muted" />
+                <div className="flex-1 truncate">
+                  <div className="text-sm font-medium">John Doe</div>
+                  <div className="truncate text-xs text-muted-foreground">johndoe@gmail.com</div>
+                </div>
               </div>
-            </div>
+            </Link>
           )}
         </div>
       </div>
