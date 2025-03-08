@@ -78,7 +78,7 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
         "w-full transition-all duration-200",
         isCollapsible ? "justify-between" : "justify-start",
         isActive && "bg-accent text-accent-foreground font-medium",
-      )}
+      )} 
       onClick={handleClick}
     >
       <div className="flex items-center min-w-0">
@@ -131,16 +131,18 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
 
 export function Sidebar() {
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const [isCollapsed, setIsCollapsed] = React.useState(true) // Default to collapsed
+  // Change the initial state to true (collapsed)
+  const [isCollapsed, setIsCollapsed] = React.useState(true)
   const router = useRouter();
   const [activeItem, setActiveItem] = React.useState("Dashboard")
   const [activeSubItem, setActiveSubItem] = React.useState<string>("")
 
   const handleItemClick = (label: string) => {
     setActiveItem(label)
-    if (isCollapsed) {
-      handleExpand()
-    }
+    // Remove the auto-expand behavior
+    // if (isCollapsed) {
+    //   handleExpand()
+    // }
   }
 
   const handleSubItemClick = (label: string, path: string) => {
@@ -148,9 +150,11 @@ export function Sidebar() {
     router.push(path)
   }
 
-  // Set initial collapse state based on screen size
+  // Update the useEffect to maintain collapsed state except on mobile
   React.useEffect(() => {
-    setIsCollapsed(isMobile)
+    if (isMobile) {
+      setIsCollapsed(true)
+    }
   }, [isMobile])
 
   const handleExpand = () => {
@@ -168,7 +172,7 @@ export function Sidebar() {
       <div className="flex w-full flex-col overflow-hidden">
         <div className={cn("p-4 flex justify-between items-center", isCollapsed && "flex-col items-center")}>
           <div className="flex items-center gap-2 pr-2 mb-2">
-            <div className="relative">
+            {/* <div className="relative">
               {isCollapsed ? (
                 <Image
                   src='/assets/1.png'
@@ -180,7 +184,7 @@ export function Sidebar() {
                 />
               ) : (
                 <Image
-                  src="/assets/2.png"
+                  src="/vercel.svg"
                   alt="Logo2"
                   width={60}
                   height={40}
@@ -188,7 +192,7 @@ export function Sidebar() {
                   priority
                 />
               )}
-            </div>
+            </div> */}
             {!isCollapsed && <span className="font-semibold">QUANTA</span>}
           </div>
           <Button
@@ -304,13 +308,15 @@ export function Sidebar() {
             />
           </div>
           {!isCollapsed && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border p-4">
-              <div className="h-8 w-8 rounded-full bg-muted" />
-              <div className="flex-1 truncate">
-                <div className="text-sm font-medium">John Doe</div>
-                <div className="truncate text-xs text-muted-foreground">johndoe@gmail.com</div>
+            <Link href="/profile">
+              <div className="mt-4 flex items-center gap-2 rounded-lg border p-4 cursor-pointer hover:bg-accent">
+                <div className="h-8 w-8 rounded-full bg-muted" />
+                <div className="flex-1 truncate">
+                  <div className="text-sm font-medium">John Doe</div>
+                  <div className="truncate text-xs text-muted-foreground">johndoe@gmail.com</div>
+                </div>
               </div>
-            </div>
+            </Link>
           )}
         </div>
       </div>
