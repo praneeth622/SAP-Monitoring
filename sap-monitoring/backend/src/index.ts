@@ -1,8 +1,7 @@
 import express from 'express';
-import systemRoutes from './routes/systemRoutes';
-import kpiRoutes from './routes/kpiRoutes';
-import monitoringAreaRoutes from './routes/monitoringAreaRoutes';
-import kpiGroupRoutes from './routes/kpiGroupRoutes';
+import systemValidationRoutes from './routes/systemValidationRoutes';
+import systemStatsRoutes from './routes/systemStatsRoutes';
+import systemListRoutes from './routes/systemListRoutes';
 
 const app = express();
 
@@ -10,10 +9,9 @@ const app = express();
 app.use(express.json());
 
 // Use routes for different API models
-app.use('/api', systemRoutes);
-app.use('/api', kpiRoutes);
-app.use('/api', monitoringAreaRoutes);
-app.use('/api', kpiGroupRoutes);
+app.use('/api', systemValidationRoutes);
+app.use('/api', systemStatsRoutes);
+app.use('/api', systemListRoutes);
 
 // Default route
 app.get('/', (req, res) => {
