@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+model System {
+  id              Int       @id @default(autoincrement())
+  system_id       String    @db.VarChar(4)
+  client          String    @db.VarChar(4)
+  system_name     String    @db.VarChar(255)
+  system_url      String    @db.VarChar(255)
+  system_type     String    @db.VarChar(10)
+  polling_status  String    @db.VarChar(2)
+  connection_status String  @db.VarChar(2)
+  description     String?   @db.Text
+  created_at      DateTime  @default(now())
+  created_by      String?   @db.VarChar(255)
+  updated_at      DateTime?
+  updated_by      String?   @db.VarChar(255)
+  
+  monitoring_areas MonitoringArea[]
+  kpi_groups       KpiGroup[]
+  kpis             Kpi[]
+}
+
+model SystemDummy {
+  id              Int       @id @default(autoincrement())
+  system_id       String    @db.VarChar(4)
+  client          String    @db.VarChar(4)
+  system_name     String    @db.VarChar(255)
+  system_url      String    @db.VarChar(255)
+  system_type     String    @db.VarChar(10)
+  polling_status  String    @db.VarChar(2)
+  connection_status String  @db.VarChar(2)
+  description     String?   @db.Text
+  userID          String    @db.VarChar(20)
+  password        String    @db.VarChar(20)
+  created_at      DateTime  @default(now())
+  created_by      String?   @db.VarChar(255)
+  updated_at      DateTime?
+  updated_by      String?   @db.VarChar(255)
+}
+
+model KpiGroup {
+  group_id   Int      @id @default(autoincrement())
+  area_id    Int
+  ID         Int      // Change from String to Int
+  group_name String   @db.VarChar(255)
+  description String?  @db.Text
+  created_at  DateTime @default(now())
+  created_by  String?  @db.VarChar(255)
+  updated_at  DateTime?
+  updated_by  String?  @db.VarChar(255)
+  
+  area        MonitoringArea @relation(fields: [area_id], references: [area_id])
+  system      System         @relation(fields: [ID], references: [id])
+  kpis        Kpi[]
+  
+  @@unique([area_id, group_name])
+}
+
+model MonitoringArea {
+  area_id        Int       @id @default(autoincrement())
+  ID             Int       // Change from String to Int
+  area_name      String    @db.VarChar(255)
+  description    String?   @db.Text
+  created_at     DateTime  @default(now())
+  created_by     String?   @db.VarChar(255)
+  updated_at     DateTime?
+  updated_by     String?   @db.VarChar(255)
+
+  system         System    @relation(fields: [ID], references: [id]) // Use ID as Int to match System's id type
+  kpi_groups     KpiGroup[]
+  kpis           Kpi[]     // Relation to Kpi
+  
+  @@unique([ID, area_name])
+}
+
+model Kpi {
+  kpi_id    Int      @id @default(autoincrement())
+  group_id  Int
+  area_id   Int
+  ID        Int      // Change from String to Int
+  kpi_name  String   @db.VarChar(255)
+  unit      String?  @db.VarChar(50)
+  description String? @db.Text
+  created_at DateTime @default(now())
+  created_by String?  @db.VarChar(255)
+  updated_at DateTime?
+  updated_by String?  @db.VarChar(255)
+
+  group      KpiGroup    @relation(fields: [group_id], references: [group_id])
+  area       MonitoringArea @relation(fields: [area_id], references: [area_id])
+  system     System      @relation(fields: [ID], references: [id])
+
+  @@unique([group_id, kpi_name])
+}
