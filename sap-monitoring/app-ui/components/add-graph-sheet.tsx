@@ -42,6 +42,20 @@ interface KPIHierarchy {
 interface AddGraphSheetProps {
   template: Template;
   onClose: () => void;
+  onAddGraph: (graphData: {
+    name: string;
+    type: 'line' | 'bar';
+    monitoringArea: string;
+    kpiGroup: string;
+    primaryKpi: string;
+    correlationKpis: string[];
+    layout: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    };
+  }) => void;
 }
 
 interface FormData {
@@ -55,7 +69,7 @@ interface FormData {
   graphName: string;
 }
 
-const AddGraphSheet: React.FC<AddGraphSheetProps> = ({ template, onClose }) => {
+const AddGraphSheet: React.FC<AddGraphSheetProps> = ({ template, onClose, onAddGraph }) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [kpiHierarchy, setKpiHierarchy] = useState<KPIHierarchy>({});
@@ -152,7 +166,32 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({ template, onClose }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Graph configuration:', formData);
+    
+    if (!formData.graphName || !formData.monitoringArea || !formData.kpiGroup || !formData.kpi) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in all required fields',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Pass the graph data back to parent
+    onAddGraph({
+      name: formData.graphName,
+      type: formData.graphType as 'line' | 'bar',
+      monitoringArea: formData.monitoringArea,
+      kpiGroup: formData.kpiGroup,
+      primaryKpi: formData.kpi,
+      correlationKpis: formData.correlationKpis.filter(kpi => kpi),
+      layout: {
+        x: 0,
+        y: 0,
+        w: 4,
+        h: 4
+      }
+    });
+
     onClose();
   };
 

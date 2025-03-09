@@ -27,8 +27,11 @@ interface DraggableChartProps {
   width: number;
   height: number;
   activeKPIs: Set<string>;
-  kpiColors: Record<string, { color: string; name: string; icon: any }>;
-  globalDateRange: DateRange | undefined;
+  kpiColors: Record<string, { 
+    color: string;
+    name: string;
+  }>;
+  globalDateRange?: DateRange;
 }
 
 export function DraggableChart({
@@ -40,7 +43,7 @@ export function DraggableChart({
   width,
   height,
   activeKPIs,
-  kpiColors,
+  kpiColors = {}, // Provide default empty object
   globalDateRange,
 }: DraggableChartProps) {
   const [chartType, setChartType] = useState<ChartType>(type);
@@ -129,6 +132,9 @@ export function DraggableChart({
   };
 
   const effectiveDateRange = useGlobalDate ? globalDateRange : localDateRange;
+
+  // Add this check before rendering KPI toggles
+  const hasKpis = kpiColors && Object.keys(kpiColors).length > 0;
 
   return (
     <>
@@ -260,29 +266,29 @@ export function DraggableChart({
             )}
 
             {/* Parameters Toggle */}
-            <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-xl border border-border/40">
-              {Object.entries(kpiColors).map(([kpiId, kpi]) => {
-                const Icon = kpi.icon;
-                return (
-                  <button
-                    key={kpiId}
-                    onClick={() => toggleKPI(kpiId)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${
-                      localActiveKPIs.has(kpiId)
-                        ? 'bg-accent/70 text-accent-foreground shadow-lg hover:shadow-xl'
-                        : 'text-muted-foreground hover:bg-accent/40 hover:shadow-md'
-                    }`}
-                    style={{
-                      color: localActiveKPIs.has(kpiId) ? kpi.color : undefined
-                    }}
-                    title={`Toggle ${kpi.name}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="text-xs font-medium">{kpi.name}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {hasKpis && (
+              <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-xl border border-border/40">
+                {Object.entries(kpiColors).map(([kpiId, kpi]) => {
+                  return (
+                    <button
+                      key={kpiId}
+                      onClick={() => toggleKPI(kpiId)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${
+                        localActiveKPIs.has(kpiId)
+                          ? 'bg-accent/70 text-accent-foreground shadow-lg hover:shadow-xl'
+                          : 'text-muted-foreground hover:bg-accent/40 hover:shadow-md'
+                      }`}
+                      style={{
+                        color: localActiveKPIs.has(kpiId) ? kpi.color : undefined
+                      }}
+                      title={`Toggle ${kpi.name}`}
+                    >
+                      <span className="text-xs font-medium">{kpi.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Chart Container */}
             <motion.div 

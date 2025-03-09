@@ -10,10 +10,12 @@ import AddGraphSheet from "@/components/add-graph-sheet"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {Sidebar} from "@/components/sidebar"
+import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { DynamicLayout } from "@/components/charts/DynamicLayout"
 import ChartContainer from "@/components/charts/ChartContainer"
+// Add this import
+import { generateDummyData, type DataPoint } from "@/utils/data"
 
 interface Template {
   id: string;
@@ -41,6 +43,9 @@ interface Graph {
     w: number;
     h: number;
   };
+  activeKPIs: Set<string>;
+  kpiColors: Record<string, { color: string; name: string }>;
+  data?: DataPoint[];
 }
 
 const timeRangeOptions = [
@@ -112,17 +117,26 @@ export default function TemplatesPage() {
         title: "Required Fields Missing",
         description: "Please fill in all required fields before proceeding.",
         variant: "destructive"
-      })
-      return
+      });
+      return;
+    }
+
+    if (graphs.length >= 9) {
+      toast({
+        title: "Error",
+        description: "Maximum 9 graphs allowed per template",
+        variant: "destructive"
+      });
+      return;
     }
 
     setSelectedTemplate({
       id: Date.now().toString(),
       ...templateData,
       graphs
-    })
-    setIsAddGraphSheetOpen(true)
-  }
+    });
+    setIsAddGraphSheetOpen(true);
+  };
 
   const handleSaveTemplate = async () => {
     if (!validateFields() || graphs.length === 0) {
@@ -130,8 +144,8 @@ export default function TemplatesPage() {
         title: "Error",
         description: "Please add at least one graph to the template",
         variant: "destructive"
-      })
-      return
+      });
+      return;
     }
 
     try {
@@ -176,45 +190,74 @@ export default function TemplatesPage() {
     }
   };
 
-  const handleAddGraphToTemplate = (graph: Graph) => {
-    setGraphs(prev => [...prev, {
-      ...graph,
+  const handleAddGraphToTemplate = (graphData: Graph) => {
+    // Create initial KPI list including primary and correlation KPIs
+    const allKPIs = [graphData.primaryKpi, ...graphData.correlationKpis].map(kpi => kpi.toLowerCase());
+    const activeKPIs = new Set(allKPIs);
+
+    // Generate colors for KPIs
+    const kpiColors = allKPIs.reduce((acc, kpi, index) => ({
+      ...acc,
+      [kpi]: {
+        color: `hsl(${index * (360 / allKPIs.length)}, 70%, 50%)`,
+        name: kpi
+      }
+    }), {});
+
+    const newGraph = {
+      ...graphData,
       id: `graph-${Date.now()}`,
+      activeKPIs, // Pass the initialized Set
+      kpiColors,  // Pass the initialized colors
       layout: {
-        x: (prev.length * 4) % 12,
-        y: Math.floor(prev.length / 3) * 4,
+        x: (graphs.length * 4) % 12,
+        y: Math.floor(graphs.length / 3) * 4,
         w: 4,
         h: 4
       }
-    }]);
+    };
+
+    setGraphs(prev => [...prev, newGraph]);
     setShowGraphs(true);
     setIsAddGraphSheetOpen(false);
 
+    toast({
+      title: "Success",
+      description: "Graph added successfully"
+    });
+
     // Update active KPIs and colors
     setActiveKPIs(prev => {
-      const newSet = new Set(prev)
-      newSet.add(graph.primaryKpi)
-      graph.correlationKpis.forEach(kpi => newSet.add(kpi))
-      return newSet
-    })
+      const newSet = new Set(prev);
+      newSet.add(graphData.primaryKpi);
+      graphData.correlationKpis.forEach(kpi => newSet.add(kpi));
+      return newSet;
+    });
 
     // Assign colors to new KPIs
-    const newColors = { ...kpiColors }
-    if (!newColors[graph.primaryKpi]) {
-      newColors[graph.primaryKpi] = {
-        color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
-        name: graph.primaryKpi
-      }
-    }
-    graph.correlationKpis.forEach(kpi => {
-      if (!newColors[kpi]) {
-        newColors[kpi] = {
+    setKpiColors(prev => {
+      const newColors = { ...prev };
+
+      // Add primary KPI color if not exists
+      if (!newColors[graphData.primaryKpi]) {
+        newColors[graphData.primaryKpi] = {
           color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
-          name: kpi
-        }
+          name: graphData.primaryKpi
+        };
       }
-    })
-    setKpiColors(newColors)
+
+      // Add correlation KPI colors if not exists
+      graphData.correlationKpis.forEach(kpi => {
+        if (!newColors[kpi]) {
+          newColors[kpi] = {
+            color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
+            name: kpi
+          };
+        }
+      });
+
+      return newColors;
+    });
   };
 
   return (
@@ -359,10 +402,10 @@ export default function TemplatesPage() {
                       title: graph.name,
                       data: [], // You'll need to fetch actual data here
                       width: graph.layout.w * 100,
-                      height: graph.layout.h * 100,
-                      activeKPIs: activeKPIs,
-                      kpiColors: kpiColors
+                      height: graph.layout.h * 100
                     }))}
+                    activeKPIs={activeKPIs}
+                    kpiColors={kpiColors || {}}
                   />
                   <Card 
                     className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
@@ -405,6 +448,7 @@ export default function TemplatesPage() {
               <AddGraphSheet
                 template={selectedTemplate}
                 onClose={() => setIsAddGraphSheetOpen(false)}
+                onAddGraph={handleAddGraphToTemplate}
               />
             )}
           </Sheet>
