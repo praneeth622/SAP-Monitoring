@@ -1,18 +1,17 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Plus, Search, Star, StarOff, BarChart2, LineChart } from "lucide-react"
+import { Plus, Search, Star, StarOff } from "lucide-react"
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import Sheet from "@/components/sheet"
+import AddGraphSheet from "@/components/add-graph-sheet"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import Sidebar from "@/components/sidebar"
+import {Sidebar} from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
-import { DynamicLayout } from "@/components/charts/DynamicLayout"
-import { generateTimeSeriesData } from "@/utils/data"
 
 interface Template {
   id: string;
@@ -22,14 +21,6 @@ interface Template {
   resolution: string;
   isDefault: boolean;
   isFavorite: boolean;
-}
-
-interface Graph {
-  id: string;
-  name: string;
-  type: 'line' | 'bar';
-  kpis: string[];
-  data: any[];
 }
 
 const timeRangeOptions = [
@@ -45,13 +36,6 @@ const timeRangeOptions = [
 
 const systemOptions = ['SVW', 'System 1', 'System 2'];
 
-const kpiOptions = [
-  { id: 'revenue', name: 'Revenue', color: '#3B82F6' },
-  { id: 'users', name: 'Users', color: '#8B5CF6' },
-  { id: 'orders', name: 'Orders', color: '#10B981' },
-  { id: 'conversion', name: 'Conversion', color: '#F59E0B' }
-];
-
 export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
@@ -64,12 +48,6 @@ export default function TemplatesPage() {
     isDefault: false,
     isFavorite: false
   })
-  const [graphData, setGraphData] = useState({
-    name: "",
-    type: "line" as 'line' | 'bar',
-    kpis: [] as string[]
-  })
-  const [graphs, setGraphs] = useState<Graph[]>([])
   const [errors, setErrors] = useState<Record<string, boolean>>({})
   const { toast } = useToast()
 
@@ -85,7 +63,7 @@ export default function TemplatesPage() {
   }
 
   const handleAddGraph = () => {
-    if (!graphData.name.trim() || graphData.kpis.length === 0) {
+    if (!validateFields()) {
       toast({
         title: "Required Fields Missing",
         description: "Please fill in all required fields before proceeding.",
@@ -94,27 +72,16 @@ export default function TemplatesPage() {
       return
     }
 
-    const newGraph: Graph = {
+    setSelectedTemplate({
       id: Date.now().toString(),
-      name: graphData.name,
-      type: graphData.type,
-      kpis: graphData.kpis,
-      data: generateTimeSeriesData(30) // Generate 30 days of sample data
-    }
-
-    setGraphs(prev => [...prev, newGraph])
-    setIsAddGraphSheetOpen(false)
-    setGraphData({ name: "", type: "line", kpis: [] })
-
-    toast({
-      title: "Graph Added",
-      description: "The new graph has been successfully added to your template.",
+      ...templateData
     })
+    setIsAddGraphSheetOpen(true)
   }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
-      <Sidebar />
+      {/* <Sidebar /> */}
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto px-8 py-6">
           <motion.div
@@ -247,7 +214,7 @@ export default function TemplatesPage() {
             >
               <Card 
                 className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
-                onClick={() => setIsAddGraphSheetOpen(true)}
+                onClick={handleAddGraph}
               >
                 <div className="flex flex-col items-center justify-center py-8">
                   <Plus className="w-12 h-12 text-muted-foreground mb-4" />
@@ -256,130 +223,22 @@ export default function TemplatesPage() {
                 </div>
               </Card>
             </motion.div>
-
-            {graphs.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mt-8 grid gap-6"
-              >
-                <DynamicLayout
-                  charts={graphs.map(graph => ({
-                    id: graph.id,
-                    title: graph.name,
-                    type: graph.type,
-                    data: graph.data,
-                    width: 400,
-                    height: 400
-                  }))}
-                  activeKPIs={new Set(graphs.flatMap(g => g.kpis))}
-                  kpiColors={Object.fromEntries(
-                    kpiOptions.map(kpi => [
-                      kpi.id,
-                      {
-                        name: kpi.name,
-                        color: kpi.color,
-                        icon: kpi.id === 'revenue' ? DollarSign :
-                              kpi.id === 'users' ? Users :
-                              Star
-                      }
-                    ])
-                  )}
-                  globalDateRange={undefined}
-                  fullscreenChartId={null}
-                  setFullscreenChartId={() => {}}
-                />
-              </motion.div>
-            )}
           </motion.div>
 
           <Sheet
             isOpen={isAddGraphSheetOpen}
             onClose={() => setIsAddGraphSheetOpen(false)}
-            title="Add Graph"
+            title="Add Graph from Template"
           >
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-foreground/90 mb-2">
-                  Graph Name <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  value={graphData.name}
-                  onChange={(e) => setGraphData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Enter graph name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground/90 mb-2">
-                  Graph Type
-                </label>
-                <div className="flex gap-4">
-                  <Button
-                    variant={graphData.type === 'line' ? 'default' : 'outline'}
-                    className="flex-1 gap-2"
-                    onClick={() => setGraphData(prev => ({ ...prev, type: 'line' }))}
-                  >
-                    <LineChart className="w-4 h-4" />
-                    Line Chart
-                  </Button>
-                  <Button
-                    variant={graphData.type === 'bar' ? 'default' : 'outline'}
-                    className="flex-1 gap-2"
-                    onClick={() => setGraphData(prev => ({ ...prev, type: 'bar' }))}
-                  >
-                    <BarChart2 className="w-4 h-4" />
-                    Bar Chart
-                  </Button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground/90 mb-2">
-                  Select KPIs (1-4) <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {kpiOptions.map(kpi => (
-                    <Button
-                      key={kpi.id}
-                      variant={graphData.kpis.includes(kpi.id) ? 'default' : 'outline'}
-                      className="w-full justify-start gap-2"
-                      onClick={() => {
-                        setGraphData(prev => ({
-                          ...prev,
-                          kpis: prev.kpis.includes(kpi.id)
-                            ? prev.kpis.filter(k => k !== kpi.id)
-                            : prev.kpis.length < 4
-                              ? [...prev.kpis, kpi.id]
-                              : prev.kpis
-                        }))
-                      }}
-                    >
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: kpi.color }}
-                      />
-                      {kpi.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-4 pt-6 border-t border-border">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsAddGraphSheetOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={handleAddGraph}>
-                  Add Graph
-                </Button>
-              </div>
-            </div>
+            {selectedTemplate && (
+              <AddGraphSheet
+                template={selectedTemplate}
+                onClose={() => setIsAddGraphSheetOpen(false)}
+              />
+            )}
           </Sheet>
         </div>
       </main>
     </div>
-  );
+  )
 }
