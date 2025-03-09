@@ -27,6 +27,7 @@ interface DraggableChartProps {
   width: number;
   height: number;
   activeKPIs: Set<string>;
+  initialActiveKPIs?: Set<string>;  // Add this new prop
   kpiColors: Record<string, { 
     color: string;
     name: string;
@@ -43,11 +44,14 @@ export function DraggableChart({
   width,
   height,
   activeKPIs,
+  initialActiveKPIs,  // Add this new prop
   kpiColors = {}, // Provide default empty object
   globalDateRange,
 }: DraggableChartProps) {
   const [chartType, setChartType] = useState<ChartType>(type);
-  const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(activeKPIs);
+  const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(
+    initialActiveKPIs || new Set()
+  );
   const [localDateRange, setLocalDateRange] = useState<DateRange | undefined>(undefined);
   const [useGlobalDate, setUseGlobalDate] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -63,10 +67,6 @@ export function DraggableChart({
     transition,
     isDragging
   } = useSortable({ id });
-
-  useEffect(() => {
-    setLocalActiveKPIs(activeKPIs);
-  }, [activeKPIs]);
 
   useEffect(() => {
     const handleResize = () => {

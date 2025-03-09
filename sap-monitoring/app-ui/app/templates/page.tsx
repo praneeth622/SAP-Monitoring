@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import { DynamicLayout } from "@/components/charts/DynamicLayout"
 import ChartContainer from "@/components/charts/ChartContainer"
 // Add this import
-import { generateDummyData, type DataPoint } from "@/utils/data"
+import { generateDummyData } from "@/utils/data"
 
 interface Template {
   id: string;
@@ -45,7 +45,6 @@ interface Graph {
   };
   activeKPIs: Set<string>;
   kpiColors: Record<string, { color: string; name: string }>;
-  data?: DataPoint[];
 }
 
 const timeRangeOptions = [
@@ -191,24 +190,39 @@ export default function TemplatesPage() {
   };
 
   const handleAddGraphToTemplate = (graphData: Graph) => {
-    // Create initial KPI list including primary and correlation KPIs
-    const allKPIs = [graphData.primaryKpi, ...graphData.correlationKpis].map(kpi => kpi.toLowerCase());
-    const activeKPIs = new Set(allKPIs);
+    if (graphs.length >= 9) {
+      toast({
+        title: "Error",
+        description: "Maximum 9 graphs allowed per template",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    // Generate colors for KPIs
-    const kpiColors = allKPIs.reduce((acc, kpi, index) => ({
-      ...acc,
-      [kpi]: {
-        color: `hsl(${index * (360 / allKPIs.length)}, 70%, 50%)`,
+    const newKpiColors: Record<string, { color: string; name: string }> = {};
+    const newActiveKPIs = new Set<string>();
+
+    // Add primary KPI
+    newActiveKPIs.add(graphData.primaryKpi);
+    newKpiColors[graphData.primaryKpi] = {
+      color: `hsl(${Object.keys(newKpiColors).length * 60}, 70%, 50%)`,
+      name: graphData.primaryKpi
+    };
+
+    // Add correlation KPIs
+    graphData.correlationKpis.forEach(kpi => {
+      newActiveKPIs.add(kpi);
+      newKpiColors[kpi] = {
+        color: `hsl(${Object.keys(newKpiColors).length * 60}, 70%, 50%)`,
         name: kpi
-      }
-    }), {});
+      };
+    });
 
     const newGraph = {
       ...graphData,
       id: `graph-${Date.now()}`,
-      activeKPIs, // Pass the initialized Set
-      kpiColors,  // Pass the initialized colors
+      activeKPIs: newActiveKPIs,
+      kpiColors: newKpiColors,
       layout: {
         x: (graphs.length * 4) % 12,
         y: Math.floor(graphs.length / 3) * 4,
@@ -220,44 +234,6 @@ export default function TemplatesPage() {
     setGraphs(prev => [...prev, newGraph]);
     setShowGraphs(true);
     setIsAddGraphSheetOpen(false);
-
-    toast({
-      title: "Success",
-      description: "Graph added successfully"
-    });
-
-    // Update active KPIs and colors
-    setActiveKPIs(prev => {
-      const newSet = new Set(prev);
-      newSet.add(graphData.primaryKpi);
-      graphData.correlationKpis.forEach(kpi => newSet.add(kpi));
-      return newSet;
-    });
-
-    // Assign colors to new KPIs
-    setKpiColors(prev => {
-      const newColors = { ...prev };
-
-      // Add primary KPI color if not exists
-      if (!newColors[graphData.primaryKpi]) {
-        newColors[graphData.primaryKpi] = {
-          color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
-          name: graphData.primaryKpi
-        };
-      }
-
-      // Add correlation KPI colors if not exists
-      graphData.correlationKpis.forEach(kpi => {
-        if (!newColors[kpi]) {
-          newColors[kpi] = {
-            color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
-            name: kpi
-          };
-        }
-      });
-
-      return newColors;
-    });
   };
 
   return (
@@ -400,12 +376,12 @@ export default function TemplatesPage() {
                       id: graph.id!,
                       type: graph.type,
                       title: graph.name,
-                      data: [], // You'll need to fetch actual data here
+                      data: generateDummyData([graph.primaryKpi, ...graph.correlationKpis]),
                       width: graph.layout.w * 100,
-                      height: graph.layout.h * 100
+                      height: graph.layout.h * 100,
+                      activeKPIs: graph.activeKPIs,
+                      kpiColors: graph.kpiColors
                     }))}
-                    activeKPIs={activeKPIs}
-                    kpiColors={kpiColors || {}}
                   />
                   <Card 
                     className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
