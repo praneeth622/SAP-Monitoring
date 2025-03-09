@@ -99,3 +99,294 @@
 
 }
 
+
+/* Grid Layout styles */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: rgba(0, 0, 0, 0.1);
+  border: 2px dashed rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius);
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  background: none;
+  opacity: 0;
+  cursor: se-resize;
+  transition: opacity 0.2s ease;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(0, 0, 0, 0.4);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.4);
+}
+
+.dark .react-grid-item > .react-resizable-handle::after {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.dark .react-grid-item.react-grid-placeholder {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Chart animations */
+.chart-enter {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.chart-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.chart-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.chart-exit-active {
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* KPI card hover effects */
+.kpi-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+}
+
+.kpi-card.selected {
+  box-shadow: 0 0 0 2px theme('colors.blue.500'),
+              0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Chart container styles */
+.chart-container {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: theme('borderRadius.xl');
+  background: theme('colors.white');
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
+              0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.dark .chart-container {
+  background: theme('colors.slate.800');
+}
+
+.chart-container:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Chart tooltips */
+.echarts-tooltip {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  padding: 0.75rem !important;
+}
+
+.dark .echarts-tooltip {
+  background: rgba(30, 41, 59, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Chart wrapper styles */
+.chart-wrapper {
+  height: 100%;
+  width: 100%;
+  transition: transform 0.2s ease;
+}
+
+.chart-wrapper:hover {
+  transform: translateY(-2px);
+}
+
+/* Fullscreen mode styles */
+.fullscreen-chart {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 50 !important;
+  background-color: hsl(var(--background));
+  transition: all 0.3s ease-in-out;
+}
+
+.fullscreen-chart .chart-container {
+  height: 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+}
+
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: hsl(var(--background) / 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.fullscreen-overlay.active {
+  opacity: 1;
+}
+
+.fullscreen-chart .chart-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 51;
+  display: flex;
+  gap: 0.5rem;
+  background-color: hsl(var(--background) / 0.8);
+  backdrop-filter: blur(8px);
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+}
+
+/* Transition animations */
+.fullscreen-enter {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.fullscreen-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.fullscreen-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.fullscreen-exit-active {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* Parameter styles */
+.parameter-button {
+  @apply flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-medium text-sm;
+  @apply hover:shadow-md transform hover:-translate-y-0.5;
+}
+
+.parameter-button.active {
+  @apply shadow-lg;
+}
+
+.parameter-button:not(.active) {
+  @apply bg-muted/30 text-muted-foreground hover:bg-muted/50;
+}
+
+/* Dashboard layout improvements */
+.dashboard-container {
+  @apply container mx-auto px-4 sm:px-6 lg:px-8 py-6;
+}
+
+.dashboard-header {
+  @apply mb-8 space-y-2;
+}
+
+.dashboard-title {
+  @apply text-4xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight;
+}
+
+.dashboard-subtitle {
+  @apply text-muted-foreground/90 text-lg;
+}
+
+.controls-card {
+  @apply p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl rounded-xl mb-8;
+}
+
+.controls-header {
+  @apply flex items-center justify-between mb-6;
+}
+
+.controls-title {
+  @apply text-lg font-semibold text-foreground/90;
+}
+
+.parameters-container {
+  @apply flex flex-wrap gap-3;
+}
+
+/* Chart grid improvements */
+.chart-grid {
+  @apply grid gap-6;
+}
+
+.chart-card {
+  @apply backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl rounded-xl overflow-hidden;
+  @apply transition-all duration-300 hover:shadow-2xl;
+}
+
+.chart-header {
+  @apply flex items-center justify-between p-4 border-b border-border/40;
+}
+
+.chart-title {
+  @apply text-lg font-semibold text-foreground/90;
+}
+
+.chart-actions {
+  @apply flex items-center gap-2;
+}

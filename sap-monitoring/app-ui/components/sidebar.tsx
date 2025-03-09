@@ -59,6 +59,7 @@ interface NavItemProps {
   onClick?: () => void
 }
 
+// Update the NavItem button styles
 function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, isCollapsed, onExpand, onClick }: NavItemProps) {
   const [isOpen, setIsOpen] = React.useState(false)
 
@@ -75,15 +76,19 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
     <Button
       variant="ghost"
       className={cn(
-        "w-full transition-all duration-200",
-        isCollapsible ? "justify-between" : "justify-start",
+        "w-full transition-all duration-200 flex items-center",
+        isCollapsible ? "justify-between" : isCollapsed ? "justify-center" : "justify-start", // Add center alignment
         isActive && "bg-accent text-accent-foreground font-medium",
+        "hover:bg-accent/50" // Add hover effect
       )} 
       onClick={handleClick}
     >
-      <div className="flex items-center min-w-0">
-        <Icon className="h-4 w-4 flex-shrink-0" />
-        {!isCollapsed && <span className="ml-2 truncate">{label}</span>}
+      <div className={cn(
+        "flex items-center min-w-0",
+        isCollapsed && "justify-center w-full" // Center icon when collapsed
+      )}>
+        <Icon className="h-5 w-5 flex-shrink-0" /> {/* Slightly larger icons */}
+        {!isCollapsed && <span className="ml-3 truncate">{label}</span>}
       </div>
       {isCollapsible && !isCollapsed && (
         <ChevronDown className={cn("h-4 w-4 flex-shrink-0 transition-transform", isOpen && "rotate-180")} />
@@ -137,17 +142,39 @@ export function Sidebar() {
   const [activeItem, setActiveItem] = React.useState("Dashboard")
   const [activeSubItem, setActiveSubItem] = React.useState<string>("")
 
+  // Update the handleItemClick function
   const handleItemClick = (label: string) => {
     setActiveItem(label)
-    // Remove the auto-expand behavior
-    // if (isCollapsed) {
-    //   handleExpand()
-    // }
+    // Add proper routing based on label
+    switch (label) {
+      case "Dashboard":
+        router.push('/dashboard')
+        break
+      case "Templates":
+        router.push('/templates')
+        break
+      case "Manage Systems":
+        router.push('/manage-systems')
+        break
+      case "System Topology":
+        router.push('/system-topology')
+        break
+      case "Alert Monitering":
+        router.push('/alert-monitoring')
+        break
+      default:
+        break
+    }
   }
 
+  // Update the handleSubItemClick function
   const handleSubItemClick = (label: string, path: string) => {
     setActiveSubItem(label)
-    router.push(path)
+    if (label === "Add Systems") {
+      router.push('/manage-systems')
+    } else {
+      router.push(path)
+    }
   }
 
   // Update the useEffect to maintain collapsed state except on mobile
@@ -166,128 +193,131 @@ export function Sidebar() {
       className={cn(
         "flex h-screen border-r sticky top-0 bg-background transition-all duration-300",
         isCollapsed ? "w-16" : "w-64",
-        "z-50", 
+        "z-50 shadow-md", // Add shadow for better depth
       )}
     >
       <div className="flex w-full flex-col overflow-hidden">
-        <div className={cn("p-4 flex justify-between items-center", isCollapsed && "flex-col items-center")}>
-          <div className="flex items-center gap-2 pr-2 mb-2">
-            {/* <div className="relative">
-              {isCollapsed ? (
-                <Image
-                  src='/assets/1.png'
-                  alt="Logo"
-                  width={30}
-                  height={10}
-                  className="object-contain"
-                  priority
-                />
-              ) : (
-                <Image
-                  src="/vercel.svg"
-                  alt="Logo2"
-                  width={60}
-                  height={40}
-                  className="object-contain"
-                  priority
-                />
-              )}
-            </div> */}
-            {!isCollapsed && <span className="font-semibold">QUANTA</span>}
+        {/* Update header styles */}
+        <div className={cn(
+          "p-4 flex items-center border-b",
+          isCollapsed ? "justify-center" : "justify-between"
+        )}>
+          <div className={cn(
+            "flex items-center gap-2",
+            isCollapsed && "justify-center w-full"
+          )}>
+            {/* Logo section */}
+            <div className="relative flex items-center">
+              <span className={cn(
+                "font-bold text-lg transition-all duration-300",
+                isCollapsed ? "scale-0 w-0" : "scale-100 w-auto"
+              )}>
+                QUANTA
+              </span>
+            </div>
           </div>
           <Button
             variant="ghost"
-            size="icon"
-            className={cn("h-8 w-8 rounded-full border bg-background")}
+            size="sm"
+            className={cn(
+              "rounded-full p-2 hover:bg-accent/50",
+              isCollapsed && "absolute right-2"
+            )}
             onClick={() => setIsCollapsed(!isCollapsed)}
           >
-            {isCollapsed ? <TbLayoutSidebarRightCollapse className="h-6 w-6" /> : <TbLayoutSidebarLeftCollapse className="h-6 w-6" />}
+            {isCollapsed ? 
+              <TbLayoutSidebarRightCollapse className="h-5 w-5" /> : 
+              <TbLayoutSidebarLeftCollapse className="h-5 w-5" />
+            }
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar mt-auto">
-          
-
-          <div className="space-y-1 py-2">
-            {!isCollapsed && <div className="text-sm font-medium">Overview</div>}
-
-            <NavItem 
-              icon={House} 
-              label="Dashboard" 
-              isCollapsed={isCollapsed} 
-              onExpand={handleExpand}
-              isActive={activeItem === "Dashboard"}
-              onClick={() => handleItemClick("Dashboard")}
-            />
-            <NavItem 
-              icon={LayoutTemplate} 
-              label="Templates" 
-              isCollapsed={isCollapsed} 
-              onExpand={handleExpand}
-              isActive={activeItem === "Templates"}
-              onClick={() => handleItemClick("Templates")}
-            />
-            <NavItem 
-              icon={ChartNetwork} 
-              label="System Topology" 
-              isCollapsed={isCollapsed} 
-              onExpand={handleExpand}
-              isActive={activeItem === "System Topology"}
-              onClick={() => handleItemClick("System Topology")}
-            />
-          </div>
-
-          <div className="space-y-1 py-2">
-            {!isCollapsed && <div className="text-sm font-medium mb-2">System Administration</div>}
-            <NavItem
-              icon={MonitorCog}
-              label="Manage Systems"
-              isCollapsible={!isCollapsed}
-              isCollapsed={isCollapsed}
-              onExpand={handleExpand}
-              isActive={activeItem === "Manage Systems"}
-              onClick={() => handleItemClick("Manage Systems")}
-            >
-              <div className="space-y-1 py-1">
-                <div className="max-w-full overflow-hidden space-y-2">
-                  {[
-                  { path: "#", label: "Extarction Config" },
-                  { path: "#", label: "KPI Config" },
-                  { path: "#", label: "Master Filters Config" },
-                  { path: "#", label: "User Access" },
-                  ].map((item, index) => (
-                  <Button
-                    key={index}
-                    variant="ghost"
-                    className={cn(
-                      "w-full justify-start text-sm py-2 px-2 h-auto whitespace-normal text-left",
-                      activeSubItem === item.label && "bg-accent text-accent-foreground font-medium"
-                    )}
-                    onClick={() => handleSubItemClick(item.label, item.path)}
-                  >
-                    {item.label}
-                  </Button>
-                  ))}
+        {/* Update navigation sections */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 custom-scrollbar">
+          <nav className="space-y-6">
+            <div className="space-y-1">
+              {!isCollapsed && 
+                <div className="text-xs uppercase font-medium text-muted-foreground mb-2 px-2">
+                  Overview
                 </div>
-              </div>
-            </NavItem>
-          </div>
-
-          <div className="space-y- py-3">
-            {!isCollapsed && <div className="text-sm font-medium">Alerts</div>}
-
-            <NavItem 
-              icon={Siren} 
-              label="Alert Monitering" 
-              isCollapsed={isCollapsed} 
-              onExpand={handleExpand}
-              isActive={activeItem === "Alert Monitering"}
-              onClick={() => handleItemClick("Alert Monitering")}
-            />
-          </div>
+              }
+              <NavItem 
+                icon={House} 
+                label="Dashboard" 
+                isCollapsed={isCollapsed} 
+                onExpand={handleExpand}
+                isActive={activeItem === "Dashboard"}
+                onClick={() => handleItemClick("Dashboard")}
+              />
+              <NavItem 
+                icon={LayoutTemplate} 
+                label="Templates" 
+                isCollapsed={isCollapsed} 
+                onExpand={handleExpand}
+                isActive={activeItem === "Templates"}
+                onClick={() => handleItemClick("Templates")}
+              />
+              <NavItem 
+                icon={ChartNetwork} 
+                label="System Topology" 
+                isCollapsed={isCollapsed} 
+                onExpand={handleExpand}
+                isActive={activeItem === "System Topology"}
+                onClick={() => handleItemClick("System Topology")}
+              />
+            </div>
+            <div className="space-y-1 py-2">
+              {!isCollapsed && <div className="text-sm font-medium mb-2">System Administration</div>}
+              <NavItem
+                icon={MonitorCog}
+                label="Manage Systems"
+                isCollapsible={!isCollapsed}
+                isCollapsed={isCollapsed}
+                onExpand={handleExpand}
+                isActive={activeItem === "Manage Systems"}
+                onClick={() => handleItemClick("Manage Systems")}
+              >
+                <div className="space-y-1 py-1">
+                  <div className="max-w-full overflow-hidden space-y-2">
+                    {[
+                      { path: "/extraction-config", label: "Extarction Config" },
+                      { path: "/manage-systems", label: "Add Systems" },
+                      { path: "/kpi-config", label: "KPI Config" },
+                      { path: "/master-filters", label: "Master Filters Config" },
+                      { path: "/user-access", label: "User Access" },
+                    ].map((item, index) => (
+                      <Button
+                        key={index}
+                        variant="ghost"
+                        className={cn(
+                          "w-full justify-start text-sm py-2 px-2 h-auto whitespace-normal text-left",
+                          activeSubItem === item.label && "bg-accent text-accent-foreground font-medium"
+                        )}
+                        onClick={() => handleSubItemClick(item.label, item.path)}
+                      >
+                        {item.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </NavItem>
+            </div>
+            <div className="space-y- py-3">
+              {!isCollapsed && <div className="text-sm font-medium">Alerts</div>}
+              <NavItem 
+                icon={Siren} 
+                label="Alert Monitering" 
+                isCollapsed={isCollapsed} 
+                onExpand={handleExpand}
+                isActive={activeItem === "Alert Monitering"}
+                onClick={() => handleItemClick("Alert Monitering")}
+              />
+            </div>
+          </nav>
         </div>
 
-        <div className="border-t p-4 mt-auto">
+        {/* Update footer section */}
+        <div className="border-t p-3 mt-auto bg-card/50">
           <div className="space-y-1">
             <NavItem 
               icon={Bell} 
@@ -309,7 +339,7 @@ export function Sidebar() {
           </div>
           {!isCollapsed && (
             <Link href="/profile">
-              <div className="mt-4 flex items-center gap-2 rounded-lg border p-4 cursor-pointer hover:bg-accent">
+              <div className="mt-4 flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-accent/50 transition-colors">
                 <div className="h-8 w-8 rounded-full bg-muted" />
                 <div className="flex-1 truncate">
                   <div className="text-sm font-medium">John Doe</div>
