@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { Plus, Search, Star, StarOff } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import Sheet from "@/components/sheet"
@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {Sidebar} from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
+import { DynamicLayout } from "@/components/charts/DynamicLayout"
+import ChartContainer from "@/components/charts/ChartContainer"
 
 interface Template {
   id: string;
@@ -21,6 +23,24 @@ interface Template {
   resolution: string;
   isDefault: boolean;
   isFavorite: boolean;
+  graphs: Graph[];
+}
+
+interface Graph {
+  id?: string;
+  name: string;
+  type: 'line' | 'bar';
+  monitoringArea: string;
+  kpiGroup: string;
+  primaryKpi: string;
+  correlationKpis: string[];
+  position?: number;
+  layout: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
 }
 
 const timeRangeOptions = [
@@ -50,6 +70,30 @@ export default function TemplatesPage() {
   })
   const [errors, setErrors] = useState<Record<string, boolean>>({})
   const { toast } = useToast()
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [graphs, setGraphs] = useState<Graph[]>([]);
+  const [showGraphs, setShowGraphs] = useState(false)
+  const [activeKPIs, setActiveKPIs] = useState<Set<string>>(new Set())
+  const [kpiColors, setKpiColors] = useState<Record<string, { color: string; name: string }>>({})
+
+  // Fetch templates on mount
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+
+  const fetchTemplates = async () => {
+    try {
+      const response = await fetch('/api/templates');
+      const data = await response.json();
+      setTemplates(data);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch templates",
+        variant: "destructive"
+      });
+    }
+  };
 
   const validateFields = () => {
     const newErrors: Record<string, boolean> = {}
@@ -74,10 +118,104 @@ export default function TemplatesPage() {
 
     setSelectedTemplate({
       id: Date.now().toString(),
-      ...templateData
+      ...templateData,
+      graphs
     })
     setIsAddGraphSheetOpen(true)
   }
+
+  const handleSaveTemplate = async () => {
+    if (!validateFields() || graphs.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one graph to the template",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const response = await fetch('/api/templates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...templateData,
+          graphs
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save template');
+
+      const savedTemplate = await response.json();
+      setTemplates(prev => [...prev, savedTemplate]);
+      
+      toast({
+        title: "Success",
+        description: "Template saved successfully",
+      });
+
+      // Reset form
+      setTemplateData({
+        name: "",
+        system: "",
+        timeRange: "auto",
+        resolution: "auto",
+        isDefault: false,
+        isFavorite: false
+      });
+      setGraphs([]);
+      setShowGraphs(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddGraphToTemplate = (graph: Graph) => {
+    setGraphs(prev => [...prev, {
+      ...graph,
+      id: `graph-${Date.now()}`,
+      layout: {
+        x: (prev.length * 4) % 12,
+        y: Math.floor(prev.length / 3) * 4,
+        w: 4,
+        h: 4
+      }
+    }]);
+    setShowGraphs(true);
+    setIsAddGraphSheetOpen(false);
+
+    // Update active KPIs and colors
+    setActiveKPIs(prev => {
+      const newSet = new Set(prev)
+      newSet.add(graph.primaryKpi)
+      graph.correlationKpis.forEach(kpi => newSet.add(kpi))
+      return newSet
+    })
+
+    // Assign colors to new KPIs
+    const newColors = { ...kpiColors }
+    if (!newColors[graph.primaryKpi]) {
+      newColors[graph.primaryKpi] = {
+        color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
+        name: graph.primaryKpi
+      }
+    }
+    graph.correlationKpis.forEach(kpi => {
+      if (!newColors[kpi]) {
+        newColors[kpi] = {
+          color: `hsl(${Object.keys(newColors).length * 60}, 70%, 50%)`,
+          name: kpi
+        }
+      }
+    })
+    setKpiColors(newColors)
+  };
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
@@ -212,16 +350,49 @@ export default function TemplatesPage() {
               transition={{ delay: 0.3 }}
               className="mt-8"
             >
-              <Card 
-                className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
-                onClick={handleAddGraph}
-              >
-                <div className="flex flex-col items-center justify-center py-8">
-                  <Plus className="w-12 h-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium text-foreground/90">Add Graph</h3>
-                  <p className="text-sm text-muted-foreground mt-2">Click to add a new graph to your template</p>
+              {showGraphs && graphs.length > 0 ? (
+                <div className="space-y-6">
+                  <DynamicLayout
+                    charts={graphs.map(graph => ({
+                      id: graph.id!,
+                      type: graph.type,
+                      title: graph.name,
+                      data: [], // You'll need to fetch actual data here
+                      width: graph.layout.w * 100,
+                      height: graph.layout.h * 100,
+                      activeKPIs: activeKPIs,
+                      kpiColors: kpiColors
+                    }))}
+                  />
+                  <Card 
+                    className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
+                    onClick={handleAddGraph}
+                  >
+                    <div className="flex flex-col items-center justify-center py-4">
+                      <Plus className="w-8 h-8 text-muted-foreground mb-2" />
+                      <h3 className="text-base font-medium text-foreground/90">Add Another Graph</h3>
+                    </div>
+                  </Card>
+                  <div className="flex justify-end">
+                    <Button onClick={handleSaveTemplate}>
+                      Save Template
+                    </Button>
+                  </div>
                 </div>
-              </Card>
+              ) : (
+                <Card 
+                  className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
+                  onClick={handleAddGraph}
+                >
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Plus className="w-12 h-12 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium text-foreground/90">Add Graph</h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Click to add a new graph to your template
+                    </p>
+                  </div>
+                </Card>
+              )}
             </motion.div>
           </motion.div>
 

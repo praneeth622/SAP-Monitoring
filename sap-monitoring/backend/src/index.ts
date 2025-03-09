@@ -1,9 +1,15 @@
 import express from 'express';
+import cors from 'cors';
 import systemValidationRoutes from './routes/systemValidationRoutes';
 import systemStatsRoutes from './routes/systemStatsRoutes';
 import systemListRoutes from './routes/systemListRoutes';
+import kpiHierarchyRoutes from './routes/kpiHierarchyRoutes';
+import templateRoutes from './routes/templateRoutes';
 
 const app = express();
+
+// Enable CORS for all routes
+app.use(cors());
 
 // Middleware to parse JSON requests
 app.use(express.json());
@@ -12,6 +18,8 @@ app.use(express.json());
 app.use('/api', systemValidationRoutes);
 app.use('/api', systemStatsRoutes);
 app.use('/api', systemListRoutes);
+app.use('/api', kpiHierarchyRoutes);
+app.use('/api', templateRoutes);
 
 // Default route
 app.get('/', (req, res) => {

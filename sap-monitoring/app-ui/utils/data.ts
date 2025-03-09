@@ -63,3 +63,18 @@ export const generateMultipleDataSets = (count: number): DataPoint[][] => {
 
   return datasets;
 };
+
+export function getDummyData() {
+  const now = new Date();
+  const data = [];
+  
+  for (let i = 0; i < 24; i++) {
+    data.push({
+      date: new Date(now.getTime() - i * 3600000).toISOString(),
+      value: Math.random() * 1000,
+      category: 'CPU Usage'
+    });
+  }
+  
+  return data;
+}
