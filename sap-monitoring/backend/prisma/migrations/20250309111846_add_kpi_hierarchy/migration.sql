@@ -54,6 +54,28 @@ CREATE TABLE "MonitoringArea" (
 );
 
 -- CreateTable
+CREATE TABLE "monitoring_kpi" (
+    "id" SERIAL NOT NULL,
+    "systemId" VARCHAR(50),
+    "client" INTEGER,
+    "monitoringArea" VARCHAR(100),
+    "kpiGroup" VARCHAR(100),
+    "kpiName" VARCHAR(100),
+    "parentKpi" VARCHAR(100),
+    "kpiDescription" TEXT,
+    "dataType" VARCHAR(50),
+    "unit" VARCHAR(50),
+    "aggregation" VARCHAR(50),
+    "drilldown" BOOLEAN,
+    "filter" BOOLEAN,
+    "secondLevelDetails" JSONB,
+    "filterValues" JSONB,
+    "drilldownCondition" JSONB,
+
+    CONSTRAINT "monitoring_kpi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "KpiGroup" (
     "groupId" SERIAL NOT NULL,
     "areaId" INTEGER NOT NULL,
@@ -90,6 +112,20 @@ CREATE TABLE "Kpi" (
     CONSTRAINT "Kpi_pkey" PRIMARY KEY ("kpiId")
 );
 
+-- CreateTable
+CREATE TABLE "kpi_hierarchy" (
+    "id" SERIAL NOT NULL,
+    "sid" TEXT NOT NULL,
+    "monitoringArea" TEXT NOT NULL,
+    "kpiGroup" TEXT NOT NULL,
+    "kpiName" TEXT NOT NULL,
+    "kpiDescription" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "kpi_hierarchy_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Systems_systemId_key" ON "Systems"("systemId");
 
@@ -104,6 +140,9 @@ CREATE UNIQUE INDEX "KpiGroup_id_key" ON "KpiGroup"("id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Kpi_id_key" ON "Kpi"("id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "kpi_hierarchy_sid_monitoringArea_kpiGroup_kpiName_key" ON "kpi_hierarchy"("sid", "monitoringArea", "kpiGroup", "kpiName");
 
 -- AddForeignKey
 ALTER TABLE "MonitoringArea" ADD CONSTRAINT "MonitoringArea_systemId_fkey" FOREIGN KEY ("systemId") REFERENCES "Systems"("systemId") ON DELETE CASCADE ON UPDATE CASCADE;

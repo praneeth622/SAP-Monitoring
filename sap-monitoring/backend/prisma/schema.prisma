@@ -117,3 +117,37 @@ model Kpi {
   systemId         String
   system           Systems        @relation(fields: [systemId], references: [systemId], onDelete: Cascade)
 }
+
+model KpiHierarchy {
+  id               Int      @id @default(autoincrement())
+  sid              String
+  monitoringArea   String
+  kpiGroup         String
+  kpiName          String
+  kpiDescription   String?
+  createdAt        DateTime? @default(now())
+  updatedAt        DateTime? @updatedAt
+
+  @@unique([sid, monitoringArea, kpiGroup, kpiName])
+  @@map("kpi_hierarchy")
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  system      String
+  timeRange   String
+  resolution  String
+  isDefault   Boolean  @default(false)
+  isFavorite  Boolean  @default(false)
+  graphs      Json     // JSONB field for storing graphs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+  updatedBy   String?
+
+  @@index([graphs], type: Gin) // Add GIN index for JSONB querying
+  @@map("templates")
+}
+
+

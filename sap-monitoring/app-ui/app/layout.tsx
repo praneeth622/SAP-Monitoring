@@ -2,6 +2,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { FontProvider } from "@/contexts/FontContext";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
+import { Toaster } from "sonner";
 
 export default function RootLayout({
   children,
@@ -26,6 +27,7 @@ export default function RootLayout({
             </div>
           </FontProvider>
         </ThemeProvider>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

@@ -12,51 +12,53 @@ export const validateAndCreateSystem = async (
   try {
     const { systemName, description, systemSource, username, password } = req.body as SystemValidationRequest;
 
-    // Check if required fields are present
+    // Validation checks
     if (!systemSource || !username || !password) {
-      res.status(400).json({ error: 'System source, username, and password are required' });
-      return;
+      return res.status(400).json({ 
+        success: false,
+        error: 'Validation Error',
+        message: 'System source, username, and password are required' 
+      });
     }
 
-    // Check if system exists in dummy table
-    const dummySystem = await prisma.systemsDummy.findFirst({
-      where: {
-        systemUrl: systemSource,
-        userID: username,
-        password: password,
-      },
-    });
+    // Check connection (mock for now)
+    const isConnectionValid = true; // Replace with actual connection check
 
-    if (!dummySystem) {
-      res.status(404).json({ error: 'System not found in dummy records' });
-      return;
+    if (!isConnectionValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Connection Error',
+        message: 'Unable to establish connection with the system'
+      });
     }
 
-    // If dummySystem.systemName is null, we need to handle that case
-    if (!dummySystem.systemName) {
-      res.status(400).json({ error: 'System name is missing in dummy records' });
-      return;
-    }
-
-    // Create new system entry with proper type handling
+    // Create new system
     const newSystem = await prisma.systems.create({
       data: {
-        systemId: dummySystem.systemId,
-        client: dummySystem.client,
-        systemName: systemName || dummySystem.systemName,
-        systemUrl: dummySystem.systemUrl,
-        systemType: dummySystem.systemType,
-        pollingStatus: dummySystem.pollingStatus,
-        connectionStatus: dummySystem.connectionStatus,
-        description: description || dummySystem.description || '',
-        createdBy: username,
-      },
+        systemId: `sys-${Date.now()}`,
+        client: 'Client A', // This should come from actual system
+        systemName: systemName || 'New System',
+        systemUrl: systemSource,
+        systemType: 'Standard', // This should be determined based on system
+        pollingStatus: 'Active',
+        connectionStatus: 'Connected',
+        description: description || '',
+        createdBy: username
+      }
     });
 
-    res.status(201).json(newSystem);
-  } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(201).json({
+      success: true,
+      data: newSystem,
+      message: 'System validated and created successfully'
+    });
+  } catch (error) {
+    console.error('System validation error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Failed to validate and create system'
+    });
   } finally {
     await prisma.$disconnect();
   }

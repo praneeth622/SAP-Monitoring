@@ -168,8 +168,9 @@ export function DynamicLayout({
               title={chart.title}
               width={chart.width}
               height={chart.height}
-              activeKPIs={activeKPIs}
-              kpiColors={kpiColors}
+              activeKPIs={chart.activeKPIs || new Set()}
+              initialActiveKPIs={chart.activeKPIs}
+              kpiColors={chart.kpiColors || {}}
               globalDateRange={globalDateRange}
               className="h-full"
               isFullscreen={fullscreenChartId === chart.id}

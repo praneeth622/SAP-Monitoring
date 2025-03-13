@@ -4,12 +4,13 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const getSystemStats = async (req: Request, res: Response) => {
+  const client = prisma;
   try {
-    // Get total systems count
-    const totalSystems = await prisma.systems.count();
+    // Get total systems count with null check
+    const totalSystems = await client.systems.count() || 0;
 
-    // Get systems count by polling status (Active, Inactive)
-    const pollingStatusCounts = await prisma.systems.groupBy({
+    // Get systems count by polling status with error handling
+    const pollingStatusCounts = await client.systems.groupBy({
       by: ['pollingStatus'],
       _count: {
         pollingStatus: true
@@ -19,26 +20,26 @@ export const getSystemStats = async (req: Request, res: Response) => {
           in: ['Active', 'Inactive']
         }
       }
-    });
+    }).catch(() => []);
 
-    // Get count of disconnected systems (where connectionStatus is not 'Connected')
-    const disconnectedSystems = await prisma.systems.count({
+    // Get count of disconnected systems with null check
+    const disconnectedSystems = await client.systems.count({
       where: {
         NOT: {
           connectionStatus: 'Connected'
         }
       }
-    });
+    }) || 0;
 
-    // Format the response according to actual data structure
+    // Format the response with safe defaults
     const stats = {
       totalSystems,
-      pollingStatusBreakdown: pollingStatusCounts.map(status => ({
+      pollingStatusBreakdown: (pollingStatusCounts || []).map(status => ({
         status: status.pollingStatus,
         count: status._count.pollingStatus
       })),
       systemStatus: {
-        connected: totalSystems - disconnectedSystems,
+        connected: Math.max(0, totalSystems - disconnectedSystems),
         disconnected: disconnectedSystems
       }
     };
@@ -53,9 +54,9 @@ export const getSystemStats = async (req: Request, res: Response) => {
     res.status(500).json({ 
       success: false, 
       error: 'Internal server error',
-      message: 'Failed to retrieve system statistics'
+      message: error instanceof Error ? error.message : 'Failed to retrieve system statistics'
     });
   } finally {
-    await prisma.$disconnect();
+    await client.$disconnect();
   }
 };
