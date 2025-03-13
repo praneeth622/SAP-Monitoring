@@ -1,7 +1,26 @@
-import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Request, Response, NextFunction } from "express";
+import { PrismaClient, Prisma } from "@prisma/client"; // Added Prisma types
+import { z } from "zod";
 
 const prisma = new PrismaClient();
+
+interface Graph {
+  id: string;
+  name: string;
+  type: "line" | "bar";
+  monitoringArea: string;
+  kpiGroup: string;
+  primaryKpi: string;
+  correlationKpis: string[];
+  layout: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+  activeKPIs: string[];
+  kpiColors: Record<string, { color: string; name: string }>;
+}
 
 // Define interface for template request body
 interface TemplateRequest {
@@ -11,21 +30,45 @@ interface TemplateRequest {
   resolution: string;
   isDefault: boolean;
   isFavorite: boolean;
-  graphs: Array<{
-    name: string;
-    type: 'line' | 'bar';
-    monitoringArea: string;
-    kpiGroup: string;
-    primaryKpi: string;
-    correlationKpis: string[];
-    layout: {
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-    };
-  }>;
+  graphs: Graph[];
 }
+
+// Updated validation schema for graph structure
+const GraphSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, "Graph name is required"),
+  type: z.enum(["line", "bar"]), // Removed invalid parameter
+  monitoringArea: z.string().min(1, "Monitoring area is required"),
+  kpiGroup: z.string().min(1, "KPI group is required"),
+  primaryKpi: z.string().min(1, "Primary KPI is required"),
+  correlationKpis: z.array(z.string()),
+  layout: z.object({
+    x: z.number(),
+    y: z.number(),
+    w: z.number(),
+    h: z.number(),
+  }),
+  activeKPIs: z.array(z.string()),
+  kpiColors: z.record(
+    z.object({
+      color: z.string(),
+      name: z.string(),
+    })
+  ),
+});
+
+const TemplateSchema = z.object({
+  name: z.string().min(1, "Template name is required"),
+  system: z.string().min(1, "System is required"),
+  timeRange: z.string().min(1, "Time range is required"),
+  resolution: z.string().min(1, "Resolution is required"),
+  isDefault: z.boolean(),
+  isFavorite: z.boolean(),
+  graphs: z
+    .array(GraphSchema)
+    .min(1, "At least one graph is required")
+    .max(9, "Maximum 9 graphs allowed"),
+});
 
 export const createTemplate = async (
   req: Request<{}, {}, TemplateRequest>,
@@ -33,7 +76,37 @@ export const createTemplate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { name, system, timeRange, resolution, isDefault, isFavorite, graphs } = req.body;
+    const validationResult = TemplateSchema.safeParse(req.body);
+
+    if (!validationResult.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: validationResult.error.errors,
+      });
+      return;
+    }
+
+    const {
+      name,
+      system,
+      timeRange,
+      resolution,
+      isDefault,
+      isFavorite,
+      graphs,
+    } = validationResult.data;
+
+    // Process graphs data for storage
+    const processedGraphs = graphs.map((graph) => ({
+      ...graph,
+      activeKPIs: Array.from(graph.activeKPIs || []),
+      kpiColors: Object.fromEntries(
+        Object.entries(graph.kpiColors).map(([key, value]) => [
+          key,
+          { color: value.color, name: value.name },
+        ])
+      ),
+    }));
 
     const template = await prisma.template.create({
       data: {
@@ -43,22 +116,35 @@ export const createTemplate = async (
         resolution,
         isDefault,
         isFavorite,
-        graphs: {
-          create: graphs.map((graph, index) => ({
-            ...graph,
-            position: index
-          }))
-        }
+        graphs: processedGraphs as Prisma.JsonArray, // Cast to JsonArray
       },
-      include: {
-        graphs: true
-      }
     });
 
     res.status(201).json(template);
   } catch (error) {
-    next(error);
+    if (error instanceof Error) {
+      res.status(400).json({
+        error: "Failed to create template",
+        message: error.message,
+      });
+    } else {
+      next(error);
+    }
   }
+};
+
+// Add a utility function to convert stored JSON back to proper types
+const convertStoredGraphs = (graphs: any[]) => {
+  return graphs.map((graph) => ({
+    ...graph,
+    activeKPIs: new Set(graph.activeKPIs),
+    kpiColors: Object.fromEntries(
+      Object.entries(graph.kpiColors).map(([key, value]: [string, any]) => [
+        key,
+        { color: value.color, name: value.name },
+      ])
+    ),
+  }));
 };
 
 export const getTemplates = async (
@@ -67,13 +153,15 @@ export const getTemplates = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const templates = await prisma.template.findMany({
-      include: {
-        graphs: true
-      }
-    });
+    const templates = await prisma.template.findMany();
 
-    res.status(200).json(templates);
+    // Convert stored JSON to proper types
+    const processedTemplates = templates.map((template) => ({
+      ...template,
+      graphs: convertStoredGraphs(template.graphs as any[]),
+    }));
+
+    res.status(200).json(processedTemplates);
   } catch (error) {
     next(error);
   }
@@ -88,17 +176,20 @@ export const getTemplateById = async (
     const { id } = req.params;
     const template = await prisma.template.findUnique({
       where: { id },
-      include: {
-        graphs: true
-      }
-    });
+    }); // Removed include since graphs is now JSONB
 
     if (!template) {
-      res.status(404).json({ error: 'Template not found' });
+      res.status(404).json({ error: "Template not found" });
       return;
     }
 
-    res.status(200).json(template);
+    // Convert stored graphs back to proper format
+    const processedTemplate = {
+      ...template,
+      graphs: convertStoredGraphs(template.graphs as any[]),
+    };
+
+    res.status(200).json(processedTemplate);
   } catch (error) {
     next(error);
   }
@@ -111,7 +202,36 @@ export const updateTemplate = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, system, timeRange, resolution, isDefault, isFavorite, graphs } = req.body;
+    const validationResult = TemplateSchema.safeParse(req.body);
+
+    if (!validationResult.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: validationResult.error.errors,
+      });
+      return;
+    }
+
+    const {
+      name,
+      system,
+      timeRange,
+      resolution,
+      isDefault,
+      isFavorite,
+      graphs,
+    } = validationResult.data;
+
+    const processedGraphs = graphs.map((graph) => ({
+      ...graph,
+      activeKPIs: Array.from(graph.activeKPIs || []),
+      kpiColors: Object.fromEntries(
+        Object.entries(graph.kpiColors).map(([key, value]) => [
+          key,
+          { color: value.color, name: value.name },
+        ])
+      ),
+    }));
 
     const template = await prisma.template.update({
       where: { id },
@@ -122,22 +242,20 @@ export const updateTemplate = async (
         resolution,
         isDefault,
         isFavorite,
-        graphs: {
-          deleteMany: {},
-          create: graphs.map((graph, index) => ({
-            ...graph,
-            position: index
-          }))
-        }
+        graphs: processedGraphs as Prisma.JsonArray, // Cast to JsonArray
       },
-      include: {
-        graphs: true
-      }
     });
 
     res.status(200).json(template);
   } catch (error) {
-    next(error);
+    if (error instanceof Error) {
+      res.status(400).json({
+        error: "Failed to update template",
+        message: error.message,
+      });
+    } else {
+      next(error);
+    }
   }
 };
 
@@ -149,7 +267,7 @@ export const deleteTemplate = async (
   try {
     const { id } = req.params;
     await prisma.template.delete({
-      where: { id }
+      where: { id },
     });
 
     res.status(204).send();
