@@ -316,8 +316,9 @@ export default function TemplatesPage() {
             className="mb-8"
           >
             <Card className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl">
-              <div className="space-y-6">
-                <div>
+              <div className="flex items-center gap-4">
+                {/* Template Name */}
+                <div className="flex-1">
                   <label className="block text-sm font-medium text-foreground/90 mb-2">
                     Template Name <span className="text-red-500">*</span>
                   </label>
@@ -339,9 +340,10 @@ export default function TemplatesPage() {
                   />
                 </div>
 
-                <div>
+                {/* System Select */}
+                <div className="w-48">
                   <label className="block text-sm font-medium text-foreground/90 mb-2">
-                    Select a system <span className="text-red-500">*</span>
+                    System <span className="text-red-500">*</span>
                   </label>
                   <Select
                     value={templateData.system}
@@ -357,7 +359,7 @@ export default function TemplatesPage() {
                           : ""
                       }
                     >
-                      <SelectValue placeholder="Select system" />
+                      <SelectValue placeholder="Select" />
                     </SelectTrigger>
                     <SelectContent>
                       {systemOptions.map((system) => (
@@ -369,74 +371,76 @@ export default function TemplatesPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground/90 mb-2">
-                      Time <span className="text-red-500">*</span>
-                    </label>
-                    <Select
-                      value={templateData.timeRange}
-                      onValueChange={(value) => {
-                        setTemplateData((prev) => ({
-                          ...prev,
-                          timeRange: value,
-                        }));
-                        setErrors((prev) => ({ ...prev, timeRange: false }));
-                      }}
+                {/* Time Range */}
+                <div className="w-48">
+                  <label className="block text-sm font-medium text-foreground/90 mb-2">
+                    Time <span className="text-red-500">*</span>
+                  </label>
+                  <Select
+                    value={templateData.timeRange}
+                    onValueChange={(value) => {
+                      setTemplateData((prev) => ({
+                        ...prev,
+                        timeRange: value,
+                      }));
+                      setErrors((prev) => ({ ...prev, timeRange: false }));
+                    }}
+                  >
+                    <SelectTrigger
+                      className={
+                        errors.timeRange
+                          ? "border-red-500 focus-visible:ring-red-500"
+                          : ""
+                      }
                     >
-                      <SelectTrigger
-                        className={
-                          errors.timeRange
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }
-                      >
-                        <SelectValue placeholder="Select time range" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timeRangeOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground/90 mb-2">
-                      Resolution <span className="text-red-500">*</span>
-                    </label>
-                    <Select
-                      value={templateData.resolution}
-                      onValueChange={(value) => {
-                        setTemplateData((prev) => ({
-                          ...prev,
-                          resolution: value,
-                        }));
-                        setErrors((prev) => ({ ...prev, resolution: false }));
-                      }}
-                    >
-                      <SelectTrigger
-                        className={
-                          errors.resolution
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }
-                      >
-                        <SelectValue placeholder="Select resolution" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timeRangeOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeRangeOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="flex items-center justify-between">
+                {/* Resolution */}
+                <div className="w-48">
+                  <label className="block text-sm font-medium text-foreground/90 mb-2">
+                    Resolution <span className="text-red-500">*</span>
+                  </label>
+                  <Select
+                    value={templateData.resolution}
+                    onValueChange={(value) => {
+                      setTemplateData((prev) => ({
+                        ...prev,
+                        resolution: value,
+                      }));
+                      setErrors((prev) => ({ ...prev, resolution: false }));
+                    }}
+                  >
+                    <SelectTrigger
+                      className={
+                        errors.resolution
+                          ? "border-red-500 focus-visible:ring-red-500"
+                          : ""
+                      }
+                    >
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeRangeOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Switches */}
+                <div className="flex flex-col gap-2 justify-center ml-4">
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={templateData.isDefault}
@@ -448,7 +452,7 @@ export default function TemplatesPage() {
                       }
                     />
                     <label className="text-sm font-medium text-foreground/90">
-                      Set as Default
+                      Default
                     </label>
                   </div>
                   <div className="flex items-center gap-2">
@@ -462,7 +466,7 @@ export default function TemplatesPage() {
                       }
                     />
                     <label className="text-sm font-medium text-foreground/90">
-                      Mark as favorite
+                      Favorite
                     </label>
                   </div>
                 </div>
