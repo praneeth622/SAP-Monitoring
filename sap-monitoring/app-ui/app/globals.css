@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Poppins:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Poppins:wght@400;500;600&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -39,8 +39,8 @@
     --input: 240 5.9% 90%;
     --ring: 240 10% 3.9%;
     --radius: 0.5rem;
-    --font-nunito: 'Nunito Sans', sans-serif;
-    --font-poppins: 'Poppins', sans-serif;
+    --font-nunito: "Nunito Sans", sans-serif;
+    --font-poppins: "Poppins", sans-serif;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -96,9 +96,7 @@
     --input: 217 100% 25%;
     --ring: 224.3 76.3% 48%;
   }
-
 }
-
 
 /* Grid Layout styles */
 .react-grid-layout {
@@ -200,27 +198,25 @@
 }
 
 .kpi-card.selected {
-  box-shadow: 0 0 0 2px theme('colors.blue.500'),
-              0 4px 6px -1px rgba(0, 0, 0, 0.1),
-              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 0 0 2px theme("colors.blue.500"),
+    0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 /* Chart container styles */
 .chart-container {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: theme('borderRadius.xl');
-  background: theme('colors.white');
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
-              0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  border-radius: theme("borderRadius.xl");
+  background: theme("colors.white");
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
 .dark .chart-container {
-  background: theme('colors.slate.800');
+  background: theme("colors.slate.800");
 }
 
 .chart-container:hover {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 /* Chart tooltips */
@@ -230,7 +226,7 @@
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
   border-radius: 0.5rem !important;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-              0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
   padding: 0.75rem !important;
 }
 
@@ -389,4 +385,24 @@
 
 .chart-actions {
   @apply flex items-center gap-2;
+}
+
+/* Custom scrollbar styles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 20px;
+  border: transparent;
 }

@@ -1,0 +1,46 @@
+[
+    {
+      "kpi_name": "job_scheduled",
+      "filter_name": "job_s_name"
+    },
+    {
+      "kpi_name": "job_released",
+      "filter_name": "job_s_name"
+    },
+    {
+      "kpi_name": "top_cpu_time_avg",
+      "filter_name": "top_s_username"
+    },
+    {
+      "kpi_name": "top_mem_util_avg",
+      "filter_name": "top_s_username"
+    },
+    {
+      "kpi_name": "job_cancelled",
+      "filter_name": "job_s_name"
+    },
+    {
+      "kpi_name": "job_completed",
+      "filter_name": "job_s_name"
+    },
+    {
+      "kpi_name": "job_active",
+      "filter_name": "job_s_name"
+    },
+    {
+      "kpi_name": "top_cpu_time_avg",
+      "filter_name": "top_s_command"
+    },
+    {
+      "kpi_name": "top_mem_util_avg",
+      "filter_name": "top_s_command"
+    },
+    {
+      "kpi_name": "job_delayed",
+      "filter_name": "job_s_name"
+    },
+    {
+      "kpi_name": "job_total",
+      "filter_name": "job_s_name"
+    }
+  ]

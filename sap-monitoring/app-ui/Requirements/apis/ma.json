@@ -1,0 +1,18 @@
+[
+    {
+        "mon_area_name": "JOBS",
+        "mon_area_desc": "Background Jobs",
+        "created_at": "2025-03-13T15:16:05.236049",
+        "created_by": "SYS_ADMIN",
+        "modified_at": "2025-03-13T15:16:05.236049",
+        "modified_by": "SYS_ADMIN"
+    },
+    {
+        "mon_area_name": "OS",
+        "mon_area_desc": "Operating System",
+        "created_at": "2025-03-13T15:16:05.236049",
+        "created_by": "SYS_ADMIN",
+        "modified_at": "2025-03-13T15:16:05.236049",
+        "modified_by": "SYS_ADMIN"
+    }
+]
