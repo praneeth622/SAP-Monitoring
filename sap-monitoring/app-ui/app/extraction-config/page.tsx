@@ -527,11 +527,11 @@ export default function ConfigDashboard() {
         ) : parentKpis.length > 0 ? (
           <div className={tableContainerStyles}>
             <div className="sticky top-0 z-10 bg-background grid grid-cols-6 gap-4 mb-2 px-2 font-medium text-sm text-gray-500">
-              <div>Data Area</div>
+              <div>KPI Name</div>
               <div>Monitoring Area</div>
-              <div>KPI Group</div>
-              <div>Dependency</div>
-              <div className="text-center">Active</div>
+              <div>KPI Desc</div>
+              {/* <div>Dependency</div> */}
+              {/* <div className="text-center">Active</div> */}
               <div className="text-center">Settings</div>
             </div>
 
@@ -552,10 +552,10 @@ export default function ConfigDashboard() {
                     </div>
                     <div>{kpi.kpi_group}</div>
                     <div>{kpi.kpi_desc}</div>
-                    <div>{kpi.parent ? "Parent" : "Child"}</div>
-                    <div className="flex justify-center">
+                    {/* <div>{kpi.parent ? "Parent" : "Child"}</div> */}
+                    {/* <div className="flex justify-center">
                       <Switch />
-                    </div>
+                    </div> */}
                     <div className="flex justify-center">
                       {kpi.parent && (
                         <Button
@@ -583,10 +583,10 @@ export default function ConfigDashboard() {
                             <div>{child.kpi_name}</div>
                             <div>{child.kpi_group}</div>
                             <div>{child.kpi_desc}</div>
-                            <div>Child</div>
-                            <div className="flex justify-center">
+                            {/* <div>Child</div> */}
+                            {/* <div className="flex justify-center">
                               <Switch />
-                            </div>
+                            </div> */}
                           </div>
                         ))}
                     </div>

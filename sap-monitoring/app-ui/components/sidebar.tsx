@@ -35,10 +35,10 @@ function useMediaQuery(query: string) {
   React.useEffect(() => {
     const media = window.matchMedia(query)
     const updateMatch = () => setMatches(media.matches)
-    
+
     // Initial check
     updateMatch()
-    
+
     // Listen for changes
     media.addEventListener('change', updateMatch)
     return () => media.removeEventListener('change', updateMatch)
@@ -80,7 +80,7 @@ function NavItem({ icon: Icon, label, isActive, isCollapsible, children, badge, 
         isCollapsible ? "justify-between" : isCollapsed ? "justify-center" : "justify-start", // Add center alignment
         isActive && "bg-accent text-accent-foreground font-medium",
         "hover:bg-accent/50" // Add hover effect
-      )} 
+      )}
       onClick={handleClick}
     >
       <div className={cn(
@@ -225,8 +225,8 @@ export function Sidebar() {
             )}
             onClick={() => setIsCollapsed(!isCollapsed)}
           >
-            {isCollapsed ? 
-              <TbLayoutSidebarRightCollapse className="h-5 w-5" /> : 
+            {isCollapsed ?
+              <TbLayoutSidebarRightCollapse className="h-5 w-5" /> :
               <TbLayoutSidebarLeftCollapse className="h-5 w-5" />
             }
           </Button>
@@ -236,31 +236,31 @@ export function Sidebar() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 custom-scrollbar">
           <nav className="space-y-6">
             <div className="space-y-1">
-              {!isCollapsed && 
+              {!isCollapsed &&
                 <div className="text-xs uppercase font-medium text-muted-foreground mb-2 px-2">
                   Overview
                 </div>
               }
-              <NavItem 
-                icon={House} 
-                label="Dashboard" 
-                isCollapsed={isCollapsed} 
+              <NavItem
+                icon={House}
+                label="Dashboard"
+                isCollapsed={isCollapsed}
                 onExpand={handleExpand}
                 isActive={activeItem === "Dashboard"}
                 onClick={() => handleItemClick("Dashboard")}
               />
-              <NavItem 
-                icon={LayoutTemplate} 
-                label="Templates" 
-                isCollapsed={isCollapsed} 
+              <NavItem
+                icon={LayoutTemplate}
+                label="Templates"
+                isCollapsed={isCollapsed}
                 onExpand={handleExpand}
                 isActive={activeItem === "Templates"}
                 onClick={() => handleItemClick("Templates")}
               />
-              <NavItem 
-                icon={ChartNetwork} 
-                label="System Topology" 
-                isCollapsed={isCollapsed} 
+              <NavItem
+                icon={ChartNetwork}
+                label="System Topology"
+                isCollapsed={isCollapsed}
                 onExpand={handleExpand}
                 isActive={activeItem === "System Topology"}
                 onClick={() => handleItemClick("System Topology")}
@@ -280,10 +280,10 @@ export function Sidebar() {
                 <div className="space-y-1 py-1">
                   <div className="max-w-full overflow-hidden space-y-2">
                     {[
-                      { path: "/extraction-config", label: "Extarction Config" },
                       { path: "/manage-systems", label: "Add Systems" },
-                      { path: "/kpi-config", label: "KPI Config" },
-                      { path: "/master-filters", label: "Master Filters Config" },
+                      { path: "/extraction-config", label: "Extarction Config" },
+                      // { path: "/kpi-config", label: "KPI Config" },
+                      // { path: "/master-filters", label: "Master Filters Config" },
                       { path: "/user-access", label: "User Access" },
                     ].map((item, index) => (
                       <Button
@@ -304,10 +304,10 @@ export function Sidebar() {
             </div>
             <div className="space-y- py-3">
               {!isCollapsed && <div className="text-sm font-medium">Alerts</div>}
-              <NavItem 
-                icon={Siren} 
-                label="Alert Monitering" 
-                isCollapsed={isCollapsed} 
+              <NavItem
+                icon={Siren}
+                label="Alert Monitering"
+                isCollapsed={isCollapsed}
                 onExpand={handleExpand}
                 isActive={activeItem === "Alert Monitering"}
                 onClick={() => handleItemClick("Alert Monitering")}
@@ -319,19 +319,19 @@ export function Sidebar() {
         {/* Update footer section */}
         <div className="border-t p-3 mt-auto bg-card/50">
           <div className="space-y-1">
-            <NavItem 
-              icon={Bell} 
-              label="Notifications" 
-              badge={3} 
-              isCollapsed={isCollapsed} 
+            <NavItem
+              icon={Bell}
+              label="Notifications"
+              badge={3}
+              isCollapsed={isCollapsed}
               onExpand={handleExpand}
               isActive={activeItem === "Notifications"}
               onClick={() => handleItemClick("Notifications")}
             />
-            <NavItem 
-              icon={Settings} 
-              label="Settings" 
-              isCollapsed={isCollapsed} 
+            <NavItem
+              icon={Settings}
+              label="Settings"
+              isCollapsed={isCollapsed}
               onExpand={handleExpand}
               isActive={activeItem === "Settings"}
               onClick={() => handleItemClick("Settings")}
