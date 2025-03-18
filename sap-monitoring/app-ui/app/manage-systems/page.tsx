@@ -42,53 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-// Add this custom hook at the top of the file after imports
-const useSystemStatusPolling = (systems: System[], interval = 60000) => {
-  const [connectionStatuses, setConnectionStatuses] = useState<
-    Record<string, boolean>
-  >({});
-
-  useEffect(() => {
-    const fetchStatus = async (systemId: string) => {
-      try {
-        const response = await fetch(
-          `https://shwsckbvbt.a.pinggy.link/api/conn?system_id=${systemId}`
-        );
-        if (!response.ok) throw new Error("Failed to fetch status");
-        const data = await response.json();
-        return { systemId, active: data.active };
-      } catch (error) {
-        console.error(`Error fetching status for system ${systemId}:`, error);
-        return { systemId, active: false };
-      }
-    };
-
-    const updateAllStatuses = async () => {
-      const statusUpdates = await Promise.all(
-        systems.map((system) => fetchStatus(system.systemId))
-      );
-
-      const newStatuses = statusUpdates.reduce((acc, { systemId, active }) => {
-        acc[systemId] = active;
-        return acc;
-      }, {} as Record<string, boolean>);
-
-      setConnectionStatuses(newStatuses);
-    };
-
-    // Initial fetch
-    updateAllStatuses();
-
-    // Set up polling interval
-    const pollInterval = setInterval(updateAllStatuses, interval);
-
-    // Cleanup
-    return () => clearInterval(pollInterval);
-  }, [systems, interval]);
-
-  return connectionStatuses;
-};
+import { Switch } from "@/components/ui/switch";
 
 // Update the System interface
 interface System {
@@ -103,16 +57,11 @@ interface System {
   no?: number;
 }
 
+// First, update the SystemStats interface to match what we'll calculate
 interface SystemStats {
   totalSystems: number;
-  pollingStatusBreakdown: Array<{
-    status: string;
-    count: number;
-  }>;
-  systemStatus: {
-    connected: number;
-    disconnected: number;
-  };
+  activeSystems: number;
+  inactiveSystems: number;
 }
 
 interface StatsCardProps {
@@ -140,16 +89,29 @@ interface AddSystemSheetProps {
   isLoading: boolean;
 }
 
+interface UpdatePollingStatusRequest {
+  systemId: string;
+  pollingStatus: boolean;
+}
+
+interface UpdateActiveStatusRequest {
+  systemId: string;
+  activeStatus: boolean;
+}
+
+// Update the StatsCards component interface
+interface StatsCardsProps {
+  stats: SystemStats;
+  isLoading: boolean;
+}
+
 export default function ManageSystemsPage() {
   const [isAddSystemSheetOpen, setIsAddSystemSheetOpen] = useState(false);
   const [systems, setSystems] = useState<System[]>([]);
   const [stats, setStats] = useState<SystemStats>({
     totalSystems: 0,
-    pollingStatusBreakdown: [],
-    systemStatus: {
-      connected: 0,
-      disconnected: 0,
-    },
+    activeSystems: 0,
+    inactiveSystems: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -160,17 +122,26 @@ export default function ManageSystemsPage() {
     fetchSystems();
   }, []);
 
+  // Update the fetchSystemStats function
   const fetchSystemStats = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("http://localhost:3000/api/system-stats");
-      const result = await response.json();
+      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys");
 
-      if (result.success) {
-        setStats(result.data);
-      } else {
-        throw new Error(result.message || "Failed to fetch system stats");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const systems = await response.json();
+
+      // Calculate stats from systems array
+      const stats = {
+        totalSystems: systems.length,
+        activeSystems: systems.filter((sys) => sys.activeStatus).length,
+        inactiveSystems: systems.filter((sys) => !sys.activeStatus).length,
+      };
+
+      setStats(stats);
     } catch (error) {
       toast({
         title: "Error",
@@ -317,30 +288,8 @@ export default function ManageSystemsPage() {
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatsCard
-            title="Total Systems"
-            value={stats.totalSystems}
-            icon={MonitorDot}
-            loading={isLoading}
-            variant="blue"
-          />
-          <StatsCard
-            title="Active Systems"
-            value={stats.systemStatus.connected}
-            icon={Activity}
-            loading={isLoading}
-            variant="green"
-          />
-          <StatsCard
-            title="Disconnected"
-            value={stats.systemStatus.disconnected}
-            icon={AlertCircle}
-            loading={isLoading}
-            variant="red"
-          />
-        </div>
+        {/* Pass stats and isLoading as props */}
+        <StatsCards stats={stats} isLoading={isLoading} />
 
         {/* Systems Table */}
         <Card className="bg-card/50 backdrop-blur border-border/50 shadow-lg">
@@ -430,15 +379,170 @@ interface SystemsTableProps {
   onSettings: (id: number) => void;
 }
 
-// Update the SystemsTable component to use the polling hook
+// First, add a custom hook for polling connection status
+const useConnectionStatusPolling = (systems: System[], interval = 60000) => {
+  const [connectionStatuses, setConnectionStatuses] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    const checkConnectionStatus = async (systemId: string) => {
+      try {
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/conn?system_id=${systemId}`
+        );
+        if (!response.ok) throw new Error("Failed to fetch connection status");
+        const data = await response.json();
+        return { systemId, active: data.active };
+      } catch (error) {
+        console.error(
+          `Error checking connection for system ${systemId}:`,
+          error
+        );
+        return { systemId, active: false };
+      }
+    };
+
+    const updateAllStatuses = async () => {
+      const statusUpdates = await Promise.all(
+        systems.map((system) => checkConnectionStatus(system.systemId))
+      );
+
+      setConnectionStatuses(
+        statusUpdates.reduce((acc, { systemId, active }) => {
+          acc[systemId] = active;
+          return acc;
+        }, {} as Record<string, boolean>)
+      );
+    };
+
+    // Initial check
+    updateAllStatuses();
+
+    // Set up polling interval
+    const pollInterval = setInterval(updateAllStatuses, interval);
+
+    // Cleanup
+    return () => clearInterval(pollInterval);
+  }, [systems, interval]);
+
+  return connectionStatuses;
+};
+
+// Update the SystemsTable component with state management
 const SystemsTable = ({
   systems,
   onDelete,
   onEdit,
   onSettings,
 }: SystemsTableProps) => {
-  const connectionStatuses = useSystemStatusPolling(systems);
+  const [isUpdating, setIsUpdating] = useState<string>("");
+  const [localSystems, setLocalSystems] = useState<System[]>(systems);
+  const { toast } = useToast();
+  const connectionStatuses = useConnectionStatusPolling(localSystems);
 
+  // Update local state when systems prop changes
+  useEffect(() => {
+    setLocalSystems(systems);
+  }, [systems]);
+
+  const handlePollingStatusChange = async (
+    systemId: string,
+    currentStatus: boolean
+  ) => {
+    setIsUpdating(`polling-${systemId}`);
+    try {
+      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemId,
+          pollingStatus: !currentStatus,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update polling status");
+
+      // Update local state after successful API call
+      setLocalSystems((prev) =>
+        prev.map((sys) =>
+          sys.systemId === systemId
+            ? { ...sys, pollingStatus: !currentStatus }
+            : sys
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `Polling ${
+          !currentStatus ? "enabled" : "disabled"
+        } for system ${systemId}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update polling status",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating("");
+    }
+  };
+
+  const handleActiveStatusChange = async (
+    systemId: string,
+    currentStatus: boolean
+  ) => {
+    setIsUpdating(`active-${systemId}`);
+    try {
+      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemId,
+          activeStatus: !currentStatus,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update active status");
+
+      // Update local state after successful API call
+      setLocalSystems((prev) =>
+        prev.map((sys) =>
+          sys.systemId === systemId
+            ? { ...sys, activeStatus: !currentStatus }
+            : sys
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: `System ${
+          !currentStatus ? "activated" : "deactivated"
+        } successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update active status",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating("");
+    }
+  };
+
+  // Update the render to use localSystems instead of systems
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -452,11 +556,12 @@ const SystemsTable = ({
             <TableHead>Description</TableHead>
             <TableHead>Connection Status</TableHead>
             <TableHead>Polling Status</TableHead>
+            <TableHead>Active Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {systems.map((system) => (
+          {localSystems.map((system) => (
             <TableRow key={system.id}>
               <TableCell>{system.no}</TableCell>
               <TableCell className="font-medium">{system.systemId}</TableCell>
@@ -478,15 +583,28 @@ const SystemsTable = ({
                 </div>
               </TableCell>
               <TableCell>
-                <div
-                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                    system.pollingStatus
-                      ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-                      : "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
-                  }`}
-                >
-                  {system.pollingStatus ? "Active" : "Inactive"}
-                </div>
+                <Switch
+                  checked={system.pollingStatus}
+                  disabled={isUpdating === `polling-${system.systemId}`}
+                  onCheckedChange={() =>
+                    handlePollingStatusChange(
+                      system.systemId,
+                      system.pollingStatus
+                    )
+                  }
+                />
+              </TableCell>
+              <TableCell>
+                <Switch
+                  checked={system.activeStatus}
+                  disabled={isUpdating === `active-${system.systemId}`}
+                  onCheckedChange={() =>
+                    handleActiveStatusChange(
+                      system.systemId,
+                      system.activeStatus
+                    )
+                  }
+                />
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end space-x-2">
@@ -497,13 +615,7 @@ const SystemsTable = ({
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onDelete(system.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+
                   <Button
                     variant="ghost"
                     size="icon"
@@ -703,3 +815,30 @@ const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
       return "bg-gray-50 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400";
   }
 };
+
+// Update the stats cards section
+const StatsCards = ({ stats, isLoading }: StatsCardsProps) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <StatsCard
+      title="Total Systems"
+      value={stats.totalSystems}
+      icon={MonitorDot}
+      loading={isLoading}
+      variant="blue"
+    />
+    <StatsCard
+      title="Active Systems"
+      value={stats.activeSystems}
+      icon={Activity}
+      loading={isLoading}
+      variant="green"
+    />
+    <StatsCard
+      title="Inactive Systems"
+      value={stats.inactiveSystems}
+      icon={AlertCircle}
+      loading={isLoading}
+      variant="red"
+    />
+  </div>
+);
