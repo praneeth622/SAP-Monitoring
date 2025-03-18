@@ -533,7 +533,7 @@ export default function TemplatesPage() {
           <Sheet
             isOpen={isAddGraphSheetOpen}
             onClose={() => setIsAddGraphSheetOpen(false)}
-            title="Add Graph from Template"
+            title="Add Graph to Template"
           >
             {selectedTemplate && (
               <AddGraphSheet

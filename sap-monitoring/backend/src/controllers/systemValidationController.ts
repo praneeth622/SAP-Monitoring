@@ -11,13 +11,13 @@ export const validateAndCreateSystem = async (
 ) => {
   try {
     const { systemName, description, systemSource, username, password } = req.body as SystemValidationRequest;
-
+    console.log(req.body);
     // Validation checks
     if (!systemSource || !username || !password) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         error: 'Validation Error',
-        message: 'System source, username, and password are required' 
+        message: 'System source, username, and password are required'
       });
     }
 
@@ -54,8 +54,8 @@ export const validateAndCreateSystem = async (
     });
   } catch (error) {
     console.error('System validation error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: 'Internal Server Error',
       message: error instanceof Error ? error.message : 'Failed to validate and create system'
     });

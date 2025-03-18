@@ -303,7 +303,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         onSubmit={handleSubmit}
         className="space-y-6"
       >
-        <motion.div
+        {/* <motion.div
           variants={itemVariants}
           className="bg-accent/20 rounded-lg p-4 mb-6 backdrop-blur-sm"
         >
@@ -314,7 +314,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             <p>Time Range: {template.timeRange}</p>
             <p>Resolution: {template.resolution}</p>
           </div>
-        </motion.div>
+        </motion.div> */}
 
         {/* Form fields */}
         <motion.div variants={itemVariants} className="space-y-4">
@@ -463,16 +463,17 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               <label className="block text-sm font-medium text-foreground/90">
                 Correlation KPIs
               </label>
-              <Button
+              {/* <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addCorrelationKpi}
                 disabled={!formData.kpiGroup || isLoading}
+                disabled={!formData.kpiGroup || isLoading}
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Add KPI
-              </Button>
+              </Button> */}
             </div>
             <div className="space-y-3">
               {formData.correlationKpis.map((corrKpi, index) => (

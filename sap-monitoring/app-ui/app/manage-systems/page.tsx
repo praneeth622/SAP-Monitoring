@@ -1,29 +1,29 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/hooks/use-toast"
+import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, 
-  MonitorDot, 
-  Activity, 
-  AlertCircle, 
-  Edit, 
-  Settings, 
+  Plus,
+  MonitorDot,
+  Activity,
+  AlertCircle,
+  Edit,
+  Settings,
   Trash2,
   SearchIcon,
   FilterIcon,
-  SortAscIcon 
-} from "lucide-react"
+  SortAscIcon,
+} from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -31,7 +31,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,17 +41,66 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 
+// Add this custom hook at the top of the file after imports
+const useSystemStatusPolling = (systems: System[], interval = 60000) => {
+  const [connectionStatuses, setConnectionStatuses] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    const fetchStatus = async (systemId: string) => {
+      try {
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/conn?system_id=${systemId}`
+        );
+        if (!response.ok) throw new Error("Failed to fetch status");
+        const data = await response.json();
+        return { systemId, active: data.active };
+      } catch (error) {
+        console.error(`Error fetching status for system ${systemId}:`, error);
+        return { systemId, active: false };
+      }
+    };
+
+    const updateAllStatuses = async () => {
+      const statusUpdates = await Promise.all(
+        systems.map((system) => fetchStatus(system.systemId))
+      );
+
+      const newStatuses = statusUpdates.reduce((acc, { systemId, active }) => {
+        acc[systemId] = active;
+        return acc;
+      }, {} as Record<string, boolean>);
+
+      setConnectionStatuses(newStatuses);
+    };
+
+    // Initial fetch
+    updateAllStatuses();
+
+    // Set up polling interval
+    const pollInterval = setInterval(updateAllStatuses, interval);
+
+    // Cleanup
+    return () => clearInterval(pollInterval);
+  }, [systems, interval]);
+
+  return connectionStatuses;
+};
+
+// Update the System interface
 interface System {
-  id: number;
+  id: string;
   systemId: string;
-  systemName: string;
-  systemType: string;
-  pollingStatus: string;
-  connectionStatus: string;
-  isActive: boolean;
-  no?: number; // Added to match backend response
+  instance: string;
+  client: number;
+  description: string;
+  type: string;
+  pollingStatus: boolean;
+  activeStatus: boolean;
+  no?: number;
 }
 
 interface SystemStats {
@@ -71,7 +120,7 @@ interface StatsCardProps {
   value: number;
   icon: React.ElementType;
   loading: boolean;
-  variant: 'blue' | 'green' | 'red';
+  variant: "blue" | "green" | "red";
 }
 
 interface EmptyStateProps {
@@ -92,18 +141,18 @@ interface AddSystemSheetProps {
 }
 
 export default function ManageSystemsPage() {
-  const [isAddSystemSheetOpen, setIsAddSystemSheetOpen] = useState(false)
-  const [systems, setSystems] = useState<System[]>([])
+  const [isAddSystemSheetOpen, setIsAddSystemSheetOpen] = useState(false);
+  const [systems, setSystems] = useState<System[]>([]);
   const [stats, setStats] = useState<SystemStats>({
     totalSystems: 0,
     pollingStatusBreakdown: [],
     systemStatus: {
       connected: 0,
-      disconnected: 0
-    }
-  })
-  const [isLoading, setIsLoading] = useState(true)
-  const { toast } = useToast()
+      disconnected: 0,
+    },
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
   const [systemToDelete, setSystemToDelete] = useState<number | null>(null);
 
   useEffect(() => {
@@ -114,41 +163,63 @@ export default function ManageSystemsPage() {
   const fetchSystemStats = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:3000/api/system-stats');
+      const response = await fetch("http://localhost:3000/api/system-stats");
       const result = await response.json();
-      
+
       if (result.success) {
         setStats(result.data);
       } else {
-        throw new Error(result.message || 'Failed to fetch system stats');
+        throw new Error(result.message || "Failed to fetch system stats");
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch system statistics",
-        variant: "destructive"
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch system statistics",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Update the fetchSystems function
   const fetchSystems = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:3000/api/systems');
+      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const result = await response.json();
-      
-      if (result.success) {
-        setSystems(result.data);
+
+      if (result) {
+        // Transform the API response to match our table structure
+        const transformedSystems = result.map((system: any, index: number) => ({
+          id: system.system_id,
+          systemId: system.system_id,
+          instance: system.instance,
+          client: system.client,
+          description: system.description,
+          type: system.type,
+          pollingStatus: system.pollingStatus,
+          activeStatus: system.activeStatus,
+          no: index + 1,
+        }));
+
+        setSystems(transformedSystems);
       } else {
-        throw new Error(result.message || 'Failed to fetch systems');
+        throw new Error("Failed to fetch systems");
       }
     } catch (error) {
+      console.error("Error fetching systems:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch systems",
-        variant: "destructive"
+        description:
+          error instanceof Error ? error.message : "Failed to fetch systems",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -156,29 +227,32 @@ export default function ManageSystemsPage() {
   };
 
   const handleAddSystem = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
     setIsLoading(true);
-    
+
     try {
       // First validate the system
-      const validateResponse = await fetch('http://localhost:3000/api/system-validation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          systemName: formData.get('name'),
-          systemType: formData.get('description'),
-          systemSource: formData.get('source'),
-          username: formData.get('username'),
-          password: formData.get('password'),
-        }),
-      });
+      const validateResponse = await fetch(
+        "http://localhost:3000/api/system-validation",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            systemName: formData.get("name"),
+            systemType: formData.get("description"),
+            systemSource: formData.get("source"),
+            username: formData.get("username"),
+            password: formData.get("password"),
+          }),
+        }
+      );
 
       if (!validateResponse.ok) {
         const errorData = await validateResponse.json();
-        throw new Error(errorData.message || 'System validation failed');
+        throw new Error(errorData.message || "System validation failed");
       }
 
       const validatedSystem = await validateResponse.json();
@@ -192,8 +266,9 @@ export default function ManageSystemsPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to add system",
-        variant: "destructive"
+        description:
+          error instanceof Error ? error.message : "Failed to add system",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -201,22 +276,19 @@ export default function ManageSystemsPage() {
   };
 
   const handleAddSystemSuccess = async () => {
-    await Promise.all([
-      fetchSystemStats(),
-      fetchSystems()
-    ]);
+    await Promise.all([fetchSystemStats(), fetchSystems()]);
   };
 
   const handleDeleteSystem = async (id: number) => {
     try {
       const response = await fetch(`http://localhost:3000/api/systems/${id}`, {
-        method: 'DELETE'
+        method: "DELETE",
       });
-      
-      if (!response.ok) throw new Error('Failed to delete system');
-      
+
+      if (!response.ok) throw new Error("Failed to delete system");
+
       await Promise.all([fetchSystemStats(), fetchSystems()]);
-      
+
       toast({
         title: "Success",
         description: "System deleted successfully",
@@ -224,8 +296,9 @@ export default function ManageSystemsPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete system",
-        variant: "destructive"
+        description:
+          error instanceof Error ? error.message : "Failed to delete system",
+        variant: "destructive",
       });
     }
     setSystemToDelete(null);
@@ -275,10 +348,7 @@ export default function ManageSystemsPage() {
             <div className="flex items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input 
-                  placeholder="Search systems..."
-                  className="pl-9"
-                />
+                <Input placeholder="Search systems..." className="pl-9" />
               </div>
               <div className="flex items-center gap-3">
                 <Button variant="outline" size="icon">
@@ -300,18 +370,18 @@ export default function ManageSystemsPage() {
           ) : systems.length === 0 ? (
             <EmptyState onAdd={() => setIsAddSystemSheetOpen(true)} />
           ) : (
-            <SystemsTable 
+            <SystemsTable
               systems={systems}
               onDelete={setSystemToDelete}
-              onEdit={(id) => console.log('Edit:', id)} // TODO: Implement edit
-              onSettings={(id) => console.log('Settings:', id)} // TODO: Implement settings
+              onEdit={(id) => console.log("Edit:", id)} // TODO: Implement edit
+              onSettings={(id) => console.log("Settings:", id)} // TODO: Implement settings
             />
           )}
         </Card>
       </main>
 
       {/* Add System Sheet */}
-      <AddSystemSheet 
+      <AddSystemSheet
         open={isAddSystemSheetOpen}
         onClose={() => setIsAddSystemSheetOpen(false)}
         onSubmit={handleAddSystem}
@@ -325,11 +395,17 @@ export default function ManageSystemsPage() {
         onConfirm={() => systemToDelete && handleDeleteSystem(systemToDelete)}
       />
     </div>
-  )
+  );
 }
 
 // Helper Components
-const StatsCard = ({ title, value, icon: Icon, loading, variant }: StatsCardProps) => (
+const StatsCard = ({
+  title,
+  value,
+  icon: Icon,
+  loading,
+  variant,
+}: StatsCardProps) => (
   <Card className="p-6 bg-card/50 backdrop-blur border-border/50 shadow-lg transition-shadow hover:shadow-xl">
     <div className="flex items-center gap-4">
       <div className={`p-3 rounded-xl ${getVariantClasses(variant)}`}>
@@ -354,89 +430,101 @@ interface SystemsTableProps {
   onSettings: (id: number) => void;
 }
 
-const SystemsTable = ({ systems, onDelete, onEdit, onSettings }: SystemsTableProps) => (
-  <div className="overflow-x-auto">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>No</TableHead>
-          <TableHead>System Name</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Polling Status</TableHead>
-          <TableHead>Connection Status</TableHead>
-          <TableHead>Active Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {systems.map((system, index) => (
-          <TableRow key={system.id}>
-            <TableCell>{system.no || index + 1}</TableCell>
-            <TableCell className="font-medium">{system.systemName}</TableCell>
-            <TableCell>{system.systemType}</TableCell>
-            <TableCell>
-              <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                system.pollingStatus === 'Active'
-                  ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
-              }`}>
-                {system.pollingStatus}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                system.connectionStatus === 'Connected'
-                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-              }`}>
-                {system.connectionStatus}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                system.isActive
-                  ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-              }`}>
-                {system.isActive ? 'Active' : 'Inactive'}
-              </div>
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex items-center justify-end space-x-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onEdit(system.id)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDelete(system.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onSettings(system.id)}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </div>
-            </TableCell>
+// Update the SystemsTable component to use the polling hook
+const SystemsTable = ({
+  systems,
+  onDelete,
+  onEdit,
+  onSettings,
+}: SystemsTableProps) => {
+  const connectionStatuses = useSystemStatusPolling(systems);
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>No</TableHead>
+            <TableHead>System ID</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Instance</TableHead>
+            <TableHead>Client</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead>Connection Status</TableHead>
+            <TableHead>Polling Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  </div>
-);
+        </TableHeader>
+        <TableBody>
+          {systems.map((system) => (
+            <TableRow key={system.id}>
+              <TableCell>{system.no}</TableCell>
+              <TableCell className="font-medium">{system.systemId}</TableCell>
+              <TableCell>{system.type}</TableCell>
+              <TableCell>{system.instance}</TableCell>
+              <TableCell>{system.client}</TableCell>
+              <TableCell>{system.description}</TableCell>
+              <TableCell>
+                <div
+                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                    connectionStatuses[system.systemId]
+                      ? "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                      : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                  }`}
+                >
+                  {connectionStatuses[system.systemId]
+                    ? "Connected"
+                    : "Disconnected"}
+                </div>
+              </TableCell>
+              <TableCell>
+                <div
+                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                    system.pollingStatus
+                      ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+                      : "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
+                  }`}
+                >
+                  {system.pollingStatus ? "Active" : "Inactive"}
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEdit(system.id)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDelete(system.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onSettings(system.id)}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
 
 const TableLoadingState = () => (
   <div className="p-8">
     <div className="space-y-4">
-      {[1, 2, 3].map(i => (
+      {[1, 2, 3].map((i) => (
         <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
       ))}
     </div>
@@ -461,14 +549,18 @@ const EmptyState = ({ onAdd }: EmptyStateProps) => (
   </div>
 );
 
-const DeleteConfirmationDialog = ({ open, onClose, onConfirm }: DeleteConfirmationDialogProps) => (
+const DeleteConfirmationDialog = ({
+  open,
+  onClose,
+  onConfirm,
+}: DeleteConfirmationDialogProps) => (
   <AlertDialog open={open} onOpenChange={onClose}>
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
         <AlertDialogDescription>
-          This action cannot be undone. This will permanently delete the
-          system and remove all associated data.
+          This action cannot be undone. This will permanently delete the system
+          and remove all associated data.
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
@@ -484,7 +576,12 @@ const DeleteConfirmationDialog = ({ open, onClose, onConfirm }: DeleteConfirmati
   </AlertDialog>
 );
 
-const AddSystemSheet = ({ open, onClose, onSubmit, isLoading }: AddSystemSheetProps) => (
+const AddSystemSheet = ({
+  open,
+  onClose,
+  onSubmit,
+  isLoading,
+}: AddSystemSheetProps) => (
   <Sheet open={open} onOpenChange={onClose}>
     <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
       <SheetHeader>
@@ -584,7 +681,7 @@ const AddSystemSheet = ({ open, onClose, onSubmit, isLoading }: AddSystemSheetPr
                 Validating...
               </>
             ) : (
-              'Add System'
+              "Add System"
             )}
           </Button>
         </div>
@@ -594,15 +691,15 @@ const AddSystemSheet = ({ open, onClose, onSubmit, isLoading }: AddSystemSheetPr
 );
 
 // Utility function for variant classes
-const getVariantClasses = (variant: 'blue' | 'green' | 'red'): string => {
+const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
   switch (variant) {
-    case 'blue':
-      return 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400';
-    case 'green':
-      return 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400';
-    case 'red':
-      return 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400';
+    case "blue":
+      return "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
+    case "green":
+      return "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400";
+    case "red":
+      return "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400";
     default:
-      return 'bg-gray-50 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400';
+      return "bg-gray-50 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400";
   }
 };
