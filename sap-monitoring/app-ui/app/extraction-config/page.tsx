@@ -83,29 +83,10 @@ interface KPI {
   y2r: number | null;
   direction: string;
   criticality: string;
+  is_active: boolean;
+  sap_frequency?: string;
+  sys_frequency?: string;
 }
-
-// Updated interfaces
-interface TableKPI extends KPI {
-  isExpanded?: boolean; // For tracking parent KPI expansion state
-  children?: KPI[]; // For storing child KPIs
-}
-
-const steps = [
-  { id: 1, name: "KPI Config", completed: true, current: false },
-  { id: 2, name: "Extraction Config", completed: false, current: true },
-  { id: 3, name: "Filters", completed: false, current: false },
-  { id: 4, name: "User Access", completed: false, current: false },
-];
-
-const fetchWithError = async (url: string) => {
-  const response = await axios.get(url);
-  if (!response.ok) {
-    console.error("Error fetching data:", response.statusText);
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  return response.data;
-};
 
 export default function ConfigDashboard() {
   const [systems, setSystems] = useState<SystemResponse[]>([]);
@@ -164,6 +145,9 @@ export default function ConfigDashboard() {
     null
   );
 
+  // Add these state declarations at the top of your ConfigDashboard component
+  const [isUpdating, setIsUpdating] = useState<string>("");
+
   // Add useEffect to initialize activeKpiGroups from API data
   useEffect(() => {
     const initialActiveGroups = new Set(
@@ -180,15 +164,14 @@ export default function ConfigDashboard() {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await fetch("/api/sys");
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setSystems(data);
+        const response = await axios.get(
+          "https://shwsckbvbt.a.pinggy.link/api/sys"
+        );
+        setSystems(response.data);
       } catch (error) {
         console.error("Error loading systems:", error);
         toast.error("Failed to load systems");
+        setError("Failed to load systems");
       } finally {
         setIsLoading(false);
       }
@@ -205,7 +188,7 @@ export default function ConfigDashboard() {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await fetch("/api/ma");
+        const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/ma");
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -262,7 +245,9 @@ export default function ConfigDashboard() {
         });
       } else {
         // Add area and fetch its KPI groups
-        const response = await fetch(`/api/kpigrp?mon_area=${areaName}`);
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/kpigrp?mon_area=${areaName}`
+        );
         if (!response.ok) {
           throw new Error(`Failed to fetch KPI groups for ${areaName}`);
         }
@@ -306,38 +291,6 @@ export default function ConfigDashboard() {
       area.mon_area_desc.toLowerCase().includes(areaSearch.toLowerCase())
   );
 
-  const filteredKpiGroups = kpiGroups.filter(
-    (kpi) =>
-      kpi.kpi_name?.toLowerCase().includes(kpiSearch.toLowerCase()) ||
-      kpi.kpi_desc?.toLowerCase().includes(kpiSearch.toLowerCase())
-  );
-
-  // Add handler for KPI group selection
-  const handleKpiGroupSelect = async (groupName: string, monArea: string) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`/api/kpi?kpi_grp=${groupName}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch KPIs for ${groupName}`);
-      }
-
-      const kpiData = await response.json();
-
-      // Set KPIs based on monitoring area
-      if (monArea === "OS") {
-        setOsKpis(kpiData);
-      } else if (monArea === "JOBS") {
-        setJobsKpis(kpiData);
-      }
-    } catch (error) {
-      console.error("Error loading KPIs:", error);
-      toast.error(`Failed to load KPIs for ${groupName}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Add this function to handle KPI expansion
   const handleKpiExpand = (kpiName: string) => {
     setExpandedKpis((prev) => {
@@ -367,6 +320,60 @@ export default function ConfigDashboard() {
         [type]: value,
       },
     }));
+  };
+
+  // Add the handleKpiStatusChange function
+  const handleKpiStatusChange = async (kpi: KPI) => {
+    try {
+      setIsUpdating(kpi.kpi_name);
+
+      const response = await fetch(
+        `https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi.kpi_name}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            is_active: !kpi.is_active,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update KPI status");
+      }
+
+      // Update local state based on monitoring area
+      if (kpi.kpi_group.startsWith("OS")) {
+        setOsKpis((prev) =>
+          prev.map((item) =>
+            item.kpi_name === kpi.kpi_name
+              ? { ...item, is_active: !item.is_active }
+              : item
+          )
+        );
+      } else if (kpi.kpi_group.startsWith("JOBS")) {
+        setJobsKpis((prev) =>
+          prev.map((item) =>
+            item.kpi_name === kpi.kpi_name
+              ? { ...item, is_active: !item.is_active }
+              : item
+          )
+        );
+      }
+
+      toast.success(
+        `KPI ${kpi.kpi_name} ${
+          !kpi.is_active ? "activated" : "deactivated"
+        } successfully`
+      );
+    } catch (error) {
+      console.error("Error updating KPI status:", error);
+      toast.error(`Failed to update KPI ${kpi.kpi_name} status`);
+    } finally {
+      setIsUpdating("");
+    }
   };
 
   // Update card styles for tables
@@ -501,7 +508,7 @@ export default function ConfigDashboard() {
     </Card>
   );
 
-  // Update the KPIs table render with parent/child structure
+  // Update the KPIs table render with proper alignment
   const renderKPIs = () => {
     const parentKpis = filteredKpis(
       [...osKpis, ...jobsKpis].filter((kpi) => kpi.parent === true)
@@ -510,14 +517,22 @@ export default function ConfigDashboard() {
 
     return (
       <Card className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold">KPIs</h2>
-          <Input
-            placeholder="Search KPIs..."
-            value={kpiSearchTerm}
-            onChange={(e) => setKpiSearchTerm(e.target.value)}
-            className="w-[300px]"
-          />
+        {/* Header with Search */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold">KPIs Configuration</h2>
+            <p className="text-sm text-muted-foreground">
+              Manage and configure your key performance indicators
+            </p>
+          </div>
+          <div className="w-[300px]">
+            <Input
+              placeholder="Search KPIs..."
+              value={kpiSearchTerm}
+              onChange={(e) => setKpiSearchTerm(e.target.value)}
+              className="w-full"
+            />
+          </div>
         </div>
 
         {isLoading ? (
@@ -526,67 +541,92 @@ export default function ConfigDashboard() {
           </div>
         ) : parentKpis.length > 0 ? (
           <div className={tableContainerStyles}>
-            <div className="sticky top-0 z-10 bg-background grid grid-cols-6 gap-4 mb-2 px-2 font-medium text-sm text-gray-500">
-              <div>KPI Name</div>
-              <div>Monitoring Area</div>
-              <div>KPI Desc</div>
-              {/* <div>Dependency</div> */}
-              {/* <div className="text-center">Active</div> */}
-              <div className="text-center">Settings</div>
+            {/* Table Header */}
+            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
+                <div className="col-span-3">KPI Name</div>
+                <div className="col-span-2">Area</div>
+                <div className="col-span-4">Description</div>
+                <div className="col-span-2 text-center">Status</div>
+                <div className="col-span-1 text-right">Actions</div>
+              </div>
             </div>
 
-            <div className="space-y-2">
+            {/* Table Body */}
+            <div className="space-y-1">
               {parentKpis.map((kpi) => (
-                <div key={kpi.kpi_name}>
+                <div key={kpi.kpi_name} className="group">
+                  {/* Parent KPI Row */}
                   <div
-                    className="grid grid-cols-6 gap-4 items-center p-2 hover:bg-accent/5 rounded-lg cursor-pointer"
+                    className="grid grid-cols-12 gap-4 py-3 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center"
                     onClick={() => handleKpiExpand(kpi.kpi_name)}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="col-span-3 flex items-center gap-2">
                       <ChevronDown
-                        className={`h-4 w-4 transition-transform ${
+                        className={`h-4 w-4 text-muted-foreground transition-transform ${
                           expandedKpis.has(kpi.kpi_name) ? "rotate-180" : ""
                         }`}
                       />
-                      {kpi.kpi_name}
+                      <span className="font-medium">{kpi.kpi_name}</span>
                     </div>
-                    <div>{kpi.kpi_group}</div>
-                    <div>{kpi.kpi_desc}</div>
-                    {/* <div>{kpi.parent ? "Parent" : "Child"}</div> */}
-                    {/* <div className="flex justify-center">
-                      <Switch />
-                    </div> */}
-                    <div className="flex justify-center">
-                      {kpi.parent && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => handleKpiSettings(kpi, e)}
-                          className="h-8 w-8"
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      )}
+                    <div className="col-span-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
+                        {kpi.kpi_group}
+                      </span>
+                    </div>
+                    <div className="col-span-4 text-sm text-muted-foreground truncate">
+                      {kpi.kpi_desc}
+                    </div>
+                    <div className="col-span-2 flex justify-center">
+                      <Switch
+                        checked={kpi.is_active}
+                        onCheckedChange={() => handleKpiStatusChange(kpi)}
+                        disabled={isUpdating === kpi.kpi_name}
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleKpiSettings(kpi, e)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
 
                   {/* Child KPIs */}
                   {expandedKpis.has(kpi.kpi_name) && (
-                    <div className="ml-8 space-y-2 mt-2">
+                    <div className="pl-6 space-y-1 ml-4 border-l border-accent">
                       {childKpis
                         .filter((child) => child.kpi_group === kpi.kpi_group)
                         .map((child) => (
                           <div
                             key={child.kpi_name}
-                            className="grid grid-cols-5 gap-4 items-center p-2 hover:bg-accent/5 rounded-lg"
+                            className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg items-center"
                           >
-                            <div>{child.kpi_name}</div>
-                            <div>{child.kpi_group}</div>
-                            <div>{child.kpi_desc}</div>
-                            {/* <div>Child</div> */}
-                            {/* <div className="flex justify-center">
-                              <Switch />
-                            </div> */}
+                            <div className="col-span-3 pl-6">
+                              {child.kpi_name}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
+                                Child
+                              </span>
+                            </div>
+                            <div className="col-span-4 text-sm text-muted-foreground truncate">
+                              {child.kpi_desc}
+                            </div>
+                            <div className="col-span-2 flex justify-center">
+                              <Switch
+                                checked={child.is_active}
+                                onCheckedChange={() =>
+                                  handleKpiStatusChange(child)
+                                }
+                                disabled={isUpdating === child.kpi_name}
+                              />
+                            </div>
+                            <div className="col-span-1" />
                           </div>
                         ))}
                     </div>
@@ -596,10 +636,10 @@ export default function ConfigDashboard() {
             </div>
           </div>
         ) : (
-          <div className="text-center text-gray-500 py-4">
+          <div className="text-center py-8 text-muted-foreground">
             {kpiSearchTerm
               ? "No matching KPIs found"
-              : "Select a monitoring area to view KPIs"}
+              : "Select a KPI group to view KPIs"}
           </div>
         )}
       </Card>
@@ -628,7 +668,9 @@ export default function ConfigDashboard() {
         setActiveKpiGroups((prev) => new Set(prev).add(groupName));
 
         // Fetch KPIs for this group
-        const response = await fetch(`/api/kpi?kpi_grp=${groupName}`);
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
+        );
         if (!response.ok) {
           throw new Error(`Failed to fetch KPIs for ${groupName}`);
         }
@@ -824,13 +866,16 @@ const KpiSettingsSheet = ({
       setIsLoading(true); // Set loading state before API call
 
       // API call to save configuration
-      const response = await fetch(`/api/kpi/${kpi?.kpi_name}/settings`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(configuration),
-      });
+      const response = await fetch(
+        `https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi?.kpi_name}/settings`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(configuration),
+        }
+      );
 
       if (!response.ok) throw new Error("Failed to save settings");
 
@@ -899,8 +944,6 @@ const KpiSettingsSheet = ({
                 </div>
               </div>
             </div>
-
-            {/* Thresholds Section */}
 
             {/* Frequency Settings */}
             <div className="space-y-4">

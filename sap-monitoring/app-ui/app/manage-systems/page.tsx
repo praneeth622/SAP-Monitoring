@@ -913,7 +913,7 @@ const AddSystemSheet = ({
   isLoading,
 }: AddSystemSheetProps) => (
   <Sheet open={open} onOpenChange={onClose}>
-    <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
+    <SheetContent className="space-y-6 w-[800px] sm:max-w-[800px]">
       <SheetHeader>
         <SheetTitle>Add New System</SheetTitle>
         <p className="text-sm text-muted-foreground">
