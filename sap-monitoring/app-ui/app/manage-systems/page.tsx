@@ -43,6 +43,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
+import axios from "axios";
+import EditSystemSheet from "@/components/edit-system-sheet";
 
 // Update the System interface
 interface System {
@@ -57,11 +59,15 @@ interface System {
   no?: number;
 }
 
-// First, update the SystemStats interface to match what we'll calculate
+// Update the SystemStats interface
 interface SystemStats {
   totalSystems: number;
   activeSystems: number;
   inactiveSystems: number;
+  connectionStats: {
+    connected: number;
+    disconnected: number;
+  };
 }
 
 interface StatsCardProps {
@@ -112,6 +118,10 @@ export default function ManageSystemsPage() {
     totalSystems: 0,
     activeSystems: 0,
     inactiveSystems: 0,
+    connectionStats: {
+      connected: 0,
+      disconnected: 0,
+    },
   });
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -135,14 +145,20 @@ export default function ManageSystemsPage() {
       const systems = await response.json();
 
       // Calculate stats from systems array
-      const stats = {
+      const calculatedStats = {
         totalSystems: systems.length,
-        activeSystems: systems.filter((sys) => sys.activeStatus).length,
-        inactiveSystems: systems.filter((sys) => !sys.activeStatus).length,
+        activeSystems: systems.filter((sys: any) => sys.activeStatus).length,
+        inactiveSystems: systems.filter((sys: any) => !sys.activeStatus).length,
+        connectionStats: {
+          connected: systems.filter((sys: any) => sys.connectionStatus).length,
+          disconnected: systems.filter((sys: any) => !sys.connectionStatus)
+            .length,
+        },
       };
 
-      setStats(stats);
+      setStats(calculatedStats);
     } catch (error) {
+      console.error("Error fetching stats:", error);
       toast({
         title: "Error",
         description:
@@ -429,17 +445,31 @@ const useConnectionStatusPolling = (systems: System[], interval = 60000) => {
   return connectionStatuses;
 };
 
-// Update the SystemsTable component with state management
+// Update in your page.tsx
 const SystemsTable = ({
   systems,
   onDelete,
   onEdit,
   onSettings,
 }: SystemsTableProps) => {
+  const [selectedSystem, setSelectedSystem] = useState<System | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string>("");
   const [localSystems, setLocalSystems] = useState<System[]>(systems);
   const { toast } = useToast();
   const connectionStatuses = useConnectionStatusPolling(localSystems);
+
+  // First, add these state variables in the SystemsTable component
+  const [showPollingConfirmDialog, setShowPollingConfirmDialog] =
+    useState(false);
+  const [showActiveConfirmDialog, setShowActiveConfirmDialog] = useState(false);
+  const [pendingChange, setPendingChange] = useState<{
+    systemId: string;
+    currentStatus: boolean;
+    type: "polling" | "active";
+    description?: string;
+    activeStatus?: boolean;
+  } | null>(null);
 
   // Update local state when systems prop changes
   useEffect(() => {
@@ -448,22 +478,39 @@ const SystemsTable = ({
 
   const handlePollingStatusChange = async (
     systemId: string,
-    currentStatus: boolean
+    currentStatus: boolean,
+    currentActiveStatus: boolean,
+    description: string
   ) => {
     setIsUpdating(`polling-${systemId}`);
-    try {
-      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          systemId,
-          pollingStatus: !currentStatus,
-        }),
-      });
 
-      if (!response.ok) throw new Error("Failed to update polling status");
+    try {
+      console.log(
+        "Polling status change:",
+        systemId,
+        !currentStatus,
+        description
+      );
+
+      const formData = new FormData();
+      formData.append("systemId", systemId);
+      formData.append("pollingStatus", (!currentStatus).toString());
+      formData.append("activeStatus", currentActiveStatus.toString());
+      formData.append("description", description);
+
+      const response = await axios.post(
+        "https://shwsckbvbt.a.pinggy.link/api/sys",
+        formData,
+        {
+          headers: {
+            Accept: "*/*",
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.status !== 200)
+        throw new Error("Failed to update polling status");
 
       // Update local state after successful API call
       setLocalSystems((prev) =>
@@ -542,94 +589,265 @@ const SystemsTable = ({
     }
   };
 
-  // Update the render to use localSystems instead of systems
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>No</TableHead>
-            <TableHead>System ID</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Instance</TableHead>
-            <TableHead>Client</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead>Connection Status</TableHead>
-            <TableHead>Polling Status</TableHead>
-            <TableHead>Active Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {localSystems.map((system) => (
-            <TableRow key={system.id}>
-              <TableCell>{system.no}</TableCell>
-              <TableCell className="font-medium">{system.systemId}</TableCell>
-              <TableCell>{system.type}</TableCell>
-              <TableCell>{system.instance}</TableCell>
-              <TableCell>{system.client}</TableCell>
-              <TableCell>{system.description}</TableCell>
-              <TableCell>
-                <div
-                  className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                    connectionStatuses[system.systemId]
-                      ? "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-                      : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-                  }`}
-                >
-                  {connectionStatuses[system.systemId]
-                    ? "Connected"
-                    : "Disconnected"}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Switch
-                  checked={system.pollingStatus}
-                  disabled={isUpdating === `polling-${system.systemId}`}
-                  onCheckedChange={() =>
-                    handlePollingStatusChange(
-                      system.systemId,
-                      system.pollingStatus
-                    )
-                  }
-                />
-              </TableCell>
-              <TableCell>
-                <Switch
-                  checked={system.activeStatus}
-                  disabled={isUpdating === `active-${system.systemId}`}
-                  onCheckedChange={() =>
-                    handleActiveStatusChange(
-                      system.systemId,
-                      system.activeStatus
-                    )
-                  }
-                />
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(system.id)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
+  const handleEditClick = (system: System) => {
+    setSelectedSystem(system);
+    setIsEditSheetOpen(true);
+  };
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onSettings(system.id)}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
+  const handleUpdateDescription = async (
+    systemId: string,
+    description: string
+  ) => {
+    try {
+      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemId,
+          description,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update system");
+
+      // Update local state
+      setLocalSystems((prev) =>
+        prev.map((sys) =>
+          sys.systemId === systemId ? { ...sys, description } : sys
+        )
+      );
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Update the toggle handlers to show confirmation first
+  const handlePollingToggleClick = (
+    systemId: string,
+    currentStatus: boolean,
+    currentActiveStatus: boolean,
+    description: string
+  ) => {
+    setPendingChange({
+      systemId,
+      currentStatus,
+      type: "polling",
+      description,
+      activeStatus: currentActiveStatus,
+    });
+    setShowPollingConfirmDialog(true);
+  };
+
+  const handleActiveToggleClick = (
+    systemId: string,
+    currentStatus: boolean
+  ) => {
+    setPendingChange({
+      systemId,
+      currentStatus,
+      type: "active",
+    });
+    setShowActiveConfirmDialog(true);
+  };
+
+  // Add confirmation dialog components
+  const PollingConfirmationDialog = () => (
+    <AlertDialog
+      open={showPollingConfirmDialog}
+      onOpenChange={() => {
+        setShowPollingConfirmDialog(false);
+        setPendingChange(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change Polling Status</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to{" "}
+            {pendingChange?.currentStatus ? "disable" : "enable"} polling for
+            this system? This will affect the system's monitoring status.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setShowPollingConfirmDialog(false);
+              setPendingChange(null);
+            }}
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (pendingChange) {
+                handlePollingStatusChange(
+                  pendingChange.systemId,
+                  pendingChange.currentStatus,
+                  pendingChange.activeStatus!,
+                  pendingChange.description!
+                );
+              }
+              setShowPollingConfirmDialog(false);
+              setPendingChange(null);
+            }}
+          >
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  const ActiveConfirmationDialog = () => (
+    <AlertDialog
+      open={showActiveConfirmDialog}
+      onOpenChange={() => {
+        setShowActiveConfirmDialog(false);
+        setPendingChange(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change Active Status</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to{" "}
+            {pendingChange?.currentStatus ? "deactivate" : "activate"} this
+            system? This will affect the system's overall functionality.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setShowActiveConfirmDialog(false);
+              setPendingChange(null);
+            }}
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (pendingChange) {
+                handleActiveStatusChange(
+                  pendingChange.systemId,
+                  pendingChange.currentStatus
+                );
+              }
+              setShowActiveConfirmDialog(false);
+              setPendingChange(null);
+            }}
+          >
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>No</TableHead>
+              <TableHead>System ID</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Instance</TableHead>
+              <TableHead>Client</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Connection Status</TableHead>
+              <TableHead>Polling Status</TableHead>
+              <TableHead>Active Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {localSystems.map((system) => (
+              <TableRow key={system.id}>
+                <TableCell>{system.no}</TableCell>
+                <TableCell className="font-medium">{system.systemId}</TableCell>
+                <TableCell>{system.type}</TableCell>
+                <TableCell>{system.instance}</TableCell>
+                <TableCell>{system.client}</TableCell>
+                <TableCell>{system.description}</TableCell>
+                <TableCell>
+                  <div
+                    className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                      connectionStatuses[system.systemId]
+                        ? "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                        : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                    }`}
+                  >
+                    {connectionStatuses[system.systemId]
+                      ? "Connected"
+                      : "Disconnected"}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Switch
+                    checked={system.pollingStatus}
+                    disabled={isUpdating === `polling-${system.systemId}`}
+                    onCheckedChange={() =>
+                      handlePollingToggleClick(
+                        system.systemId,
+                        system.pollingStatus,
+                        system.activeStatus,
+                        system.description
+                      )
+                    }
+                  />
+                </TableCell>
+                <TableCell>
+                  <Switch
+                    checked={system.activeStatus}
+                    disabled={isUpdating === `active-${system.systemId}`}
+                    onCheckedChange={() =>
+                      handleActiveToggleClick(
+                        system.systemId,
+                        system.activeStatus
+                      )
+                    }
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEditClick(system)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onSettings(system.id)}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <PollingConfirmationDialog />
+      <ActiveConfirmationDialog />
+      <EditSystemSheet
+        open={isEditSheetOpen}
+        onClose={() => {
+          setIsEditSheetOpen(false);
+          setSelectedSystem(null);
+        }}
+        system={selectedSystem}
+        onSubmit={handleUpdateDescription}
+      />
+    </>
   );
 };
 
@@ -732,49 +950,48 @@ const AddSystemSheet = ({
               />
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-                Password <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="password"
-                name="password"
-                placeholder="Enter password"
-                required
-                disabled={isLoading}
-              />
-            </div>
-          </div>
-
-          <div>
+            <div></div>
             <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-              System Name
+              Password <span className="text-red-500">*</span>
             </label>
             <Input
-              name="name"
-              placeholder="Enter a friendly name for this system"
+              type="password"
+              name="password"
+              placeholder="Enter password"
+              required
               disabled={isLoading}
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              A descriptive name to identify this system
-            </p>
           </div>
+        </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-              Description
-            </label>
-            <Textarea
-              name="description"
-              placeholder="Enter system description"
-              className="resize-none"
-              rows={3}
-              disabled={isLoading}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Additional details about this system (optional)
-            </p>
-          </div>
+        <div>
+          <label className="text-sm font-medium text-foreground/90 block mb-1.5">
+            System Name
+          </label>
+          <Input
+            name="name"
+            placeholder="Enter a friendly name for this system"
+            disabled={isLoading}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            A descriptive name to identify this system
+          </p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-foreground/90 block mb-1.5">
+            Description
+          </label>
+          <Textarea
+            name="description"
+            placeholder="Enter system description"
+            className="resize-none"
+            rows={3}
+            disabled={isLoading}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Additional details about this system (optional)
+          </p>
         </div>
 
         <div className="flex justify-end gap-4 pt-6 border-t border-border">
@@ -818,7 +1035,7 @@ const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
 
 // Update the stats cards section
 const StatsCards = ({ stats, isLoading }: StatsCardsProps) => (
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
     <StatsCard
       title="Total Systems"
       value={stats.totalSystems}
@@ -839,6 +1056,13 @@ const StatsCards = ({ stats, isLoading }: StatsCardsProps) => (
       icon={AlertCircle}
       loading={isLoading}
       variant="red"
+    />
+    <StatsCard
+      title="Connected Systems"
+      value={stats.connectionStats.connected}
+      icon={Activity}
+      loading={isLoading}
+      variant="blue"
     />
   </div>
 );
