@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+// import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
     Plus,
@@ -46,26 +46,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import Link  from 'next/link';
 
-interface System {
+interface User {
     id: number;
-    systemId: string;
-    systemName: string;
-    systemType: string;
-    pollingStatus: string;
-    connectionStatus: string;
-    isActive: boolean;
-    no?: number; // Added to match backend response
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
 }
 
-interface SystemStats {
-    totalSystems: number;
-    pollingStatusBreakdown: Array<{
-        status: string;
+interface UserStats {
+    totalUsers: number;
+    roleBreakdown: Array<{
+        role: string;
         count: number;
     }>;
-    systemStatus: {
-        connected: number;
-        disconnected: number;
+    userStatus: {
+        active: number;
+        inactive: number;
     };
 }
 
@@ -87,7 +84,7 @@ interface DeleteConfirmationDialogProps {
     onConfirm: () => void;
 }
 
-interface AddSystemSheetProps {
+interface AddUserSheetProps {
     open: boolean;
     onClose: () => void;
     onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
@@ -97,15 +94,6 @@ interface AddSystemSheetProps {
     userToEdit?: User | null;
 }
 
-interface User {
-    id: number;
-    firstName: string;
-    lastName: string;
-    email: string;
-    role: string;
-}
-
-// Add this interface with the other interfaces
 interface UpdateUserSheetProps {
     open: boolean;
     onClose: () => void;
@@ -116,39 +104,39 @@ interface UpdateUserSheetProps {
     setRole: (role: string) => void;
 }
 
-export default function ManageSystemsPage() {
-    const [isAddSystemSheetOpen, setIsAddSystemSheetOpen] = useState(false);
-    const [systems, setSystems] = useState<System[]>([]);
+export default function ManageUsersPage() {
+    const [isAddUserSheetOpen, setIsAddUserSheetOpen] = useState(false);
+    const [users, setUsers] = useState<User[]>([]);
     const [role, setRole] = useState<string>("");
-    const [stats, setStats] = useState<SystemStats>({
-        totalSystems: 0,
-        pollingStatusBreakdown: [],
-        systemStatus: {
-            connected: 0,
-            disconnected: 0,
+    const [stats, setStats] = useState<UserStats>({
+        totalUsers: 0,
+        roleBreakdown: [],
+        userStatus: {
+            active: 0,
+            inactive: 0,
         },
     });
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
-    const [systemToDelete, setSystemToDelete] = useState<number | null>(null);
+    const [userToDelete, setUserToDelete] = useState<number | null>(null);
     const [userToEdit, setUserToEdit] = useState<User | null>(null);
     const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
 
     useEffect(() => {
-        fetchSystemStats();
-        fetchSystems();
+        fetchUserStats();
+        fetchUsers();
     }, []);
 
-    const fetchSystemStats = async () => {
+    const fetchUserStats = async () => {
         try {
             setIsLoading(true);
-            const response = await fetch("http://localhost:3000/api/system-stats");
+            const response = await fetch("http://localhost:3000/api/user-stats");
             const result = await response.json();
 
             if (result.success) {
                 setStats(result.data);
             } else {
-                throw new Error(result.message || "Failed to fetch system stats");
+                throw new Error(result.message || "Failed to fetch user stats");
             }
         } catch (error) {
             toast({
@@ -156,7 +144,7 @@ export default function ManageSystemsPage() {
                 description:
                     error instanceof Error
                         ? error.message
-                        : "Failed to fetch system statistics",
+                        : "Failed to fetch user statistics",
                 variant: "destructive",
             });
         } finally {
@@ -164,22 +152,22 @@ export default function ManageSystemsPage() {
         }
     };
 
-    const fetchSystems = async () => {
+    const fetchUsers = async () => {
         try {
             setIsLoading(true);
-            const response = await fetch("http://localhost:3000/api/systems");
+            const response = await fetch("http://localhost:3000/api/users");
             const result = await response.json();
 
             if (result.success) {
-                setSystems(result.data);
+                setUsers(result.data);
             } else {
-                throw new Error(result.message || "Failed to fetch systems");
+                throw new Error(result.message || "Failed to fetch users");
             }
         } catch (error) {
             toast({
                 title: "Error",
                 description:
-                    error instanceof Error ? error.message : "Failed to fetch systems",
+                    error instanceof Error ? error.message : "Failed to fetch users",
                 variant: "destructive",
             });
         } finally {
@@ -187,48 +175,38 @@ export default function ManageSystemsPage() {
         }
     };
 
-    const handleAddSystem = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         setIsLoading(true);
 
         try {
-            // First validate the system
-            const validateResponse = await fetch(
-                "http://localhost:3000/api/system-validation",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        systemName: formData.get("name"),
-                        systemType: formData.get("description"),
-                        systemSource: formData.get("source"),
-                        username: formData.get("username"),
-                        password: formData.get("password"),
-                    }),
-                }
-            );
+            const response = await fetch("http://localhost:3000/api/users", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    firstName: formData.get("firstname"),
+                    lastName: formData.get("lastname"),
+                    email: formData.get("email"),
+                    role: role,
+                }),
+            });
 
-            if (!validateResponse.ok) {
-                const errorData = await validateResponse.json();
-                throw new Error(errorData.message || "System validation failed");
-            }
+            if (!response.ok) throw new Error("Failed to add user");
 
-            const validatedSystem = await validateResponse.json();
-
-            setIsAddSystemSheetOpen(false);
+            setIsAddUserSheetOpen(false);
             toast({
                 title: "Success",
-                description: "System validated and added successfully.",
+                description: "User added successfully.",
             });
-            handleAddSystemSuccess();
+            await fetchUsers();
         } catch (error) {
             toast({
                 title: "Error",
                 description:
-                    error instanceof Error ? error.message : "Failed to add system",
+                    error instanceof Error ? error.message : "Failed to add user",
                 variant: "destructive",
             });
         } finally {
@@ -236,36 +214,31 @@ export default function ManageSystemsPage() {
         }
     };
 
-    const handleAddSystemSuccess = async () => {
-        await Promise.all([fetchSystemStats(), fetchSystems()]);
-    };
-
-    const handleDeleteSystem = async (id: number) => {
+    const handleDeleteUser = async (id: number) => {
         try {
-            const response = await fetch(`http://localhost:3000/api/systems/${id}`, {
+            const response = await fetch(`http://localhost:3000/api/users/${id}`, {
                 method: "DELETE",
             });
 
-            if (!response.ok) throw new Error("Failed to delete system");
+            if (!response.ok) throw new Error("Failed to delete user");
 
-            await Promise.all([fetchSystemStats(), fetchSystems()]);
+            await Promise.all([fetchUserStats(), fetchUsers()]);
 
             toast({
                 title: "Success",
-                description: "System deleted successfully",
+                description: "User deleted successfully",
             });
         } catch (error) {
             toast({
                 title: "Error",
                 description:
-                    error instanceof Error ? error.message : "Failed to delete system",
+                    error instanceof Error ? error.message : "Failed to delete user",
                 variant: "destructive",
             });
         }
-        setSystemToDelete(null);
+        setUserToDelete(null);
     };
 
-    // Add this function to handle user updates
     const handleUpdateUser = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
@@ -297,7 +270,7 @@ export default function ManageSystemsPage() {
                 title: "Success",
                 description: "User updated successfully.",
             });
-            await fetchSystems(); // Refresh the user list
+            await fetchUsers(); // Refresh the user list
         } catch (error) {
             toast({
                 title: "Error",
@@ -309,6 +282,16 @@ export default function ManageSystemsPage() {
         }
     };
 
+    const handleEditUser = (user: User) => {
+        setUserToEdit(user);
+        setRole(user.role);
+        setIsUpdateSheetOpen(true);
+    };
+
+    const handleUserSettings = (id: number) => {
+        console.log("Settings:", id); // TODO: Implement settings
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-background/95">
             <main className="container mx-auto px-4 py-8">
@@ -318,11 +301,11 @@ export default function ManageSystemsPage() {
                         User Management
                     </h1>
                     <p className="text-muted-foreground mt-2">
-                        Monitor and manage User Profiles
+                        Monitor and manage user profiles
                     </p>
                 </div>
 
-                {/* Systems Table */}
+                {/* Users Table */}
                 <Card className="bg-card/50 backdrop-blur border-border/50 shadow-lg">
                     <div className="p-6 border-b border-border/50">
                         <div className="flex items-center justify-between gap-4">
@@ -337,7 +320,7 @@ export default function ManageSystemsPage() {
                                 <Button variant="outline" size="icon">
                                     <SortAscIcon className="h-4 w-4" />
                                 </Button>
-                                <Button onClick={() => setIsAddSystemSheetOpen(true)}>
+                                <Button onClick={() => setIsAddUserSheetOpen(true)}>
                                     <Plus className="h-4 w-4 mr-2" />
                                     Add New User
                                 </Button>
@@ -347,26 +330,22 @@ export default function ManageSystemsPage() {
 
                     {isLoading ? (
                         <TableLoadingState />
-                    ) : systems.length === 0 ? (
-                        <EmptyState onAdd={() => setIsAddSystemSheetOpen(true)} />
+                    ) : users.length === 0 ? (
+                        <EmptyState onAdd={() => setIsAddUserSheetOpen(true)} />
                     ) : (
-                        <SystemsTable
-                            systems={systems}
-                            onDelete={setSystemToDelete}
-                            onEdit={(user) => {
-                                setUserToEdit(user);
-                                setRole(user.role);
-                                setIsUpdateSheetOpen(true);
-                            }}
-                            onSettings={(id) => console.log("Settings:", id)} // TODO: Implement settings
+                        <UsersTable
+                            users={users}
+                            onDelete={setUserToDelete}
+                            onEdit={handleEditUser}
+                            onSettings={handleUserSettings}
                         />
                     )}
                 </Card>
             </main>
-            <AddSystemSheet
-                open={isAddSystemSheetOpen}
-                onClose={() => setIsAddSystemSheetOpen(false)}
-                onSubmit={handleAddSystem}
+            <AddUserSheet
+                open={isAddUserSheetOpen}
+                onClose={() => setIsAddUserSheetOpen(false)}
+                onSubmit={handleAddUser}
                 isLoading={isLoading}
                 role={role}
                 setRole={setRole}
@@ -375,16 +354,16 @@ export default function ManageSystemsPage() {
 
             {/* Delete Confirmation Dialog */}
             <DeleteConfirmationDialog
-                open={!!systemToDelete}
-                onClose={() => setSystemToDelete(null)}
-                onConfirm={() => systemToDelete && handleDeleteSystem(systemToDelete)}
+                open={!!userToDelete}
+                onClose={() => setUserToDelete(null)}
+                onConfirm={() => userToDelete && handleDeleteUser(userToDelete)}
             />
 
             {/* Create User Sheet */}
-            <AddSystemSheet
-                open={isAddSystemSheetOpen}
-                onClose={() => setIsAddSystemSheetOpen(false)}
-                onSubmit={handleAddSystem}
+            <AddUserSheet
+                open={isAddUserSheetOpen}
+                onClose={() => setIsAddUserSheetOpen(false)}
+                onSubmit={handleAddUser}
                 isLoading={isLoading}
                 role={role}
                 setRole={setRole}
@@ -433,25 +412,19 @@ const StatsCard = ({
     </Card>
 );
 
-interface SystemsTableProps {
-    systems: System[];
+interface UsersTableProps {
+    users: User[];
     onDelete: (id: number) => void;
     onEdit: (user: User) => void;
     onSettings: (id: number) => void;
 }
 
-const SystemsTable = ({
-    systems,
+const UsersTable = ({
+    users,
     onDelete,
     onEdit,
     onSettings,
-}: SystemsTableProps) => {
-    const mockUsers: User[] = [
-        { id: 1, firstName: 'John', lastName: 'Doe', email: 'john@example.com', role: 'Admin' },
-        { id: 2, firstName: 'Jane', lastName: 'Smith', email: 'jane@example.com', role: 'User' },
-        { id: 3, firstName: 'Mike', lastName: 'Johnson', email: 'mike@example.com', role: 'Manager' },
-    ];
-
+}: UsersTableProps) => {
     return (
         <div className="overflow-x-auto">
             <Table>
@@ -465,7 +438,7 @@ const SystemsTable = ({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {mockUsers.map((user, index) => (
+                    {users.map((user, index) => (
                         <TableRow key={user.id}>
                             <TableCell>{index + 1}</TableCell>
                             <TableCell className="font-medium">
@@ -529,13 +502,13 @@ const EmptyState = ({ onAdd }: EmptyStateProps) => (
             <div className="p-4 rounded-full bg-primary/10">
                 <MonitorDot className="w-8 h-8 text-primary" />
             </div>
-            <h3 className="text-lg font-medium">No systems found</h3>
+            <h3 className="text-lg font-medium">No users found</h3>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Get started by adding your first SAP system for monitoring.
+                Get started by adding your first user to the system.
             </p>
             <Button onClick={onAdd} className="mt-4">
                 <Plus className="w-4 h-4 mr-2" />
-                Add New System
+                Add New User
             </Button>
         </div>
     </div>
@@ -551,7 +524,7 @@ const DeleteConfirmationDialog = ({
             <AlertDialogHeader>
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete the system
+                    This action cannot be undone. This will permanently delete the user
                     and remove all associated data.
                 </AlertDialogDescription>
             </AlertDialogHeader>
@@ -568,7 +541,7 @@ const DeleteConfirmationDialog = ({
     </AlertDialog>
 );
 
-const AddSystemSheet = ({
+const AddUserSheet = ({
     open,
     onClose,
     onSubmit,
@@ -576,7 +549,7 @@ const AddSystemSheet = ({
     role,
     setRole,
     userToEdit
-}: AddSystemSheetProps) => (
+}: AddUserSheetProps) => (
     <Sheet open={open} onOpenChange={onClose}>
         <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
             <SheetHeader>
@@ -589,21 +562,6 @@ const AddSystemSheet = ({
             </SheetHeader>
             <form onSubmit={onSubmit} className="space-y-6">
                 <div className="space-y-4">
-                    <div>
-                        {/* <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-              System Source <span className="text-red-500">*</span>
-            </label>
-            <Input
-              name="source"
-              placeholder="Enter system URL (e.g., http://system.example.com)"
-              required
-              disabled={isLoading}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              The URL of the system you want to monitor
-            </p> */}
-                    </div>
-
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-sm font-medium text-foreground/90 block mb-1.5">
@@ -679,7 +637,7 @@ const AddSystemSheet = ({
                                 {userToEdit ? 'Updating...' : 'Adding...'}
                             </>
                         ) : (
-                            userToEdit ? 'Update User' : 'Add System'
+                            userToEdit ? 'Update User' : 'Add User'
                         )}
                     </Button>
                 </div>
@@ -688,7 +646,6 @@ const AddSystemSheet = ({
     </Sheet>
 );
 
-// Add this new component at the bottom of the file
 const UpdateUserSheet = ({
     open,
     onClose,
