@@ -5,12 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 // import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import {
     Plus,
     MonitorDot,
-    Activity,
-    AlertCircle,
     Edit,
     Settings,
     Trash2,
@@ -45,6 +42,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import Link  from 'next/link';
+import {toast} from 'sonner'
 
 interface User {
     id: number;
@@ -117,7 +115,6 @@ export default function ManageUsersPage() {
         },
     });
     const [isLoading, setIsLoading] = useState(true);
-    const { toast } = useToast();
     const [userToDelete, setUserToDelete] = useState<number | null>(null);
     const [userToEdit, setUserToEdit] = useState<User | null>(null);
     const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
@@ -139,13 +136,8 @@ export default function ManageUsersPage() {
                 throw new Error(result.message || "Failed to fetch user stats");
             }
         } catch (error) {
-            toast({
-                title: "Error",
-                description:
-                    error instanceof Error
-                        ? error.message
-                        : "Failed to fetch user statistics",
-                variant: "destructive",
+            toast.error("Failed to fetch user statistics", {
+                description: error instanceof Error ? error.message : "Please try again"
             });
         } finally {
             setIsLoading(false);
@@ -164,11 +156,8 @@ export default function ManageUsersPage() {
                 throw new Error(result.message || "Failed to fetch users");
             }
         } catch (error) {
-            toast({
-                title: "Error",
-                description:
-                    error instanceof Error ? error.message : "Failed to fetch users",
-                variant: "destructive",
+            toast.error("Failed to fetch users", {
+                description: error instanceof Error ? error.message : "Please try again"
             });
         } finally {
             setIsLoading(false);
@@ -197,17 +186,13 @@ export default function ManageUsersPage() {
             if (!response.ok) throw new Error("Failed to add user");
 
             setIsAddUserSheetOpen(false);
-            toast({
-                title: "Success",
-                description: "User added successfully.",
+            toast.success("User added successfully", {
+                description: "New user has been created"
             });
             await fetchUsers();
         } catch (error) {
-            toast({
-                title: "Error",
-                description:
-                    error instanceof Error ? error.message : "Failed to add user",
-                variant: "destructive",
+            toast.error("Failed to add user", {
+                description: error instanceof Error ? error.message : "Please try again"
             });
         } finally {
             setIsLoading(false);
@@ -224,16 +209,12 @@ export default function ManageUsersPage() {
 
             await Promise.all([fetchUserStats(), fetchUsers()]);
 
-            toast({
-                title: "Success",
-                description: "User deleted successfully",
+            toast.success("User deleted successfully", {
+                description: "User has been removed from the system"
             });
         } catch (error) {
-            toast({
-                title: "Error",
-                description:
-                    error instanceof Error ? error.message : "Failed to delete user",
-                variant: "destructive",
+            toast.error("Failed to delete user", {
+                description: error instanceof Error ? error.message : "Please try again"
             });
         }
         setUserToDelete(null);
@@ -243,10 +224,10 @@ export default function ManageUsersPage() {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         setIsLoading(true);
-    
+
         try {
             if (!userToEdit) throw new Error("No user selected for update");
-    
+
             const response = await fetch(`http://localhost:3000/api/users/${userToEdit.id}`, {
                 method: "PUT",
                 headers: {
@@ -259,16 +240,15 @@ export default function ManageUsersPage() {
                     role: role,
                 }),
             });
-    
+
             if (!response.ok) {
                 throw new Error("Failed to update user");
             }
-    
+
             setIsUpdateSheetOpen(false);
             setUserToEdit(null);
-            toast({
-                title: "Success",
-                description: "User updated successfully.",
+            toast.success("User updated successfully", {
+                description: "User details have been updated"
             });
             await fetchUsers(); // Refresh the user list
         } catch (error) {
@@ -555,7 +535,7 @@ const AddUserSheet = ({
             <SheetHeader>
                 <SheetTitle>{userToEdit ? 'Edit User' : 'Add User'}</SheetTitle>
                 <p className="text-sm text-muted-foreground">
-                    {userToEdit 
+                    {userToEdit
                         ? 'Update the user details below.'
                         : 'Enter the user details below to add a new user.'}
                 </p>
@@ -606,7 +586,7 @@ const AddUserSheet = ({
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
                             <Label htmlFor="role">Role</Label>
-                            
+
                         </div>
                         <Select value={role} onValueChange={setRole}>
                             <SelectTrigger>
@@ -709,8 +689,8 @@ const UpdateUserSheet = ({
                         <div className="flex justify-between items-center">
                             <Label htmlFor="role">Role</Label>
                         </div>
-                        <Select 
-                            value={role || userToEdit?.role || ''} 
+                        <Select
+                            value={role || userToEdit?.role || ''}
                             onValueChange={setRole}
                         >
                             <SelectTrigger>

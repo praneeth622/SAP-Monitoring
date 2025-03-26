@@ -117,9 +117,9 @@ export default function TemplatesPage() {
       const data = await response.json();
       setTemplates(data);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : ERROR_MESSAGES.FETCH_ERROR
-      );
+      toast.error(ERROR_MESSAGES.FETCH_ERROR, {
+        description: error instanceof Error ? error.message : "Please try again"
+      });
     }
   };
 
@@ -219,7 +219,9 @@ export default function TemplatesPage() {
       // Update local state with the saved template
       setTemplates((prev) => [...prev, savedTemplate]);
 
-      toast.success(SUCCESS_MESSAGES.TEMPLATE_SAVED);
+      toast.success(SUCCESS_MESSAGES.TEMPLATE_SAVED, {
+        description: "Your template has been saved successfully"
+      });
 
       // Reset form
       setTemplateData({
@@ -236,9 +238,9 @@ export default function TemplatesPage() {
       setActiveKPIs(new Set());
       setKpiColors({});
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : ERROR_MESSAGES.SAVE_ERROR
-      );
+      toast.error(ERROR_MESSAGES.SAVE_ERROR, {
+        description: error instanceof Error ? error.message : "Please try again"
+      });
     }
   };
 

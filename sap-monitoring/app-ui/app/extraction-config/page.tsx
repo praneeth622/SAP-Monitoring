@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Check, ChevronDown, Info, Settings } from "lucide-react";
+import { useState, useEffect } from "react";
+// Remove useToast import if it exists
+import {  ChevronDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,12 +16,6 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import axios from "axios";
 import {
   Sheet,
@@ -108,9 +103,6 @@ export default function ConfigDashboard() {
   const [areaSearch, setAreaSearch] = useState("");
   const [kpiSearch, setKpiSearch] = useState("");
   const [activeAreas, setActiveAreas] = useState<Set<string>>(new Set());
-  const [activeStep, setActiveStep] = useState(2);
-  const [kpis, setKpis] = useState<KPI[]>([]);
-  const [selectedKpis, setSelectedKpis] = useState<Set<string>>(new Set());
 
   // Add this state for KPI expansion
   const [expandedKpis, setExpandedKpis] = useState<Set<string>>(new Set());
@@ -170,7 +162,9 @@ export default function ConfigDashboard() {
         setSystems(response.data);
       } catch (error) {
         console.error("Error loading systems:", error);
-        toast.error("Failed to load systems");
+        toast.error("Failed to load systems", {
+          description: error instanceof Error ? error.message : "Unknown error occurred"
+        });
         setError("Failed to load systems");
       } finally {
         setIsLoading(false);
@@ -204,7 +198,9 @@ export default function ConfigDashboard() {
         setJobsKpis([]);
       } catch (error) {
         console.error("Error loading monitoring areas:", error);
-        toast.error("Failed to load monitoring areas");
+        toast.error("Failed to load monitoring areas", {
+          description: error instanceof Error ? error.message : "Please try again"
+        });
       } finally {
         setIsLoading(false);
       }
@@ -243,6 +239,10 @@ export default function ConfigDashboard() {
           groupsToRemove.forEach((name) => next.delete(name));
           return next;
         });
+
+        toast.info(`Monitoring Area Deactivated`, {
+          description: `${areaName} monitoring area has been deactivated`,
+        });
       } else {
         // Add area and fetch its KPI groups
         const response = await fetch(
@@ -258,13 +258,21 @@ export default function ConfigDashboard() {
         // Set KPI groups based on area
         if (areaName === "OS") {
           setOsKpiGroup(kpiGroupData);
+          if (kpiGroupData.mon_area_name) {
+          }
         } else if (areaName === "JOBS") {
           setJobsKpiGroup(kpiGroupData);
         }
+
+        toast.success(`Monitoring Area Activated`, {
+          description: `${areaName} monitoring area has been activated`,
+        });
       }
     } catch (error) {
       console.error("Error toggling monitoring area:", error);
-      toast.error(`Failed to load data for ${areaName}`);
+      toast.error(`Failed to toggle ${areaName}`, {
+        description: error instanceof Error ? error.message : "Please try again"
+      });
     } finally {
       setIsLoading(false);
     }
@@ -363,14 +371,17 @@ export default function ConfigDashboard() {
         );
       }
 
-      toast.success(
-        `KPI ${kpi.kpi_name} ${
+      toast.success(`KPI Status Updated`, {
+        description: `KPI ${kpi.kpi_name} has been ${
           !kpi.is_active ? "activated" : "deactivated"
-        } successfully`
-      );
+        }`,
+      });
     } catch (error) {
       console.error("Error updating KPI status:", error);
-      toast.error(`Failed to update KPI ${kpi.kpi_name} status`);
+      toast.error(`Failed to update KPI ${kpi.kpi_name} status`, {
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      });
     } finally {
       setIsUpdating("");
     }
@@ -514,6 +525,7 @@ export default function ConfigDashboard() {
       [...osKpis, ...jobsKpis].filter((kpi) => kpi.parent === true)
     );
     const childKpis = [...osKpis, ...jobsKpis].filter((kpi) => !kpi.parent);
+    const [showChildren, setShowChildren] = useState(false);
 
     return (
       <Card className="p-6">
@@ -559,14 +571,14 @@ export default function ConfigDashboard() {
                   {/* Parent KPI Row */}
                   <div
                     className="grid grid-cols-12 gap-4 py-3 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center"
-                    onClick={() => handleKpiExpand(kpi.kpi_name)}
+                    // onClick={() => handleKpiExpand(kpi.kpi_name)}
                   >
                     <div className="col-span-3 flex items-center gap-2">
-                      <ChevronDown
+                      {/* <ChevronDown
                         className={`h-4 w-4 text-muted-foreground transition-transform ${
                           expandedKpis.has(kpi.kpi_name) ? "rotate-180" : ""
                         }`}
-                      />
+                      /> */}
                       <span className="font-medium">{kpi.kpi_name}</span>
                     </div>
                     <div className="col-span-2">
@@ -596,7 +608,7 @@ export default function ConfigDashboard() {
                     </div>
                   </div>
 
-                  {/* Child KPIs */}
+                  {/* Child KPIs
                   {expandedKpis.has(kpi.kpi_name) && (
                     <div className="pl-6 space-y-1 ml-4 border-l border-accent">
                       {childKpis
@@ -630,7 +642,7 @@ export default function ConfigDashboard() {
                           </div>
                         ))}
                     </div>
-                  )}
+                  )} */}
                 </div>
               ))}
             </div>
@@ -642,6 +654,61 @@ export default function ConfigDashboard() {
               : "Select a KPI group to view KPIs"}
           </div>
         )}
+
+        {/* Children Section */}
+        {childKpis.length > 0 && (
+          <div className="mt-6 border-t pt-4">
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setShowChildren(!showChildren)}
+            >
+              <ChevronDown
+                className={`h-4 w-4 mr-2 transition-transform ${
+                  showChildren ? "rotate-180" : ""
+                }`}
+              />
+              {showChildren ? "Hide" : "Show"} Child KPIs ({childKpis.length})
+            </Button>
+
+            {showChildren && (
+              <div className="mt-4 space-y-1">
+                {childKpis.map((kpi) => (
+                  <div
+                    key={kpi.kpi_name}
+                    className="grid grid-cols-12 gap-4 py-3 px-4 hover:bg-accent/5 rounded-lg items-center"
+                  >
+                    <div className="col-span-4">{kpi.kpi_name}</div>
+                    <div className="col-span-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
+                        {kpi.kpi_group}
+                      </span>
+                    </div>
+                    <div className="col-span-4 text-sm text-muted-foreground truncate">
+                      {kpi.kpi_desc}
+                    </div>
+                    <div className="col-span-1 flex justify-center">
+                      <Switch
+                        checked={kpi.is_active}
+                        onCheckedChange={() => handleKpiStatusChange(kpi)}
+                        disabled={isUpdating === kpi.kpi_name}
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleKpiSettings(kpi, e)}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     );
   };
@@ -650,8 +717,36 @@ export default function ConfigDashboard() {
   const handleKpiGroupToggle = async (groupName: string, monArea: string) => {
     try {
       setIsLoading(true);
+      const willBeActive = !activeKpiGroups.has(groupName);
 
-      if (activeKpiGroups.has(groupName)) {
+      // First update the UI state
+      if (willBeActive) {
+        setActiveKpiGroups((prev) => new Set(prev).add(groupName));
+
+        // Immediately fetch KPIs
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch KPIs for ${groupName}`);
+        }
+
+        const kpiData = await response.json();
+
+        // Update KPIs state based on monitoring area
+        if (monArea === "OS") {
+          setOsKpis((prev) => [...prev, ...kpiData]);
+          toast.success("OS KPIs loaded successfully", {
+            description: `KPIs for ${groupName} have been activated`,
+          });
+        } else if (monArea === "JOBS") {
+          setJobsKpis((prev) => [...prev, ...kpiData]);
+          toast.success("Job KPIs loaded successfully", {
+            description: `KPIs for ${groupName} have been activated`,
+          });
+        }
+      } else {
         setActiveKpiGroups((prev) => {
           const next = new Set(prev);
           next.delete(groupName);
@@ -660,31 +755,27 @@ export default function ConfigDashboard() {
 
         // Clear KPIs for this group
         if (monArea === "OS") {
-          setOsKpis([]);
+          setOsKpis((prev) =>
+            prev.filter((kpi) => kpi.kpi_group !== groupName)
+          );
+          toast.info("OS KPIs removed", {
+            description: `KPIs for ${groupName} have been deactivated`,
+          });
         } else if (monArea === "JOBS") {
-          setJobsKpis([]);
-        }
-      } else {
-        setActiveKpiGroups((prev) => new Set(prev).add(groupName));
-
-        // Fetch KPIs for this group
-        const response = await fetch(
-          `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
-        );
-        if (!response.ok) {
-          throw new Error(`Failed to fetch KPIs for ${groupName}`);
-        }
-
-        const kpiData = await response.json();
-        if (monArea === "OS") {
-          setOsKpis(kpiData);
-        } else if (monArea === "JOBS") {
-          setJobsKpis(kpiData);
+          setJobsKpis((prev) =>
+            prev.filter((kpi) => kpi.kpi_group !== groupName)
+          );
+          toast.info("Job KPIs removed", {
+            description: `KPIs for ${groupName} have been deactivated`,
+          });
         }
       }
     } catch (error) {
       console.error("Error toggling KPI group:", error);
-      toast.error(`Failed to toggle KPI group ${groupName}`);
+      toast.error(`Failed to toggle KPI group ${groupName}`, {
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -694,6 +785,9 @@ export default function ConfigDashboard() {
     e.stopPropagation(); // Prevent expanding when clicking settings
     setSelectedKpiSettings(kpi);
     setIsSettingsOpen(true);
+    toast.info("Opening KPI Settings", {
+      description: `Configuring settings for ${kpi.kpi_name}`,
+    });
   };
 
   return (
@@ -879,10 +973,14 @@ const KpiSettingsSheet = ({
 
       if (!response.ok) throw new Error("Failed to save settings");
 
-      toast.success("KPI configuration updated successfully");
+      toast.success("Settings Updated", {
+        description: "KPI configuration has been updated successfully"
+      });
       onClose();
     } catch (error) {
-      toast.error("Failed to save KPI settings. Please try again.");
+      toast.error("Failed to save settings", {
+        description: error instanceof Error ? error.message : "Please try again"
+      });
     } finally {
       setIsLoading(false); // Reset loading state after API call
     }
@@ -891,128 +989,121 @@ const KpiSettingsSheet = ({
   if (!kpi) return null;
 
   return (
-    <>
-      {/* Add backdrop */}
-      {open && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm" />
-      )}
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="w-full sm:w-[800px] overflow-y-auto border-l">
+        <SheetHeader className="border-b pb-4">
+          <SheetTitle className="text-2xl font-bold">KPI Settings</SheetTitle>
+          <SheetDescription>
+            Configure settings for{" "}
+            <span className="font-medium">{kpi.kpi_name}</span>
+          </SheetDescription>
+        </SheetHeader>
 
-      <Sheet open={open} onOpenChange={onClose}>
-        <SheetContent className="w-full sm:w-[600px] overflow-y-auto border-l bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <SheetHeader className="border-b pb-4">
-            <SheetTitle className="text-2xl font-bold">KPI Settings</SheetTitle>
-            <SheetDescription>
-              Configure settings for{" "}
-              <span className="font-medium">{kpi.kpi_name}</span>
-            </SheetDescription>
-          </SheetHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-6 pt-6">
-            {/* Basic Settings Section */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Basic Settings</h3>
-              <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="isActive" className="font-medium">
-                    Active Status
-                  </Label>
-                  <Switch
-                    id="isActive"
-                    checked={configuration.isActive}
-                    onCheckedChange={(checked) =>
-                      setConfiguration((prev) => ({
-                        ...prev,
-                        isActive: checked,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="isDrilldown" className="font-medium">
-                    Enable Drilldown
-                  </Label>
-                  <Switch
-                    id="isDrilldown"
-                    checked={configuration.isDrilldown}
-                    onCheckedChange={(checked) =>
-                      setConfiguration((prev) => ({
-                        ...prev,
-                        isDrilldown: checked,
-                      }))
-                    }
-                  />
-                </div>
+        <form onSubmit={handleSubmit} className="space-y-6 pt-6">
+          {/* Basic Settings Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Basic Settings</h3>
+            <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="isActive" className="font-medium">
+                  Active Status
+                </Label>
+                <Switch
+                  id="isActive"
+                  checked={configuration.isActive}
+                  onCheckedChange={(checked) =>
+                    setConfiguration((prev) => ({
+                      ...prev,
+                      isActive: checked,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="isDrilldown" className="font-medium">
+                  Enable Drilldown
+                </Label>
+                <Switch
+                  id="isDrilldown"
+                  checked={configuration.isDrilldown}
+                  onCheckedChange={(checked) =>
+                    setConfiguration((prev) => ({
+                      ...prev,
+                      isDrilldown: checked,
+                    }))
+                  }
+                />
               </div>
             </div>
+          </div>
 
-            {/* Frequency Settings */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Frequency Settings</h3>
-              <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
-                <div className="grid gap-2">
-                  <Label htmlFor="sapFrequency">SAP Frequency (seconds)</Label>
-                  <Input
-                    id="sapFrequency"
-                    type="number"
-                    value={configuration.frequency.sap}
-                    onChange={(e) =>
-                      setConfiguration((prev) => ({
-                        ...prev,
-                        frequency: { ...prev.frequency, sap: e.target.value },
-                      }))
-                    }
-                    placeholder="Enter SAP frequency"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="systemFrequency">
-                    System Frequency (seconds)
-                  </Label>
-                  <Input
-                    id="systemFrequency"
-                    type="number"
-                    value={configuration.frequency.sys}
-                    onChange={(e) =>
-                      setConfiguration((prev) => ({
-                        ...prev,
-                        frequency: {
-                          ...prev.frequency,
-                          sys: e.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="Enter system frequency"
-                  />
-                </div>
+          {/* Frequency Settings */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Frequency Settings</h3>
+            <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
+              <div className="grid gap-2">
+                <Label htmlFor="sapFrequency">SAP Frequency (seconds)</Label>
+                <Input
+                  id="sapFrequency"
+                  type="number"
+                  value={configuration.frequency.sap}
+                  onChange={(e) =>
+                    setConfiguration((prev) => ({
+                      ...prev,
+                      frequency: { ...prev.frequency, sap: e.target.value },
+                    }))
+                  }
+                  placeholder="Enter SAP frequency"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="systemFrequency">
+                  System Frequency (seconds)
+                </Label>
+                <Input
+                  id="systemFrequency"
+                  type="number"
+                  value={configuration.frequency.sys}
+                  onChange={(e) =>
+                    setConfiguration((prev) => ({
+                      ...prev,
+                      frequency: {
+                        ...prev.frequency,
+                        sys: e.target.value,
+                      },
+                    }))
+                  }
+                  placeholder="Enter system frequency"
+                />
               </div>
             </div>
+          </div>
 
-            {/* Notification Settings */}
+          {/* Notification Settings */}
 
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <span className="animate-spin mr-2">⌛</span>
-                    Saving...
-                  </>
-                ) : (
-                  "Save Changes"
-                )}
-              </Button>
-            </div>
-          </form>
-        </SheetContent>
-      </Sheet>
-    </>
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <span className="animate-spin mr-2">⌛</span>
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 };

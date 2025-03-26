@@ -45,6 +45,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import axios from "axios";
 import EditSystemSheet from "@/components/edit-system-sheet";
+import { toast } from "sonner";
 
 // Update the System interface
 interface System {
@@ -159,13 +160,8 @@ export default function ManageSystemsPage() {
       setStats(calculatedStats);
     } catch (error) {
       console.error("Error fetching stats:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to fetch system statistics",
-        variant: "destructive",
+      toast.error("Failed to fetch system statistics", {
+        description: error instanceof Error ? error.message : "Unknown error occurred"
       });
     } finally {
       setIsLoading(false);
@@ -202,11 +198,8 @@ export default function ManageSystemsPage() {
       }
     } catch (error) {
       console.error("Error fetching systems:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to fetch systems",
-        variant: "destructive",
+      toast.error("Failed to fetch systems", {
+        description: error instanceof Error ? error.message : "Unknown error occurred"
       });
     } finally {
       setIsLoading(false);
@@ -245,17 +238,13 @@ export default function ManageSystemsPage() {
       const validatedSystem = await validateResponse.json();
 
       setIsAddSystemSheetOpen(false);
-      toast({
-        title: "Success",
-        description: "System validated and added successfully.",
+      toast.success("System added successfully", {
+        description: "System has been validated and added to the database"
       });
       handleAddSystemSuccess();
     } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to add system",
-        variant: "destructive",
+      toast.error("Failed to add system", {
+        description: error instanceof Error ? error.message : "Please try again"
       });
     } finally {
       setIsLoading(false);
@@ -276,16 +265,12 @@ export default function ManageSystemsPage() {
 
       await Promise.all([fetchSystemStats(), fetchSystems()]);
 
-      toast({
-        title: "Success",
-        description: "System deleted successfully",
+      toast.success("System deleted", {
+        description: "System has been successfully removed"
       });
     } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to delete system",
-        variant: "destructive",
+      toast.error("Failed to delete system", {
+        description: error instanceof Error ? error.message : "Please try again"
       });
     }
     setSystemToDelete(null);

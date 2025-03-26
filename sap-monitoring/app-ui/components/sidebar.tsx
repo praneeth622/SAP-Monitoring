@@ -284,7 +284,6 @@ export function Sidebar() {
                       { path: "/extraction-config", label: "Extarction Config" },
                       // { path: "/kpi-config", label: "KPI Config" },
                       // { path: "/master-filters", label: "Master Filters Config" },
-                      { path: "/user-access", label: "User Access" },
                     ].map((item, index) => (
                       <Button
                         key={index}
@@ -312,6 +311,42 @@ export function Sidebar() {
                 isActive={activeItem === "Alert Monitering"}
                 onClick={() => handleItemClick("Alert Monitering")}
               />
+            </div>
+            <div className="space-y-1 py-2">
+              {!isCollapsed && <div className="text-sm font-medium mb-2">User Access</div>}
+              <NavItem
+                icon={MonitorCog}
+                label="User Access"
+                isCollapsible={!isCollapsed}
+                isCollapsed={isCollapsed}
+                onExpand={handleExpand}
+                isActive={activeItem === "Manage Systems"}
+                onClick={() => handleItemClick("Manage Systems")}
+              >
+                <div className="space-y-1 py-1">
+                  <div className="max-w-full overflow-hidden space-y-2">
+                    {[
+                      { path: "/manage-systems", label: "User Management" },
+                      { path: "/extraction-config", label: "Create User" },
+                      // { path: "/kpi-config", label: "KPI Config" },
+                      // { path: "/master-filters", label: "Master Filters Config" },
+                      { path: "/user-access", label: "User Access" },
+                    ].map((item, index) => (
+                      <Button
+                        key={index}
+                        variant="ghost"
+                        className={cn(
+                          "w-full justify-start text-sm py-2 px-2 h-auto whitespace-normal text-left",
+                          activeSubItem === item.label && "bg-accent text-accent-foreground font-medium"
+                        )}
+                        onClick={() => handleSubItemClick(item.label, item.path)}
+                      >
+                        {item.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </NavItem>
             </div>
           </nav>
         </div>
