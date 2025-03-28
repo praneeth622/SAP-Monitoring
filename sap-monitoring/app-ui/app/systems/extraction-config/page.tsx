@@ -150,7 +150,7 @@ export default function ConfigDashboard() {
     setActiveKpiGroups(initialActiveGroups);
   }, [osKpiGroup, jobsKpiGroup]); // Dependencies array
 
-  // Fetch systems - runs only once on component mount
+  // Fetch systems with auto-selection of single system
   useEffect(() => {
     const fetchSystems = async () => {
       try {
@@ -159,7 +159,20 @@ export default function ConfigDashboard() {
         const response = await axios.get(
           "https://shwsckbvbt.a.pinggy.link/api/sys"
         );
+
+        // Store systems
         setSystems(response.data);
+
+        // Auto-select the system if there's only one
+        if (response.data && response.data.length === 1) {
+          const singleSystem = response.data[0];
+          setSelectedSystem(singleSystem.system_id);
+
+          // Show a notification to inform the user
+          toast.info("System auto-selected", {
+            description: `${singleSystem.system_id} (${singleSystem.client}) was automatically selected as it's the only available system.`,
+          });
+        }
       } catch (error) {
         console.error("Error loading systems:", error);
         toast.error("Failed to load systems", {
@@ -480,7 +493,6 @@ export default function ConfigDashboard() {
                 <Input
                   type="text"
                   value={frequencies[group.kpi_grp_name]?.sap || ""}
-
                   className="w-20 text-center"
                   disabled
                 />
@@ -571,12 +583,12 @@ export default function ConfigDashboard() {
                     // onClick={() => handleKpiExpand(kpi.kpi_name)}
                   >
                     {/* <div className="col-span-3 flex items-center gap-2"> */}
-                      {/* <ChevronDown
+                    {/* <ChevronDown
                         className={`h-4 w-4 text-muted-foreground transition-transform ${
                           expandedKpis.has(kpi.kpi_name) ? "rotate-180" : ""
                         }`}
                       /> */}
-                      {/* <span className="font-medium">{kpi.kpi_name}</span>
+                    {/* <span className="font-medium">{kpi.kpi_name}</span>
                     </div> */}
                     <div className="col-span-4 text-sm text-muted-foreground truncate">
                       {kpi.kpi_desc}
@@ -699,34 +711,44 @@ export default function ConfigDashboard() {
       setIsLoading(true);
       const willBeActive = !activeKpiGroups.has(groupName);
 
-      // First update the UI state
       if (willBeActive) {
+        // First update the UI state
         setActiveKpiGroups((prev) => new Set(prev).add(groupName));
 
-        // Immediately fetch KPIs
+        // Immediately fetch KPIs for this group
         const response = await fetch(
           `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
         );
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch KPIs for ${groupName}`);
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to fetch KPIs for ${groupName}. Server response: ${response.status} ${errorText}`
+          );
         }
 
         const kpiData = await response.json();
+
+        if (kpiData.length === 0) {
+          toast.warning(`No KPIs found for ${groupName}`, {
+            description: "The KPI group is active but contains no KPIs.",
+          });
+        }
 
         // Update KPIs state based on monitoring area
         if (monArea === "OS") {
           setOsKpis((prev) => [...prev, ...kpiData]);
           toast.success("OS KPIs loaded successfully", {
-            description: `KPIs for ${groupName} have been activated`,
+            description: `${kpiData.length} KPIs activated for ${groupName}`,
           });
         } else if (monArea === "JOBS") {
           setJobsKpis((prev) => [...prev, ...kpiData]);
           toast.success("Job KPIs loaded successfully", {
-            description: `KPIs for ${groupName} have been activated`,
+            description: `${kpiData.length} KPIs activated for ${groupName}`,
           });
         }
       } else {
+        // Deactivate the KPI group
         setActiveKpiGroups((prev) => {
           const next = new Set(prev);
           next.delete(groupName);
@@ -735,21 +757,48 @@ export default function ConfigDashboard() {
 
         // Clear KPIs for this group
         if (monArea === "OS") {
+          const removedCount = osKpis.filter(
+            (kpi) => kpi.kpi_group === groupName
+          ).length;
           setOsKpis((prev) =>
             prev.filter((kpi) => kpi.kpi_group !== groupName)
           );
+          toast.info("OS KPIs removed", {
+            description: `${removedCount} KPIs deactivated for ${groupName}`,
+          });
         } else if (monArea === "JOBS") {
+          const removedCount = jobsKpis.filter(
+            (kpi) => kpi.kpi_group === groupName
+          ).length;
           setJobsKpis((prev) =>
             prev.filter((kpi) => kpi.kpi_group !== groupName)
           );
+          toast.info("Job KPIs removed", {
+            description: `${removedCount} KPIs deactivated for ${groupName}`,
+          });
         }
       }
     } catch (error) {
       console.error("Error toggling KPI group:", error);
       toast.error(`Failed to toggle KPI group ${groupName}`, {
         description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred. Please try again or contact support.",
       });
+
+      // Roll back the UI state on error
+      if (activeKpiGroups.has(groupName)) {
+        // If we were trying to deactivate it, don't change the state
+        // as the KPIs are still active on the server
+      } else {
+        // If we were trying to activate it but failed, remove it from active groups
+        setActiveKpiGroups((prev) => {
+          const next = new Set(prev);
+          next.delete(groupName);
+          return next;
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -952,7 +1001,7 @@ const KpiSettingsSheet = ({
       const response = await fetch(
         `https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi?.kpi_name}/settings`,
         {
-          method: "PUT",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
@@ -1006,7 +1055,7 @@ const KpiSettingsSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:w-[800px] overflow-y-auto border-l bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
         <SheetHeader className="border-b pb-4">
           <SheetTitle className="text-2xl font-bold">Alert Config</SheetTitle>
           <SheetDescription>

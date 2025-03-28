@@ -28,7 +28,7 @@ const Sheet: React.FC<SheetProps> = ({ isOpen, onClose, title, children }) => {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-full sm:w-[540px] bg-background shadow-2xl z-50"
+            className="fixed right-0 top-0 h-full w-full sm:w-[540px] bg-background shadow-2xl z-50 flex flex-col"
           >
             <div className="flex items-center justify-between p-6 border-b border-border/40">
               <h2 className="text-xl font-semibold text-foreground/90">{title}</h2>
@@ -39,7 +39,7 @@ const Sheet: React.FC<SheetProps> = ({ isOpen, onClose, title, children }) => {
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto h-[calc(100vh-80px)] custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
               {children}
             </div>
           </motion.div>

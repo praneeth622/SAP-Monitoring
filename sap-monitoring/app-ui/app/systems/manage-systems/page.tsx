@@ -5,7 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   MonitorDot,
@@ -125,7 +124,6 @@ export default function ManageSystemsPage() {
     },
   });
   const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
   const [systemToDelete, setSystemToDelete] = useState<number | null>(null);
 
   useEffect(() => {
@@ -161,7 +159,8 @@ export default function ManageSystemsPage() {
     } catch (error) {
       console.error("Error fetching stats:", error);
       toast.error("Failed to fetch system statistics", {
-        description: error instanceof Error ? error.message : "Unknown error occurred"
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
       });
     } finally {
       setIsLoading(false);
@@ -199,7 +198,8 @@ export default function ManageSystemsPage() {
     } catch (error) {
       console.error("Error fetching systems:", error);
       toast.error("Failed to fetch systems", {
-        description: error instanceof Error ? error.message : "Unknown error occurred"
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
       });
     } finally {
       setIsLoading(false);
@@ -239,12 +239,13 @@ export default function ManageSystemsPage() {
 
       setIsAddSystemSheetOpen(false);
       toast.success("System added successfully", {
-        description: "System has been validated and added to the database"
+        description: "System has been validated and added to the database",
       });
       handleAddSystemSuccess();
     } catch (error) {
       toast.error("Failed to add system", {
-        description: error instanceof Error ? error.message : "Please try again"
+        description:
+          error instanceof Error ? error.message : "Please try again",
       });
     } finally {
       setIsLoading(false);
@@ -266,11 +267,12 @@ export default function ManageSystemsPage() {
       await Promise.all([fetchSystemStats(), fetchSystems()]);
 
       toast.success("System deleted", {
-        description: "System has been successfully removed"
+        description: "System has been successfully removed",
       });
     } catch (error) {
       toast.error("Failed to delete system", {
-        description: error instanceof Error ? error.message : "Please try again"
+        description:
+          error instanceof Error ? error.message : "Please try again",
       });
     }
     setSystemToDelete(null);
@@ -441,7 +443,6 @@ const SystemsTable = ({
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string>("");
   const [localSystems, setLocalSystems] = useState<System[]>(systems);
-  const { toast } = useToast();
   const connectionStatuses = useConnectionStatusPolling(localSystems);
 
   // First, add these state variables in the SystemsTable component
@@ -506,20 +507,19 @@ const SystemsTable = ({
         )
       );
 
-      toast({
-        title: "Success",
+      // FIXED: Correct toast.success usage
+      toast.success(`Polling status updated`, {
         description: `Polling ${
           !currentStatus ? "enabled" : "disabled"
         } for system ${systemId}`,
       });
     } catch (error) {
-      toast({
-        title: "Error",
+      // FIXED: Correct toast.error usage
+      toast.error(`Failed to update polling status`, {
         description:
           error instanceof Error
             ? error.message
-            : "Failed to update polling status",
-        variant: "destructive",
+            : "An unexpected error occurred. Please try again.",
       });
     } finally {
       setIsUpdating("");
@@ -531,19 +531,39 @@ const SystemsTable = ({
     currentStatus: boolean
   ) => {
     setIsUpdating(`active-${systemId}`);
-    try {
-      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/sys", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          systemId,
-          activeStatus: !currentStatus,
-        }),
-      });
 
-      if (!response.ok) throw new Error("Failed to update active status");
+    try {
+      // Create FormData object
+      const formData = new FormData();
+      formData.append("systemId", systemId);
+      formData.append("activeStatus", (!currentStatus).toString());
+
+      // Get the current system to include its description and polling status
+      const currentSystem = localSystems.find(
+        (sys) => sys.systemId === systemId
+      );
+      if (currentSystem) {
+        formData.append("description", currentSystem.description || "");
+        formData.append(
+          "pollingStatus",
+          currentSystem.pollingStatus.toString()
+        );
+      }
+
+      // Make the API request using FormData
+      const response = await axios.post(
+        "https://shwsckbvbt.a.pinggy.link/api/sys",
+        formData,
+        {
+          headers: {
+            Accept: "*/*",
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.status !== 200)
+        throw new Error("Failed to update active status");
 
       // Update local state after successful API call
       setLocalSystems((prev) =>
@@ -554,20 +574,18 @@ const SystemsTable = ({
         )
       );
 
-      toast({
-        title: "Success",
-        description: `System ${
-          !currentStatus ? "activated" : "deactivated"
-        } successfully`,
-      });
+      toast.success(
+        `System ${!currentStatus ? "activated" : "deactivated"} successfully`,
+        {
+          description: `The system ${systemId} has been ${
+            !currentStatus ? "activated" : "deactivated"
+          }`,
+        }
+      );
     } catch (error) {
-      toast({
-        title: "Error",
+      toast.error("Failed to update active status", {
         description:
-          error instanceof Error
-            ? error.message
-            : "Failed to update active status",
-        variant: "destructive",
+          error instanceof Error ? error.message : "Please try again",
       });
     } finally {
       setIsUpdating("");
@@ -898,7 +916,7 @@ const AddSystemSheet = ({
   isLoading,
 }: AddSystemSheetProps) => (
   <Sheet open={open} onOpenChange={onClose}>
-    <SheetContent className="space-y-6 w-[800px] sm:max-w-[800px]">
+    <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
       <SheetHeader>
         <SheetTitle>Add New System</SheetTitle>
         <p className="text-sm text-muted-foreground">
@@ -1020,7 +1038,7 @@ const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
 
 // Update the stats cards section
 const StatsCards = ({ stats, isLoading }: StatsCardsProps) => (
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
     <StatsCard
       title="Total Systems"
       value={stats.totalSystems}
@@ -1041,13 +1059,6 @@ const StatsCards = ({ stats, isLoading }: StatsCardsProps) => (
       icon={AlertCircle}
       loading={isLoading}
       variant="red"
-    />
-    <StatsCard
-      title="Connected Systems"
-      value={stats.connectionStats.connected}
-      icon={Activity}
-      loading={isLoading}
-      variant="blue"
     />
   </div>
 );
