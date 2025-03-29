@@ -1,0 +1,11 @@
+[
+    {
+        "system_id": "SWX",
+        "instance": "80",
+        "client": "600",
+        "type": "S/4 HANA",
+        "polling": true,
+        "connection": true,
+        "description": "SwiftAI SAP System"
+    }
+]

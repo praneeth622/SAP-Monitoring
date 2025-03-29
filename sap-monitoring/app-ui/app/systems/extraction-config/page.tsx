@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 // Remove useToast import if it exists
-import { ChevronDown, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  Settings,
+  X,
+  Plus,
+  ArrowUpIcon,
+  ArrowDownIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -83,6 +90,13 @@ interface KPI {
   sys_frequency?: string;
 }
 
+interface FilterOption {
+  id: string;
+  filterName: string;
+  operator: "EQ" | "NE" | "CP";
+  value: string;
+}
+
 export default function ConfigDashboard() {
   const [systems, setSystems] = useState<SystemResponse[]>([]);
   const [selectedSystem, setSelectedSystem] = useState<string>("");
@@ -150,7 +164,7 @@ export default function ConfigDashboard() {
     setActiveKpiGroups(initialActiveGroups);
   }, [osKpiGroup, jobsKpiGroup]); // Dependencies array
 
-  // Fetch systems - runs only once on component mount
+  // Fetch systems with auto-selection of single system
   useEffect(() => {
     const fetchSystems = async () => {
       try {
@@ -159,7 +173,20 @@ export default function ConfigDashboard() {
         const response = await axios.get(
           "https://shwsckbvbt.a.pinggy.link/api/sys"
         );
+
+        // Store systems
         setSystems(response.data);
+
+        // Auto-select the system if there's only one
+        if (response.data && response.data.length === 1) {
+          const singleSystem = response.data[0];
+          setSelectedSystem(singleSystem.system_id);
+
+          // Show a notification to inform the user
+          toast.info("System auto-selected", {
+            description: `${singleSystem.system_id} (${singleSystem.client}) was automatically selected as it's the only available system.`,
+          });
+        }
       } catch (error) {
         console.error("Error loading systems:", error);
         toast.error("Failed to load systems", {
@@ -480,7 +507,6 @@ export default function ConfigDashboard() {
                 <Input
                   type="text"
                   value={frequencies[group.kpi_grp_name]?.sap || ""}
-
                   className="w-20 text-center"
                   disabled
                 />
@@ -571,12 +597,12 @@ export default function ConfigDashboard() {
                     // onClick={() => handleKpiExpand(kpi.kpi_name)}
                   >
                     {/* <div className="col-span-3 flex items-center gap-2"> */}
-                      {/* <ChevronDown
+                    {/* <ChevronDown
                         className={`h-4 w-4 text-muted-foreground transition-transform ${
                           expandedKpis.has(kpi.kpi_name) ? "rotate-180" : ""
                         }`}
                       /> */}
-                      {/* <span className="font-medium">{kpi.kpi_name}</span>
+                    {/* <span className="font-medium">{kpi.kpi_name}</span>
                     </div> */}
                     <div className="col-span-4 text-sm text-muted-foreground truncate">
                       {kpi.kpi_desc}
@@ -674,15 +700,15 @@ export default function ConfigDashboard() {
                     key={kpi.kpi_name}
                     className="grid grid-cols-12 gap-4 py-3 px-4 hover:bg-accent/5 rounded-lg items-center"
                   >
-                    <div className="col-span-4">{kpi.kpi_name}</div>
-                    <div className="col-span-4">
+                    <div className="col-span-6">{kpi.kpi_desc}</div>
+                    <div className="col-span-6">
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
                         {kpi.kpi_group}
                       </span>
                     </div>
-                    <div className="col-span-4 text-sm text-muted-foreground truncate">
+                    {/* <div className="col-span-4 text-sm text-muted-foreground truncate">
                       {kpi.kpi_desc}
-                    </div>
+                    </div> */}
                   </div>
                 ))}
               </div>
@@ -699,34 +725,44 @@ export default function ConfigDashboard() {
       setIsLoading(true);
       const willBeActive = !activeKpiGroups.has(groupName);
 
-      // First update the UI state
       if (willBeActive) {
+        // First update the UI state
         setActiveKpiGroups((prev) => new Set(prev).add(groupName));
 
-        // Immediately fetch KPIs
+        // Immediately fetch KPIs for this group
         const response = await fetch(
           `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
         );
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch KPIs for ${groupName}`);
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to fetch KPIs for ${groupName}. Server response: ${response.status} ${errorText}`
+          );
         }
 
         const kpiData = await response.json();
+
+        if (kpiData.length === 0) {
+          toast.warning(`No KPIs found for ${groupName}`, {
+            description: "The KPI group is active but contains no KPIs.",
+          });
+        }
 
         // Update KPIs state based on monitoring area
         if (monArea === "OS") {
           setOsKpis((prev) => [...prev, ...kpiData]);
           toast.success("OS KPIs loaded successfully", {
-            description: `KPIs for ${groupName} have been activated`,
+            description: `${kpiData.length} KPIs activated for ${groupName}`,
           });
         } else if (monArea === "JOBS") {
           setJobsKpis((prev) => [...prev, ...kpiData]);
           toast.success("Job KPIs loaded successfully", {
-            description: `KPIs for ${groupName} have been activated`,
+            description: `${kpiData.length} KPIs activated for ${groupName}`,
           });
         }
       } else {
+        // Deactivate the KPI group
         setActiveKpiGroups((prev) => {
           const next = new Set(prev);
           next.delete(groupName);
@@ -735,21 +771,48 @@ export default function ConfigDashboard() {
 
         // Clear KPIs for this group
         if (monArea === "OS") {
+          const removedCount = osKpis.filter(
+            (kpi) => kpi.kpi_group === groupName
+          ).length;
           setOsKpis((prev) =>
             prev.filter((kpi) => kpi.kpi_group !== groupName)
           );
+          toast.info("OS KPIs removed", {
+            description: `${removedCount} KPIs deactivated for ${groupName}`,
+          });
         } else if (monArea === "JOBS") {
+          const removedCount = jobsKpis.filter(
+            (kpi) => kpi.kpi_group === groupName
+          ).length;
           setJobsKpis((prev) =>
             prev.filter((kpi) => kpi.kpi_group !== groupName)
           );
+          toast.info("Job KPIs removed", {
+            description: `${removedCount} KPIs deactivated for ${groupName}`,
+          });
         }
       }
     } catch (error) {
       console.error("Error toggling KPI group:", error);
       toast.error(`Failed to toggle KPI group ${groupName}`, {
         description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred. Please try again or contact support.",
       });
+
+      // Roll back the UI state on error
+      if (activeKpiGroups.has(groupName)) {
+        // If we were trying to deactivate it, don't change the state
+        // as the KPIs are still active on the server
+      } else {
+        // If we were trying to activate it but failed, remove it from active groups
+        setActiveKpiGroups((prev) => {
+          const next = new Set(prev);
+          next.delete(groupName);
+          return next;
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -902,6 +965,10 @@ const KpiSettingsSheet = ({
   kpi: KPI | null;
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  // Add state for filter values
+  const [filterValues, setFilterValues] = useState<string[]>([]);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
 
   const [configuration, setConfiguration] = useState({
     isActive: false,
@@ -910,20 +977,24 @@ const KpiSettingsSheet = ({
       sap: "",
       sys: "",
     },
-    // Add new configuration fields
     thresholds: {
       g2y: "", // Green to Yellow
       y2r: "", // Yellow to Red
     },
     criticality: "Low", // Default value
     alertWaitTime: "5", // Default wait time in minutes
+    // Update filters to be an array of FilterOption objects
+    filters: [] as FilterOption[],
   });
 
-  // Add this to your state in KpiSettingsSheet
+  const [availableFilters, setAvailableFilters] = useState<string[]>([]);
+  const [isLoadingFilterOptions, setIsLoadingFilterOptions] = useState(false);
+
   const [comparisonDirection, setComparisonDirection] = useState<"gt" | "lt">(
     "gt"
   );
 
+  // Fetch filter values when the KPI is set and has filter=true
   useEffect(() => {
     if (kpi) {
       setConfiguration({
@@ -939,24 +1010,126 @@ const KpiSettingsSheet = ({
         },
         criticality: kpi.criticality || "Low",
         alertWaitTime: "5", // Default value if not provided by API
+        filters: [], // Reset filters
       });
+
+      // If KPI has filter=true, fetch the filter values
+      if (kpi.filter === true) {
+        fetchFilterValues(kpi.kpi_name);
+      } else {
+        // Reset filter values if KPI doesn't have filters
+        setFilterValues([]);
+      }
     }
   }, [kpi]);
+
+  // Function to fetch filter values for a KPI
+  const fetchFilterValues = async (kpiName: string) => {
+    try {
+      setIsLoadingFilters(true);
+      setFilterError(null);
+      setIsLoadingFilterOptions(true);
+
+      // Fetch filter names for this KPI
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`
+      );
+
+      if (response.status === 200) {
+        // Extract filter names from response
+        const filterNames = response.data.map(
+          (item: { filter_name: string }) => item.filter_name
+        );
+        setAvailableFilters(filterNames);
+
+        // Initialize with one empty filter if there are available filters
+        if (filterNames.length > 0 && configuration.filters.length === 0) {
+          setConfiguration((prev) => ({
+            ...prev,
+            filters: [
+              {
+                id: `filter-${Date.now()}`,
+                filterName: filterNames[0],
+                operator: "EQ",
+                value: "",
+              },
+            ],
+          }));
+        }
+      } else {
+        throw new Error("Failed to fetch filter options");
+      }
+    } catch (error) {
+      console.error("Error fetching filter options:", error);
+      setFilterError("Failed to load filter options");
+      setAvailableFilters([]);
+    } finally {
+      setIsLoadingFilters(false);
+      setIsLoadingFilterOptions(false);
+    }
+  };
+
+  const handleAddFilter = () => {
+    if (availableFilters.length === 0) return;
+
+    setConfiguration((prev) => ({
+      ...prev,
+      filters: [
+        ...prev.filters,
+        {
+          id: `filter-${Date.now()}`,
+          filterName: availableFilters[0],
+          operator: "EQ",
+          value: "",
+        },
+      ],
+    }));
+  };
+
+  const handleRemoveFilter = (id: string) => {
+    setConfiguration((prev) => ({
+      ...prev,
+      filters: prev.filters.filter((filter) => filter.id !== id),
+    }));
+  };
+
+  const handleFilterChange = (
+    id: string,
+    field: keyof FilterOption,
+    value: string
+  ) => {
+    setConfiguration((prev) => ({
+      ...prev,
+      filters: prev.filters.map((filter) =>
+        filter.id === id ? { ...filter, [field]: value } : filter
+      ),
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setIsLoading(true);
 
+      // Format the filters for the API
+      const formattedFilters = configuration.filters.map((filter) => ({
+        name: filter.filterName,
+        operator: filter.operator,
+        value: filter.value,
+      }));
+
       // API call to save configuration
       const response = await fetch(
         `https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi?.kpi_name}/settings`,
         {
-          method: "PUT",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(configuration),
+          body: JSON.stringify({
+            ...configuration,
+            filters: formattedFilters,
+          }),
         }
       );
 
@@ -983,8 +1156,11 @@ const KpiSettingsSheet = ({
     subField?: string
   ) => {
     const value = e.target.value;
-    // Only allow numbers
-    if (value && !/^\d+$/.test(value)) return;
+
+    // Only allow positive numbers
+    if (value && (!/^\d+$/.test(value) || parseInt(value) < 0)) {
+      return;
+    }
 
     if (subField) {
       setConfiguration((prev) => ({
@@ -1002,11 +1178,29 @@ const KpiSettingsSheet = ({
     }
   };
 
+  // Add these validation functions to KpiSettingsSheet component
+  const validateThresholds = () => {
+    const g2y = parseFloat(configuration.thresholds.g2y);
+    const y2r = parseFloat(configuration.thresholds.y2r);
+
+    if (isNaN(g2y) || isNaN(y2r)) {
+      return true; // Skip validation if values are not numbers yet
+    }
+
+    if (comparisonDirection === "gt") {
+      // For greater than (>), yellow threshold should be less than red threshold
+      return g2y < y2r;
+    } else {
+      // For less than (<), yellow threshold should be greater than red threshold
+      return g2y > y2r;
+    }
+  };
+
   if (!kpi) return null;
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:w-[800px] overflow-y-auto border-l bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px] overflow-y-auto">
         <SheetHeader className="border-b pb-4">
           <SheetTitle className="text-2xl font-bold">Alert Config</SheetTitle>
           <SheetDescription>
@@ -1019,7 +1213,7 @@ const KpiSettingsSheet = ({
           {/* Section 1: Threshold Settings */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Threshold Settings</h3>
-            <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
+            <div className="grid gap-4  bg-accent/5">
               <div className="grid grid-cols-5 gap-2 items-center">
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="g2y" className="font-medium text-green-600">
@@ -1034,7 +1228,13 @@ const KpiSettingsSheet = ({
                       handleNumberInputChange(e, "thresholds", "g2y")
                     }
                     placeholder="Enter threshold"
-                    className="text-center"
+                    className={`text-center ${
+                      !validateThresholds() &&
+                      configuration.thresholds.g2y &&
+                      configuration.thresholds.y2r
+                        ? "border-red-500 focus-visible:ring-red-500"
+                        : ""
+                    }`}
                   />
                 </div>
 
@@ -1050,7 +1250,11 @@ const KpiSettingsSheet = ({
                       )
                     }
                   >
-                    {comparisonDirection === "gt" ? ">" : "<"}
+                    {comparisonDirection === "gt" ? (
+                      <p className="text-lg"> &lt; </p>
+                    ) : (
+                      <p className="text-lg"> &gt; </p>
+                    )}
                   </Button>
                 </div>
 
@@ -1067,21 +1271,48 @@ const KpiSettingsSheet = ({
                       handleNumberInputChange(e, "thresholds", "y2r")
                     }
                     placeholder="Enter threshold"
-                    className="text-center"
+                    className={`text-center ${
+                      !validateThresholds() &&
+                      configuration.thresholds.g2y &&
+                      configuration.thresholds.y2r
+                        ? "border-red-500 focus-visible:ring-red-500"
+                        : ""
+                    }`}
                   />
                 </div>
               </div>
+              {/* Error message */}
+              {!validateThresholds() &&
+                configuration.thresholds.g2y &&
+                configuration.thresholds.y2r && (
+                  <div className="text-red-500 text-sm px-2">
+                    {comparisonDirection === "gt" ? (
+                      <>
+                        <span className="font-medium">Invalid thresholds:</span>{" "}
+                        When using <span> &gt; </span>,
+                        Green to Yellow ({configuration.thresholds.g2y}) must be
+                        lower than Yellow to Red ({configuration.thresholds.y2r}
+                        )
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium">Invalid thresholds:</span>{" "}
+                        When using <p> &lt; </p>,
+                        Green to Yellow ({configuration.thresholds.g2y}) must be
+                        higher than Yellow to Red (
+                        {configuration.thresholds.y2r})
+                      </>
+                    )}
+                  </div>
+                )}
             </div>
           </div>
 
           {/* Section 2: Alert Criticality */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Alert Criticality</h3>
-            <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
+            <div className="grid gap-4 ">
               <div className="grid gap-2">
-                <Label htmlFor="criticality" className="font-medium">
-                  Criticality Level
-                </Label>
                 <Select
                   value={configuration.criticality}
                   onValueChange={(value) =>
@@ -1107,12 +1338,11 @@ const KpiSettingsSheet = ({
 
           {/* Section 3: Alert Wait Time */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Alert Wait Time</h3>
-            <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
+            <h3 className="text-lg font-semibold">
+              Alert Wait Time (In Minutes)
+            </h3>
+            <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="alertWaitTime" className="font-medium">
-                  Wait Time (In Minutes)
-                </Label>
                 <Input
                   id="alertWaitTime"
                   type="text"
@@ -1162,44 +1392,136 @@ const KpiSettingsSheet = ({
             </div>
           </div>
 
-          {/* Frequency Settings */}
+          {/* Filter Section */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Frequency Settings</h3>
-            <div className="grid gap-4 p-4 border rounded-lg bg-accent/5">
-              <div className="grid gap-2">
-                <Label htmlFor="sapFrequency" className="flex items-center">
-                  SAP Frequency (seconds)
-                  <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
-                    Read-only
-                  </span>
-                </Label>
-                <Input
-                  id="sapFrequency"
-                  type="text"
-                  inputMode="numeric"
-                  value={configuration.frequency.sap}
-                  disabled
-                  placeholder="Enter SAP frequency"
-                  className="disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                />
+            <h3 className="text-lg font-semibold">Filter Settings</h3>
+
+            {kpi.filter === true ? (
+              <div className="grid gap-4 ">
+                {isLoadingFilters ? (
+                  <div className="flex justify-center p-4">
+                    <Spinner className="h-6 w-6" />
+                    <span className="ml-2">Loading filters...</span>
+                  </div>
+                ) : filterError ? (
+                  <div className="text-center text-red-500 p-4">
+                    {filterError}
+                  </div>
+                ) : availableFilters.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground">
+                      <div className="col-span-4">Filter Name</div>
+                      <div className="col-span-3">Options</div>
+                      <div className="col-span-4">Value</div>
+                      <div className="col-span-1"></div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {configuration.filters.map((filter) => (
+                        <div
+                          key={filter.id}
+                          className="grid grid-cols-12 gap-2 items-center"
+                        >
+                          <div className="col-span-4">
+                            <Select
+                              value={filter.filterName}
+                              onValueChange={(value) =>
+                                handleFilterChange(
+                                  filter.id,
+                                  "filterName",
+                                  value
+                                )
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select filter" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableFilters.map((filterName) => (
+                                  <SelectItem
+                                    key={filterName}
+                                    value={filterName}
+                                  >
+                                    {filterName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="col-span-3">
+                            <Select
+                              value={filter.operator}
+                              onValueChange={(value) =>
+                                handleFilterChange(
+                                  filter.id,
+                                  "operator",
+                                  value as "EQ" | "NE" | "CP"
+                                )
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Op" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="EQ">EQ</SelectItem>
+                                <SelectItem value="NE">NE</SelectItem>
+                                <SelectItem value="CP">CP</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="col-span-4">
+                            <Input
+                              value={filter.value}
+                              required
+                              onChange={(e) =>
+                                handleFilterChange(
+                                  filter.id,
+                                  "value",
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Enter value"
+                            />
+                          </div>
+
+                          <div className="col-span-1 flex justify-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveFilter(filter.id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddFilter}
+                      className="mt-2"
+                      disabled={isLoadingFilterOptions}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Filter
+                    </Button>
+                  </>
+                ) : (
+                  <div className="text-center text-muted-foreground p-4">
+                    No filter options available for this KPI
+                  </div>
+                )}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="systemFrequency" className="font-medium">
-                  System Frequency (seconds)
-                </Label>
-                <Input
-                  id="systemFrequency"
-                  type="text"
-                  inputMode="numeric"
-                  value={configuration.frequency.sys}
-                  onChange={(e) =>
-                    handleNumberInputChange(e, "frequency", "sys")
-                  }
-                  placeholder="Enter system frequency"
-                  className="w-full"
-                />
+            ) : (
+              <div className="text-center text-muted-foreground p-4 border rounded-lg">
+                Filtering is not available for this KPI
               </div>
-            </div>
+            )}
           </div>
 
           {/* Action Buttons */}
@@ -1212,7 +1534,7 @@ const KpiSettingsSheet = ({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || !validateThresholds()}>
               {isLoading ? (
                 <>
                   <span className="animate-spin mr-2">⌛</span>

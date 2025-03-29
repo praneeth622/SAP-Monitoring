@@ -7,16 +7,16 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import {
-  Plus, 
-  MonitorDot, 
-  Activity, 
-  AlertCircle, 
-  Edit, 
-  Settings, 
+  Plus,
+  MonitorDot,
+  Activity,
+  AlertCircle,
+  Edit,
+  Settings,
   Trash2,
   SearchIcon,
   FilterIcon,
-  SortAscIcon 
+  SortAscIcon
 } from "lucide-react"
 import {
   Sheet,
@@ -103,7 +103,7 @@ export default function ManageSystemsPage() {
     }
   })
   const [isLoading, setIsLoading] = useState(true)
-  const { toast } = useToast()
+  // const { toast } = useToast()
   const [systemToDelete, setSystemToDelete] = useState<number | null>(null);
 
   useEffect(() => {
@@ -116,7 +116,7 @@ export default function ManageSystemsPage() {
       setIsLoading(true);
       const response = await fetch('http://localhost:3000/api/system-stats');
       const result = await response.json();
-      
+
       if (result.success) {
         setStats(result.data);
       } else {
@@ -138,7 +138,7 @@ export default function ManageSystemsPage() {
       setIsLoading(true);
       const response = await fetch('http://localhost:3000/api/systems');
       const result = await response.json();
-      
+
       if (result.success) {
         setSystems(result.data);
       } else {
@@ -159,7 +159,7 @@ export default function ManageSystemsPage() {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     setIsLoading(true);
-    
+
     try {
       // First validate the system
       const validateResponse = await fetch('http://localhost:3000/api/system-validation', {
@@ -212,11 +212,11 @@ export default function ManageSystemsPage() {
       const response = await fetch(`http://localhost:3000/api/systems/${id}`, {
         method: 'DELETE'
       });
-      
+
       if (!response.ok) throw new Error('Failed to delete system');
-      
+
       await Promise.all([fetchSystemStats(), fetchSystems()]);
-      
+
       toast({
         title: "Success",
         description: "System deleted successfully",
@@ -275,7 +275,7 @@ export default function ManageSystemsPage() {
             <div className="flex items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input 
+                <Input
                   placeholder="Search systems..."
                   className="pl-9"
                 />
@@ -300,7 +300,7 @@ export default function ManageSystemsPage() {
           ) : systems.length === 0 ? (
             <EmptyState onAdd={() => setIsAddSystemSheetOpen(true)} />
           ) : (
-            <SystemsTable 
+            <SystemsTable
               systems={systems}
               onDelete={setSystemToDelete}
               onEdit={(id) => console.log('Edit:', id)} // TODO: Implement edit
@@ -311,7 +311,7 @@ export default function ManageSystemsPage() {
       </main>
 
       {/* Add System Sheet */}
-      <AddSystemSheet 
+      <AddSystemSheet
         open={isAddSystemSheetOpen}
         onClose={() => setIsAddSystemSheetOpen(false)}
         onSubmit={handleAddSystem}

@@ -1,0 +1,15 @@
+[
+    {
+        "sapfrequency": "60",
+        "mon_area": "OS",
+        "instance": true,
+        "is_active": true,
+        "sysfrequency": "60",
+        "modified_by": "SYS_ADMIN",
+        "created_at": "2025-03-13T15:16:05.236049",
+        "kpi_grp_desc": "Operating System Details",
+        "modified_at": "2025-03-13T15:16:05.236049",
+        "created_by": "SYS_ADMIN",
+        "kpi_grp_name": "OS"
+    }
+]

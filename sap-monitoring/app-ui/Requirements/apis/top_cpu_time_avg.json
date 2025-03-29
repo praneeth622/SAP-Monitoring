@@ -1,0 +1,11 @@
+
+[
+    {
+        "kpi_name": "top_cpu_time_avg",
+        "filter_name": "top_s_username"
+    },
+    {
+        "kpi_name": "top_cpu_time_avg",
+        "filter_name": "top_s_command"
+    }
+]
