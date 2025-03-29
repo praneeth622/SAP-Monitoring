@@ -1,7 +1,3 @@
-import dotenv from 'dotenv';
-// Configure dotenv before any other imports
-dotenv.config();
-
 import express from 'express';
 import cors from 'cors';
 import systemValidationRoutes from './routes/systemValidationRoutes';
