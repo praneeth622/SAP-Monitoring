@@ -16,6 +16,9 @@ interface ChartConfig {
   title: string;
   width: number;
   height: number;
+  activeKPIs?: Set<string> | string[];
+  kpiColors?: Record<string, { color: string; name: string; icon?: any }>;
+  layout?: { x: number, y: number, w: number, h: number };
 }
 
 interface DynamicLayoutProps {
@@ -39,55 +42,205 @@ export function DynamicLayout({
   const [layouts, setLayouts] = useState({});
   const [currentBreakpoint, setCurrentBreakpoint] = useState("lg");
   const [mounted, setMounted] = useState(false);
-  const initTimeoutRef = useRef<NodeJS.Timeout>();
-  const resizeTimeoutRef = useRef<NodeJS.Timeout>();
+  const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const getChartSize = (total: number) => {
+    // Enhanced size calculation for different number of graphs
+    switch (total) {
+      case 1:
+        return { w: 12, h: 10 }; // Full width, taller for single chart
+      case 2:
+        return { w: 6, h: 9 }; // Two charts side by side
+      case 3:
+        return { w: 4, h: 8 }; // Three charts in a row
+      case 4:
+        return { w: 6, h: 6 }; // 2x2 grid
+      case 5:
+      case 6:
+        return { w: 4, h: 6 }; // 2x3 grid
+      case 7:
+      case 8:
+        return { w: 4, h: 5 }; // 2x4 grid
+      case 9:
+      case 10:
+      case 11:
+      case 12:
+        return { w: 3, h: 5 }; // 3x4 grid
+      default:
+        return { w: 3, h: 4 }; // For many charts, make them smaller
+    }
+  };
+
+  // Improved layout calculation to handle different numbers of charts
   const calculateOptimalLayout = useCallback(() => {
     const numCharts = charts.length;
-    const viewportHeight =
-      typeof window !== "undefined" ? window.innerHeight : 900;
-    const baseRowHeight = Math.floor(viewportHeight / 12); // Divide viewport into 12 rows
-
-    const getChartSize = (total: number) => {
-      switch (total) {
-        case 1:
-          return { w: 12, h: 8 };
-        case 2:
-          return { w: 6, h: 8 };
-        case 3:
-          return { w: 4, h: 6 };
-        case 4:
-          return { w: 6, h: 6 };
-        case 6:
-          return { w: 4, h: 6 };
-        case 9:
-          return { w: 4, h: 4 };
-        default:
-          return { w: 4, h: 5 };
-      }
-    };
-
-    const size = getChartSize(numCharts);
-
+    console.log(`Calculating layout for ${numCharts} charts`);
+    
+    // Define minimum sizes to ensure charts don't get too small
+    const minWidth = 3;
+    const minHeight = 4;
+    
+    // Get size based on total number of charts - this is our layout rule
+    const defaultSize = getChartSize(numCharts);
+    console.log(`Using rule-based layout for ${numCharts} charts: w=${defaultSize.w}, h=${defaultSize.h}`);
+    
+    // For strict layout, we need to calculate the positions based on the layout rule
+    let layoutConfig;
+    
+    switch (numCharts) {
+      case 1:
+        // Single chart takes full width
+        layoutConfig = [{ x: 0, y: 0, w: 12, h: 10 }];
+        break;
+      case 2:
+        // Two charts side by side
+        layoutConfig = [
+          { x: 0, y: 0, w: 6, h: 9 },
+          { x: 6, y: 0, w: 6, h: 9 }
+        ];
+        break;
+      case 3:
+        // Three charts in a row
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 8 },
+          { x: 4, y: 0, w: 4, h: 8 },
+          { x: 8, y: 0, w: 4, h: 8 }
+        ];
+        break;
+      case 4:
+        // 2x2 grid
+        layoutConfig = [
+          { x: 0, y: 0, w: 6, h: 6 },
+          { x: 6, y: 0, w: 6, h: 6 },
+          { x: 0, y: 6, w: 6, h: 6 },
+          { x: 6, y: 6, w: 6, h: 6 }
+        ];
+        break;
+      case 5:
+        // 2x3 grid (with one empty space)
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 6 },
+          { x: 4, y: 0, w: 4, h: 6 },
+          { x: 8, y: 0, w: 4, h: 6 },
+          { x: 0, y: 6, w: 4, h: 6 },
+          { x: 4, y: 6, w: 4, h: 6 }
+        ];
+        break;
+      case 6:
+        // 2x3 grid
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 6 },
+          { x: 4, y: 0, w: 4, h: 6 },
+          { x: 8, y: 0, w: 4, h: 6 },
+          { x: 0, y: 6, w: 4, h: 6 },
+          { x: 4, y: 6, w: 4, h: 6 },
+          { x: 8, y: 6, w: 4, h: 6 }
+        ];
+        break;
+      case 7:
+        // 2x4 grid (with one empty space)
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 5 },
+          { x: 4, y: 0, w: 4, h: 5 },
+          { x: 8, y: 0, w: 4, h: 5 },
+          { x: 0, y: 5, w: 4, h: 5 },
+          { x: 4, y: 5, w: 4, h: 5 },
+          { x: 8, y: 5, w: 4, h: 5 },
+          { x: 0, y: 10, w: 4, h: 5 }
+        ];
+        break;
+      case 8:
+        // 2x4 grid
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 5 },
+          { x: 4, y: 0, w: 4, h: 5 },
+          { x: 8, y: 0, w: 4, h: 5 },
+          { x: 0, y: 5, w: 4, h: 5 },
+          { x: 4, y: 5, w: 4, h: 5 },
+          { x: 8, y: 5, w: 4, h: 5 },
+          { x: 0, y: 10, w: 4, h: 5 },
+          { x: 4, y: 10, w: 4, h: 5 }
+        ];
+        break;
+      case 9:
+        // 3x3 grid
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 5 },
+          { x: 4, y: 0, w: 4, h: 5 },
+          { x: 8, y: 0, w: 4, h: 5 },
+          { x: 0, y: 5, w: 4, h: 5 },
+          { x: 4, y: 5, w: 4, h: 5 },
+          { x: 8, y: 5, w: 4, h: 5 },
+          { x: 0, y: 10, w: 4, h: 5 },
+          { x: 4, y: 10, w: 4, h: 5 },
+          { x: 8, y: 10, w: 4, h: 5 }
+        ];
+        break;
+      default:
+        // Default case - generate a grid using the standard formula
+        layoutConfig = [];
+        const cols = Math.ceil(12 / defaultSize.w);
+        
+        for (let i = 0; i < numCharts; i++) {
+          const row = Math.floor(i / cols);
+          const col = (i % cols) * defaultSize.w;
+          layoutConfig.push({
+            x: col,
+            y: row * defaultSize.h,
+            w: defaultSize.w,
+            h: defaultSize.h
+          });
+        }
+    }
+    
     return charts.map((chart, i) => {
-      const row = Math.floor(i / Math.ceil(12 / size.w));
-      const col = (i * size.w) % 12;
-
+      // If we're past the number of defined positions, generate dynamically
+      const position = i < layoutConfig.length 
+        ? layoutConfig[i]
+        : { 
+            x: (i % 4) * 3, 
+            y: Math.floor(i / 4) * 4, 
+            w: 3, 
+            h: 4 
+          };
+      
+      // Check if the chart has its own layout, make it a user preference
+      // but ensure minimum sizes are enforced
+      if (chart.layout) {
+        console.log(`Chart ${chart.id} has custom layout, but will enforce minimum size`);
+        
+        return {
+          i: chart.id,
+          x: chart.layout.x,
+          y: chart.layout.y,
+          w: Math.max(chart.layout.w, minWidth),
+          h: Math.max(chart.layout.h, minHeight),
+          minW: minWidth,
+          maxW: 12,
+          minH: minHeight,
+          maxH: 12,
+          isDraggable: true,
+          isResizable: true,
+        };
+      }
+      
+      // Apply the calculated layout for this chart
       return {
         i: chart.id,
-        x: col,
-        y: row * size.h,
-        w: size.w,
-        h: size.h,
-        minW: 3,
+        x: position.x,
+        y: position.y,
+        w: position.w,
+        h: position.h,
+        minW: minWidth,
         maxW: 12,
-        minH: 3,
+        minH: minHeight,
         maxH: 12,
         isDraggable: true,
         isResizable: true,
       };
     });
-  }, [charts]);
+  }, [charts, getChartSize]);
 
   useEffect(() => {
     const layout = calculateOptimalLayout();
@@ -102,6 +255,18 @@ export function DynamicLayout({
     setLayouts(initialLayouts);
     setMounted(true);
   }, [calculateOptimalLayout]);
+
+  useEffect(() => {
+    // Cleanup function
+    return () => {
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleLayoutChange = (layout: Layout[], allLayouts: any) => {
     setLayouts(allLayouts);

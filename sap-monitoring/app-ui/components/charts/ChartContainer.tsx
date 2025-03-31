@@ -19,8 +19,8 @@ interface ChartContainerProps {
   data: DataPoint[];
   type: ChartType;
   title: string;
-  activeKPIs: Set<string>;
-  kpiColors: Record<string, { color: string; name: string }>;
+  activeKPIs: Set<string> | string[] | undefined;
+  kpiColors: Record<string, { color: string; name: string }> | undefined;
   dateRange?: DateRange;
   className?: string;
   options?: echarts.EChartsOption;
@@ -120,31 +120,73 @@ const ChartContainer = memo(
 
       // Debug the data coming in
       console.log("Updating chart with data:", filteredData.length, "points");
-      console.log("Active KPIs:", activeKPIs);
-      console.log("KPI Colors:", kpiColors);
+      console.log("Active KPIs:", activeKPIs ? 
+        (activeKPIs instanceof Set ? Array.from(activeKPIs) : activeKPIs) : 'none');
+      console.log("KPI Colors:", kpiColors || 'none');
       console.log("Current theme:", theme);
+
+      // Create a fallback for activeKPIs if it's undefined or empty
+      let effectiveActiveKPIs: Set<string> | string[] = new Set();
+      
+      if (activeKPIs) {
+        if (activeKPIs instanceof Set && activeKPIs.size > 0) {
+          effectiveActiveKPIs = activeKPIs;
+        } else if (Array.isArray(activeKPIs) && activeKPIs.length > 0) {
+          effectiveActiveKPIs = activeKPIs;
+        } else {
+          // If empty, use all categories as active
+          effectiveActiveKPIs = Array.from(
+            new Set(filteredData.map(item => item.category.toLowerCase()))
+          );
+          console.log("No active KPIs specified, using all:", effectiveActiveKPIs);
+        }
+      } else {
+        // If activeKPIs is undefined, use all categories
+        effectiveActiveKPIs = Array.from(
+          new Set(filteredData.map(item => item.category.toLowerCase()))
+        );
+        console.log("ActiveKPIs is undefined, using all categories:", effectiveActiveKPIs);
+      }
 
       const categories = Array.from(
         new Set(filteredData.map((item) => item.category))
       ).filter((category) => {
-        // Handle both Set and string[] activeKPIs
         const categoryLower = category.toLowerCase();
-        let isActive = false;
         
-        if (activeKPIs instanceof Set) {
-          isActive = activeKPIs.has(categoryLower);
-        } else if (Array.isArray(activeKPIs)) {
-          isActive = activeKPIs.includes(categoryLower);
-        } else {
-          // If activeKPIs is not properly set, show all categories
-          console.warn("activeKPIs is not a Set or Array, showing all categories");
-          isActive = true;
+        // Check if category is active based on effectiveActiveKPIs type
+        if (effectiveActiveKPIs instanceof Set) {
+          return effectiveActiveKPIs.has(categoryLower);
+        } else if (Array.isArray(effectiveActiveKPIs)) {
+          return effectiveActiveKPIs.includes(categoryLower);
         }
-
-        return isActive;
+        
+        return true; // Default to including the category if activeKPIs is invalid
       });
 
       console.log("Filtered categories:", categories);
+
+      // Handle empty categories case
+      if (categories.length === 0) {
+        console.warn("No active categories found, showing chart with no data");
+        chartInstance.current.setOption({
+          title: {
+            text: 'No data available',
+            left: 'center',
+            top: 'center',
+            textStyle: {
+              fontSize: 14,
+              fontWeight: 'normal'
+            }
+          },
+          grid: {
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0
+          }
+        });
+        return;
+      }
 
       const dates = Array.from(new Set(filteredData.map((item) => item.date))).sort((a, b) => {
         return new Date(a).getTime() - new Date(b).getTime();
@@ -178,7 +220,7 @@ const ChartContainer = memo(
             )}</div>`;
             params.forEach((param: any) => {
               const kpiId = param.seriesName.toLowerCase();
-              const color = kpiColors[kpiId]?.color || param.color;
+              const color = kpiColors && kpiColors[kpiId]?.color || param.color;
               html += `
               <div style="color: ${color}">
                 <span style="display: inline-block; width: 10px; height: 10px; background: ${color};  margin-right: 5px;"></span>
@@ -275,9 +317,8 @@ const ChartContainer = memo(
               shadowOffsetY: 1,
             },
             textStyle: {
-              fontSize: "0.7em", // Make font size relative
+              fontSize: 10, // Use number instead of string with unit
               color: "#666",
-              margin: 2,
             },
             moveHandleStyle: {
               opacity: 0.3,
@@ -289,16 +330,22 @@ const ChartContainer = memo(
           // Ensure we get the lowercase version of the category for kpiId
           const kpiId = category.toLowerCase();
           
-          // Try to get color from kpiColors first
-          let color = kpiColors && kpiColors[kpiId]?.color;
-          
-          // If no color from kpiColors, try theme colors
-          if (!color && theme?.colors && theme.colors.length > 0) {
+          // Log to debug color identification
+          console.log(`Applying color for KPI: ${kpiId}`);
+
+          // Always use color from kpiColors if available - highest priority
+          let color;
+          if (kpiColors && kpiColors[kpiId] && kpiColors[kpiId].color) {
+            color = kpiColors[kpiId].color;
+            console.log(`Using kpiColors color for ${kpiId}: ${color}`);
+          } 
+          // If no color from kpiColors, try theme colors as fallback
+          else if (theme?.colors && theme.colors.length > 0) {
             color = theme.colors[index % theme.colors.length];
+            console.log(`Using theme color for ${kpiId}: ${color}`);
           }
-          
           // Final fallback to default palette
-          if (!color) {
+          else {
             color = [
               "#3B82F6", // blue
               "#8B5CF6", // purple
@@ -307,15 +354,8 @@ const ChartContainer = memo(
               "#F97316", // orange
               "#EF4444", // red
             ][index % 6];
+            console.log(`Using fallback color for ${kpiId}: ${color}`);
           }
-          
-          // Debug to confirm we have a valid color
-          console.log(`Series ${category} using color:`, {
-            kpiId,
-            fromKpiColors: kpiColors && kpiColors[kpiId]?.color,
-            fromTheme: theme?.colors ? theme.colors[index % theme.colors.length] : null,
-            finalColor: color,
-          });
 
           return {
             name: category,
@@ -327,31 +367,43 @@ const ChartContainer = memo(
               return point ? point.value : null;
             }),
             smooth: true,
-            symbolSize: 4,
-            showSymbol: dates.length < 50, // Only show symbols when there aren't too many points
+            symbolSize: 5, // Larger symbols for better visibility
+            showSymbol: dates.length < 50,
             emphasis: {
               focus: "series",
-              scale: 1.5,
+              scale: 1.1,
+              lineStyle: {
+                width: 3.5, // Thicker on hover
+                shadowBlur: 10,
+                shadowColor: color
+              }
             },
+            // Add !important to make sure color is applied
             itemStyle: {
               color: color,
+              borderWidth: 1,
+              borderColor: color
+            },
+            lineStyle: {
+              width: 3, // Thicker lines for better visibility
+              color: color, // Make sure color is explicitly set
+              shadowBlur: 0,
+              join: 'round'
             },
             ...(type === "line" && {
               areaStyle: {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                   {
                     offset: 0,
-                    // Use rgba format to safely add opacity
                     color: color.startsWith("rgb")
-                      ? color.replace(")", ", 0.25)").replace("rgb", "rgba")
-                      : color + "40", // For hex colors use hex opacity
+                      ? color.replace(")", ", 0.35)").replace("rgb", "rgba")
+                      : color + "59", // Higher opacity for better visibility
                   },
                   {
                     offset: 1,
-                    // Use rgba format to safely add opacity
                     color: color.startsWith("rgb")
                       ? color.replace(")", ", 0)").replace("rgb", "rgba")
-                      : color + "00", // For hex colors use hex opacity
+                      : color + "00",
                   },
                 ]),
               },
@@ -363,7 +415,7 @@ const ChartContainer = memo(
       requestAnimationFrame(() => {
         chartInstance.current?.setOption(options, { notMerge: true });
       });
-    }, [filteredData, type, activeKPIs, kpiColors, theme]);
+    }, [filteredData, type]);
 
     useEffect(() => {
       if (!mounted || !chartInstance.current) return;
