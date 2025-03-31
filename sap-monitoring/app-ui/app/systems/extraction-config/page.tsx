@@ -1289,18 +1289,16 @@ const KpiSettingsSheet = ({
                     {comparisonDirection === "gt" ? (
                       <>
                         <span className="font-medium">Invalid thresholds:</span>{" "}
-                        When using <span> &gt; </span>,
-                        Green to Yellow ({configuration.thresholds.g2y}) must be
-                        lower than Yellow to Red ({configuration.thresholds.y2r}
-                        )
+                        When using <span> &gt; </span>, Green to Yellow (
+                        {configuration.thresholds.g2y}) must be lower than
+                        Yellow to Red ({configuration.thresholds.y2r})
                       </>
                     ) : (
                       <>
                         <span className="font-medium">Invalid thresholds:</span>{" "}
-                        When using <p> &lt; </p>,
-                        Green to Yellow ({configuration.thresholds.g2y}) must be
-                        higher than Yellow to Red (
-                        {configuration.thresholds.y2r})
+                        When using <p> &lt; </p>, Green to Yellow (
+                        {configuration.thresholds.g2y}) must be higher than
+                        Yellow to Red ({configuration.thresholds.y2r})
                       </>
                     )}
                   </div>
@@ -1550,3 +1548,5 @@ const KpiSettingsSheet = ({
     </Sheet>
   );
 };
+
+

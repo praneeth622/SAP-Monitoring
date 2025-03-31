@@ -20,6 +20,8 @@ export interface Template {
   timeRange: string;
   resolution: string;
   graphs: Graph[];
+  isDefault?: boolean;
+  isFavorite?: boolean;
 }
 
 export interface Graph {
@@ -36,4 +38,26 @@ export interface Graph {
     w: number;
     h: number;
   };
+  activeKPIs?: Set<string> | string[];
+  kpiColors?: Record<string, { color: string; name: string }>;
+}
+
+export interface ChartConfig {
+  id: string;
+  data: DataPoint[];
+  type: ChartType;
+  title: string;
+  width: number;
+  height: number;
+  activeKPIs?: Set<string> | string[];
+  kpiColors?: Record<string, { color: string; name: string }>;
+}
+
+export type TemplateKey = 'default' | 'single' | 'dual' | 'triple' | 'quad' | 'five' | 'six' | 'seven' | 'eight';
+
+export interface TemplateConfig {
+  id: string;
+  name: string;
+  description: string;
+  charts: number[];
 }

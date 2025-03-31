@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Plus,
   Search as SearchIcon,
@@ -15,6 +15,8 @@ import {
   Copy,
   Trash2,
   LayoutTemplate,
+  Star,
+  StarOff,
 } from "lucide-react";
 import {
   Table,
@@ -24,75 +26,264 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Interface definitions
 interface Template {
-  id: string;
-  name: string;
-  system: string;
-  kpiGroups: string[];
-  graphCount: number;
-  isDefault: boolean;
+  user_id?: string; // May not be in the response
+  template_id: string[] | string;
+  template_name: string[] | string;
+  template_desc: string[] | string;
+  default: boolean[] | boolean;
+  favorite: boolean[] | boolean;
+  frequency?: string[] | string; // May not be in the response
+  systems?: System[]; // May not be in the response
+  graphs?: Graph[]; // May not be in the response
+}
+
+interface System {
+  system_id: string;
+}
+
+interface Graph {
+  graph_id: string;
+  graph_name: string;
+  top_xy_pos: string;
+  bottom_xy_pos: string;
+  frequency: string;
+  resolution: string;
+  primary_kpi_id: string;
+  systems: System[];
+  primary_filter_values?: FilterValue[];
+  secondary_kpis?: SecondaryKpi[];
+}
+
+interface FilterValue {
+  kpi_filter_name: string;
+  option: string;
+  sign: string;
+  value: string;
+}
+
+interface SecondaryKpi {
+  kpi_id: string;
+  filter_values?: FilterValue | FilterValue[];
 }
 
 interface EmptyStateProps {
   onAdd: () => void;
 }
 
+// Add helper function to normalize template data
+const normalizeTemplate = (template: Template): Template => {
+  return {
+    template_id: Array.isArray(template.template_id)
+      ? template.template_id[0]
+      : template.template_id,
+    template_name: Array.isArray(template.template_name)
+      ? template.template_name[0]
+      : template.template_name,
+    template_desc: Array.isArray(template.template_desc)
+      ? template.template_desc[0]
+      : template.template_desc,
+    default: Array.isArray(template.default)
+      ? template.default[0]
+      : template.default,
+    favorite: Array.isArray(template.favorite)
+      ? template.favorite[0]
+      : template.favorite,
+    frequency: template.frequency
+      ? Array.isArray(template.frequency)
+        ? template.frequency[0]
+        : template.frequency
+      : "5m",
+    systems: template.systems || [],
+    graphs: template.graphs || [],
+  };
+};
+
 export default function Mainscreen() {
   const router = useRouter();
-  const [templates, setTemplates] = useState<Template[]>([
-    {
-      id: "1",
-      name: "Performance Monitor",
-      system: "PRD",
-      kpiGroups: ["Performance", "Memory", "CPU"],
-      graphCount: 6,
-      isDefault: true,
-    },
-    {
-      id: "2",
-      name: "Database Health",
-      system: "DEV",
-      kpiGroups: ["Database", "Storage"],
-      graphCount: 4,
-      isDefault: false,
-    },
-    {
-      id: "3",
-      name: "User Activity",
-      system: "QAS",
-      kpiGroups: ["Users", "Sessions", "Response Time"],
-      graphCount: 5,
-      isDefault: false,
-    },
-  ]);
-  const { toast } = useToast();
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "https://shwsckbvbt.a.pinggy.link";
+
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+
+  const fetchTemplates = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${baseUrl}/api/utl?userId=USER_TEST_1`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch templates");
+      }
+      const data = await response.json();
+
+      // Normalize the data to handle array values
+      const normalizedTemplates = Array.isArray(data)
+        ? data.map(normalizeTemplate)
+        : [];
+
+      setTemplates(normalizedTemplates);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+      toast.error("Failed to fetch templates", {
+        description: "Please try again or contact support",
+      });
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddTemplate = () => {
     router.push("/templates/add");
   };
 
   const handleEditTemplate = (id: string) => {
-    toast({
-      title: "Coming Soon",
-      description: "Edit template functionality will be implemented soon.",
-    });
+    router.push(`/templates/add?templateId=${id}`);
   };
 
-  const handleDuplicateTemplate = (id: string) => {
-    toast({
-      title: "Coming Soon",
-      description: "Duplicate template functionality will be implemented soon.",
-    });
+  const handleToggleFavorite = async (template: Template) => {
+    try {
+      // Get the normalized values for the API request
+      const templateId = Array.isArray(template.template_id)
+        ? template.template_id[0]
+        : template.template_id;
+      const templateName = Array.isArray(template.template_name)
+        ? template.template_name[0]
+        : template.template_name;
+      const templateDesc = Array.isArray(template.template_desc)
+        ? template.template_desc[0]
+        : template.template_desc;
+      const isDefault = Array.isArray(template.default)
+        ? template.default[0]
+        : template.default;
+      const isFavorite = Array.isArray(template.favorite)
+        ? template.favorite[0]
+        : template.favorite;
+      const frequency = template.frequency
+        ? Array.isArray(template.frequency)
+          ? template.frequency[0]
+          : template.frequency
+        : "5m";
+
+      const updatedTemplate = {
+        user_id: "USER_TEST_1",
+        template_id: templateId,
+        template_name: templateName,
+        template_desc: templateDesc,
+        default: isDefault,
+        favorite: !isFavorite,
+        frequency: frequency,
+        systems: template.systems || [],
+        graphs: template.graphs || [],
+      };
+
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedTemplate),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update template");
+      }
+
+      // Update local state after successful API call
+      setTemplates((prevTemplates) =>
+        prevTemplates.map((t) => {
+          const tId = Array.isArray(t.template_id)
+            ? t.template_id[0]
+            : t.template_id;
+          if (tId === templateId) {
+            return { ...t, favorite: !isFavorite };
+          }
+          return t;
+        })
+      );
+
+      toast.success(
+        `Template ${isFavorite ? "removed from" : "added to"} favorites`
+      );
+    } catch (error) {
+      console.error("Error updating template:", error);
+      toast.error("Failed to update template", {
+        description: "Please try again or contact support",
+      });
+    }
   };
 
-  const handleDeleteTemplate = (id: string) => {
-    toast({
-      title: "Coming Soon",
-      description: "Delete template functionality will be implemented soon.",
-    });
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      // Find the template to delete
+      const templateToDelete = templates.find((t) => {
+        const tId = Array.isArray(t.template_id)
+          ? t.template_id[0]
+          : t.template_id;
+        return tId === id;
+      });
+
+      if (!templateToDelete) return;
+
+      // Send delete request to API
+      const response = await fetch(`${baseUrl}/api/ut/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete template");
+      }
+
+      // Update local state
+      setTemplates(
+        templates.filter((t) => {
+          const tId = Array.isArray(t.template_id)
+            ? t.template_id[0]
+            : t.template_id;
+          return tId !== id;
+        })
+      );
+      setConfirmDelete(null);
+
+      toast.success("Template deleted successfully");
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      toast.error("Failed to delete template", {
+        description: "Please try again or contact support",
+      });
+    }
   };
+
+  const filteredTemplates = templates.filter((template) => {
+    const name = Array.isArray(template.template_name)
+      ? template.template_name[0]
+      : template.template_name;
+
+    const desc = Array.isArray(template.template_desc)
+      ? template.template_desc[0]
+      : template.template_desc;
+
+    return (
+      name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      desc.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-background/95">
@@ -113,7 +304,12 @@ export default function Mainscreen() {
             <div className="flex items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input placeholder="Search templates..." className="pl-9" />
+                <Input
+                  placeholder="Search templates..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
               <div className="flex items-center gap-3">
                 <Button variant="outline" size="icon">
@@ -130,7 +326,16 @@ export default function Mainscreen() {
             </div>
           </div>
 
-          {templates.length === 0 ? (
+          {loading ? (
+            <div className="p-10 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <p className="text-sm text-muted-foreground">
+                  Loading templates...
+                </p>
+              </div>
+            </div>
+          ) : filteredTemplates.length === 0 ? (
             <EmptyState onAdd={handleAddTemplate} />
           ) : (
             <div className="overflow-x-auto">
@@ -138,67 +343,145 @@ export default function Mainscreen() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Template Name</TableHead>
-                    <TableHead>System</TableHead>
-                    <TableHead>KPI Groups</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Systems</TableHead>
+                    <TableHead>Frequency</TableHead>
                     <TableHead>Graphs</TableHead>
-                    <TableHead>Default</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {templates.map((template) => (
-                    <TableRow key={template.id}>
-                      <TableCell className="font-medium">
-                        {template.name}
-                      </TableCell>
-                      <TableCell>{template.system}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {template.kpiGroups.map((group) => (
-                            <span
-                              key={group}
-                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                  {filteredTemplates.map((template) => {
+                    // Extract values safely
+                    const templateId = Array.isArray(template.template_id)
+                      ? template.template_id[0]
+                      : template.template_id;
+                    const templateName = Array.isArray(template.template_name)
+                      ? template.template_name[0]
+                      : template.template_name;
+                    const templateDesc = Array.isArray(template.template_desc)
+                      ? template.template_desc[0]
+                      : template.template_desc;
+                    const isDefault = Array.isArray(template.default)
+                      ? template.default[0]
+                      : template.default;
+                    const isFavorite = Array.isArray(template.favorite)
+                      ? template.favorite[0]
+                      : template.favorite;
+                    const frequency = template.frequency
+                      ? Array.isArray(template.frequency)
+                        ? template.frequency[0]
+                        : template.frequency
+                      : "5m";
+
+                    return (
+                      <TableRow key={templateId}>
+                        <TableCell className="font-medium">
+                          {templateName}
+                        </TableCell>
+                        <TableCell>{templateDesc}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {(template.systems || []).map((system) => (
+                              <Badge
+                                key={system.system_id}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {system.system_id.toUpperCase()}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>{frequency}</TableCell>
+                        <TableCell>{(template.graphs || []).length}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {isDefault && (
+                              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                                Default
+                              </Badge>
+                            )}
+                            {isFavorite && (
+                              <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">
+                                Favorite
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleToggleFavorite(template)}
+                              title={
+                                isFavorite
+                                  ? "Remove from favorites"
+                                  : "Add to favorites"
+                              }
                             >
-                              {group}
-                            </span>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>{template.graphCount}</TableCell>
-                      <TableCell>
-                        {template.isDefault && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
-                            Default
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditTemplate(template.id)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteTemplate(template.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              {isFavorite ? (
+                                <Star className="h-4 w-4 text-yellow-500" />
+                              ) : (
+                                <StarOff className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditTemplate(templateId)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setConfirmDelete(templateId)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </Card>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!confirmDelete}
+        onOpenChange={() => setConfirmDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this template? This action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                confirmDelete && handleDeleteTemplate(confirmDelete)
+              }
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

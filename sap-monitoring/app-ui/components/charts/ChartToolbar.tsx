@@ -1,12 +1,33 @@
-"use client"
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Download, ZoomIn, ZoomOut, Square, Lasso, Trash2, FileJson, FileSpreadsheet, File as FilePdf, Image } from 'lucide-react';
-import { saveAs } from 'file-saver';
-import { jsPDF } from 'jspdf';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Download,
+  ZoomIn,
+  ZoomOut,
+  Square,
+  Lasso,
+  Trash2,
+  FileJson,
+  FileSpreadsheet,
+  File as FilePdf,
+  Image,
+} from "lucide-react";
+import { saveAs } from "file-saver";
+import { jsPDF } from "jspdf";
+import type { ECharts } from "echarts";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface ChartToolbarProps {
-  chartInstance: echarts.ECharts | null;
+  chartInstance: ECharts | null;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onBoxSelect: () => void;
@@ -24,162 +45,248 @@ export function ChartToolbar({
   onLassoSelect,
   onClearSelection,
   data,
-  title
+  title,
 }: ChartToolbarProps) {
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [showTools, setShowTools] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
+  // Handle clicks outside the toolbar to close it
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
-        menuRef.current &&
-        buttonRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
-        !buttonRef.current.contains(event.target as Node)
+        toolbarRef.current &&
+        !toolbarRef.current.contains(event.target as Node)
       ) {
-        setShowDownloadMenu(false);
+        setShowTools(false);
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleDownload = async (format: 'png' | 'svg' | 'pdf' | 'csv' | 'json') => {
-    if (!chartInstance) return;
-
-    switch (format) {
-      case 'png':
-      case 'svg': {
-        const url = chartInstance.getDataURL({
-          type: format,
-          pixelRatio: 2,
-          backgroundColor: '#fff'
-        });
-        saveAs(url, `chart-${title}.${format}`);
-        break;
-      }
-      case 'pdf': {
-        const url = chartInstance.getDataURL({
-          type: 'png',
-          pixelRatio: 2,
-          backgroundColor: '#fff'
-        });
-        const pdf = new jsPDF({
-          orientation: 'landscape',
-          unit: 'px'
-        });
-        const imgProps = pdf.getImageProperties(url);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        pdf.addImage(url, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`chart-${title}.pdf`);
-        break;
-      }
-      case 'csv': {
-        const csvContent = data.map(row => 
-          Object.values(row).join(',')
-        ).join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        saveAs(blob, `chart-${title}.csv`);
-        break;
-      }
-      case 'json': {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        saveAs(blob, `chart-${title}.json`);
-        break;
-      }
+  // Handle download functionality for different formats
+  const handleDownload = async (
+    format: "png" | "svg" | "pdf" | "csv" | "json"
+  ) => {
+    if (!chartInstance) {
+      console.error("Chart instance is not available");
+      return;
     }
-    setShowDownloadMenu(false);
+
+    try {
+      switch (format) {
+        case "png": {
+          const url = chartInstance.getDataURL({
+            type: "png",
+            pixelRatio: 2,
+            backgroundColor: "#ffffff",
+          });
+          const link = document.createElement("a");
+          link.download = `${title.toLowerCase().replace(/\s+/g, "-")}.png`;
+          link.href = url;
+          link.click();
+          break;
+        }
+        case "pdf": {
+          const url = chartInstance.getDataURL({
+            type: "png",
+            pixelRatio: 2,
+            backgroundColor: "#ffffff",
+          });
+
+          const pdf = new jsPDF({
+            orientation: "landscape",
+            unit: "px",
+            format: "a4",
+          });
+
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const imgWidth = chartInstance.getWidth();
+          const imgHeight = chartInstance.getHeight();
+
+          // Calculate aspect ratio to fit the image properly
+          const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+          const width = imgWidth * ratio;
+          const height = imgHeight * ratio;
+          const x = (pdfWidth - width) / 2;
+          const y = (pdfHeight - height) / 2;
+
+          pdf.addImage(url, "PNG", x, y, width, height);
+          pdf.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+          break;
+        }
+        case "csv": {
+          if (!data || !data.length) {
+            console.error("No data available for CSV export");
+            return;
+          }
+
+          // Create CSV header
+          const headers = Object.keys(data[0]);
+          const csvContent = [
+            headers.join(","),
+            ...data.map((row) =>
+              headers
+                .map((header) => {
+                  const cell = row[header];
+                  return typeof cell === "string" && cell.includes(",")
+                    ? `"${cell}"`
+                    : cell;
+                })
+                .join(",")
+            ),
+          ].join("\n");
+
+          const blob = new Blob([csvContent], {
+            type: "text/csv;charset=utf-8;",
+          });
+          saveAs(blob, `${title.toLowerCase().replace(/\s+/g, "-")}.csv`);
+          break;
+        }
+        case "json": {
+          if (!data) {
+            console.error("No data available for JSON export");
+            return;
+          }
+          const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: "application/json",
+          });
+          saveAs(blob, `${title.toLowerCase().replace(/\s+/g, "-")}.json`);
+          break;
+        }
+        default:
+          console.warn(`Download format not supported: ${format}`);
+      }
+    } catch (error) {
+      console.error("Error downloading chart:", error);
+    }
   };
 
   return (
-    <div className="absolute top-2 right-2 z-30 flex items-center gap-2">
-      <div className="flex items-center gap-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
-        <button
-          onClick={onZoomIn}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-lg transition-colors"
-          title="Zoom In"
+    <div
+      ref={toolbarRef}
+      className="absolute top-2 right-2 z-30 flex items-center gap-2"
+    >
+      <div className="flex items-center">
+        <motion.div
+          className="flex items-center bg-background/95 backdrop-blur-sm rounded-lg shadow-lg border border-border"
+          initial={false}
+          animate={{
+            width: showTools ? "auto" : "2rem",
+            paddingRight: showTools ? "0.375rem" : "0",
+          }}
+          transition={{
+            duration: 0.2,
+            ease: "easeInOut",
+          }}
         >
-          <ZoomIn className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onZoomOut}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 border-l border-r border-slate-200 dark:border-slate-700 transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onBoxSelect}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 border-r border-slate-200 dark:border-slate-700 transition-colors"
-          title="Box Selection"
-        >
-          <Square className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onLassoSelect}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 border-r border-slate-200 dark:border-slate-700 transition-colors"
-          title="Lasso Selection"
-        >
-          <Lasso className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onClearSelection}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          title="Clear Selection"
-        >
-          <Trash2 className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-      </div>
-
-      <div className="relative">
-        <button
-          ref={buttonRef}
-          onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-          className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          title="Download"
-        >
-          <Download className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-
-        {showDownloadMenu && (
-          <div
-            ref={menuRef}
-            className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-lg transition-colors",
+              showTools && "rounded-r-none border-r border-border"
+            )}
+            onClick={() => setShowTools(!showTools)}
           >
-            <button
-              onClick={() => handleDownload('png')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <Image className="w-4 h-4 mr-2" />
-              Download PNG
-            </button>
-            <button
-              onClick={() => handleDownload('pdf')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <FilePdf className="w-4 h-4 mr-2" />
-              Download PDF
-            </button>
-            <button
-              onClick={() => handleDownload('csv')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Download CSV
-            </button>
-            <button
-              onClick={() => handleDownload('json')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <FileJson className="w-4 h-4 mr-2" />
-              Download JSON
-            </button>
-          </div>
-        )}
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+
+          <AnimatePresence>
+            {showTools && (
+              <motion.div
+                className="flex items-center gap-1 px-1"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: "auto" }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onZoomIn}
+                  title="Zoom In"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onZoomOut}
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+
+                <div className="w-[1px] h-8 bg-border mx-1" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onBoxSelect}
+                  title="Box Selection"
+                >
+                  <Square className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onLassoSelect}
+                  title="Lasso Selection"
+                >
+                  <Lasso className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onClearSelection}
+                  title="Clear Selection"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => handleDownload("png")}>
+                      <Image className="h-4 w-4 mr-2" />
+                      <span>Download PNG</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownload("pdf")}>
+                      <FilePdf className="h-4 w-4 mr-2" />
+                      <span>Download PDF</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownload("csv")}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      <span>Download CSV</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownload("json")}>
+                      <FileJson className="h-4 w-4 mr-2" />
+                      <span>Download JSON</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
     </div>
   );
 }
+
+export default ChartToolbar;
