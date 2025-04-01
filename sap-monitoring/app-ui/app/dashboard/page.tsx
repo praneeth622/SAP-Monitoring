@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { Activity, TrendingUp, Users, DollarSign } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { generateMultipleDataSets } from "@/utils/data"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
 import { DynamicLayout } from "@/components/charts/DynamicLayout"
 import { DateRangePicker } from "@/components/date-range-picker"
@@ -383,82 +383,6 @@ export default function Dashboard() {
   // Apply theme colors to KPI colors
   const [themedKpiColors, setThemedKpiColors] = useState(kpiColors);
 
-  // Update the charts from the selected template to use the current theme colors
-  const applyThemeToCharts = useCallback((chartsList: ChartConfig[]) => {
-    if (chartsList.length === 0) return chartsList;
-    
-    const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
-    if (!theme) return chartsList;
-    
-    console.log(`Applying ${selectedTheme} theme to ${chartsList.length} charts`);
-    
-    // First collect all unique KPIs across all charts
-    const allKpis = new Set<string>();
-    chartsList.forEach(chart => {
-      if (chart.activeKPIs) {
-        // Handle both Set and Array types
-        const kpiArray = chart.activeKPIs instanceof Set 
-          ? Array.from(chart.activeKPIs) 
-          : chart.activeKPIs;
-          
-        kpiArray.forEach(kpi => {
-          if (typeof kpi === 'string') {
-            allKpis.add(kpi.toLowerCase());
-          }
-        });
-      }
-    });
-    
-    console.log(`Found ${allKpis.size} unique KPIs to color`);
-    
-    // Create a global color mapping for all KPIs
-    const globalColorMap: Record<string, string> = {};
-    Array.from(allKpis).forEach((kpiId, index) => {
-      globalColorMap[kpiId] = theme.colors[index % theme.colors.length];
-      console.log(`Assigned ${theme.name} color to ${kpiId}: ${globalColorMap[kpiId]}`);
-    });
-    
-    // Apply the global color mapping to each chart (prioritize over any API colors)
-    return chartsList.map(chart => {
-      // Create a new kpiColors object or use existing one
-      const updatedKpiColors: Record<string, { color: string; name: string }> = {};
-      
-      // Handle both Set and Array for activeKPIs
-      const activeKpisList = chart.activeKPIs instanceof Set 
-        ? Array.from(chart.activeKPIs) 
-        : (Array.isArray(chart.activeKPIs) ? chart.activeKPIs : []);
-      
-      // Apply colors to each active KPI
-      activeKpisList.forEach(kpi => {
-        if (typeof kpi === 'string') {
-          const kpiLower = kpi.toLowerCase();
-          const name = chart.kpiColors?.[kpi]?.name || kpi;
-          
-          updatedKpiColors[kpi] = {
-            // Always use theme color from global mapping
-            color: globalColorMap[kpiLower] || theme.colors[0],
-            name: name
-          };
-        }
-      });
-      
-      console.log(`Applied theme colors to chart "${chart.title}"`, updatedKpiColors);
-      
-      return {
-        ...chart,
-        kpiColors: updatedKpiColors
-      };
-    });
-  }, [selectedTheme]);
-
-  // When theme changes, update all charts to use the new theme colors
-  useEffect(() => {
-    if (charts.length === 0) return;
-    
-    console.log(`Theme changed to ${selectedTheme}, updating all chart colors`);
-    setCharts(applyThemeToCharts([...charts]));
-  }, [selectedTheme, applyThemeToCharts, charts]);
-
   // Fetch templates from API
   const fetchTemplates = async () => {
     try {
@@ -602,60 +526,116 @@ export default function Dashboard() {
     }
   };
 
-  // Modified to apply the theme colors to charts from API
+  // Fetch template by ID
   const fetchTemplateById = async (templateId: string) => {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        setIsLoading(true);
-        console.log(`Fetching template with ID: ${templateId}`);
-        
-        const response = await fetch(`${baseUrl}/api/ut?templateId=${templateId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch template: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log("Template API response:", data);
-        
-        if (!data || !data.length) {
-          throw new Error("Template not found or empty response");
-        }
-        
-        // Normalize the template
-        const normalizedTemplate = normalizeTemplate(data[0]);
-        console.log("Normalized template:", normalizedTemplate);
-        
-        if (!normalizedTemplate.graphs || normalizedTemplate.graphs.length === 0) {
-          console.warn("Template has no graphs, falling back to default charts");
-          setCharts(generateChartConfigs(resolution));
-          resolve();
-          return;
-        }
-        
-        // Generate charts from the fetched template
-        const templateCharts = generateChartsFromTemplate(normalizedTemplate, resolution);
-        console.log(`Generated ${templateCharts.length} charts from template`);
-        
-        // Apply current theme colors to override any colors from the API
-        const updatedCharts = applyThemeToCharts(templateCharts);
-        
-        setCharts(updatedCharts);
-        toast.success(`Template "${normalizedTemplate.name}" loaded successfully`);
-        resolve();
-      } catch (error) {
-        console.error("Error fetching template:", error);
-        toast.error("Failed to load template", {
-          description: error instanceof Error ? error.message : "Please try again or contact support",
-        });
-        
-        // Fallback to default charts
-        setCharts(generateChartConfigs(resolution));
-        reject(error);
-      } finally {
-        setIsLoading(false);
+    try {
+      setIsLoading(true);
+      console.log(`Fetching template with ID: ${templateId}`);
+      
+      const response = await fetch(`${baseUrl}/api/ut?templateId=${templateId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch template: ${response.statusText}`);
       }
-    });
+      
+      const data = await response.json();
+      console.log("Template API response:", data);
+      
+      if (!data || !data.length) {
+        throw new Error("Template not found or empty response");
+      }
+      
+      // Normalize the template
+      const normalizedTemplate = normalizeTemplate(data[0]);
+      console.log("Normalized template:", normalizedTemplate);
+      
+      if (!normalizedTemplate.graphs || normalizedTemplate.graphs.length === 0) {
+        console.warn("Template has no graphs, falling back to default charts");
+        setCharts(generateChartConfigs(resolution));
+        return;
+      }
+      
+      // Generate charts from the fetched template with the selected theme
+      const templateCharts = generateChartsFromTemplate(normalizedTemplate, resolution);
+      
+      // Apply current theme colors to the charts
+      const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
+      if (theme) {
+        templateCharts.forEach((chart: any, index) => {
+          // Update chart KPI colors with current theme colors
+          if (chart.kpiColors) {
+            const kpiEntries = Object.entries(chart.kpiColors);
+            kpiEntries.forEach(([kpiId, kpiInfo], colorIndex) => {
+              // Apply theme color based on index
+              chart.kpiColors[kpiId].color = theme.colors[colorIndex % theme.colors.length];
+            });
+          }
+        });
+      }
+      
+      console.log(`Generated ${templateCharts.length} charts from template`);
+      setCharts(templateCharts);
+      
+      toast.success(`Template "${normalizedTemplate.name}" loaded successfully`);
+    } catch (error) {
+      console.error("Error fetching template:", error);
+      toast.error("Failed to load template", {
+        description: error instanceof Error ? error.message : "Please try again or contact support",
+      });
+      
+      // Fallback to default charts
+      setCharts(generateChartConfigs(resolution));
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // When theme changes, update KPI colors and apply to existing charts
+  useEffect(() => {
+    const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
+    if (!theme) return;
+    
+    // Create a new kpiColors object with theme colors
+    const updatedKpiColors = {
+      revenue: {
+        ...kpiColors.revenue,
+        color: theme.colors[0] // Use first theme color for revenue
+      },
+      users: {
+        ...kpiColors.users,
+        color: theme.colors[1] // Use second theme color for users
+      }
+    };
+    
+    setThemedKpiColors(updatedKpiColors);
+    console.log("Updated KPI colors with theme:", updatedKpiColors);
+    
+    // Update colors in existing charts when theme changes - but don't include charts in dependency
+    // to avoid infinite loop
+    if (charts.length > 0) {
+      const updatedCharts = charts.map(chart => {
+        if (chart.kpiColors) {
+          const newKpiColors = { ...chart.kpiColors };
+          
+          // Apply new theme colors to each KPI
+          Object.keys(newKpiColors).forEach((kpiId, index) => {
+            newKpiColors[kpiId] = {
+              ...newKpiColors[kpiId],
+              color: theme.colors[index % theme.colors.length]
+            };
+          });
+          
+          return {
+            ...chart,
+            kpiColors: newKpiColors
+          };
+        }
+        return chart;
+      });
+      
+      console.log("Updated chart colors with new theme");
+      setCharts(updatedCharts);
+    }
+  }, [selectedTheme]); // Remove charts from dependency array
 
   // Initialize dashboard with templates
   useEffect(() => {
