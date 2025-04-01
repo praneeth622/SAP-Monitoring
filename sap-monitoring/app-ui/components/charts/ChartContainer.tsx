@@ -1,19 +1,26 @@
 "use client";
-
-import React, {
-  useEffect,
-  useRef,
-  memo,
-  useState,
-  useCallback,
-  useImperativeHandle,
-} from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import React, { memo, useImperativeHandle } from "react";
 import * as echarts from "echarts";
 import { ChartType, DataPoint } from "@/types";
 import { ChartToolbar } from "./ChartToolbar";
 import { DateRange } from "react-day-picker";
 import dayjs from "dayjs";
 import type { EChartsOption, ECharts } from "echarts";
+import { cn } from "@/lib/utils";
+import { Download } from "./ChartContainer";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { saveAs } from "file-saver";
+import { Button } from "../ui/button";
+import { jsPDF } from "jspdf";
 
 interface ChartContainerProps {
   data: DataPoint[];
@@ -28,9 +35,10 @@ interface ChartContainerProps {
     name: string;
     colors: string[];
   };
+  width?: string;
+  height?: string;
 }
 
-// Add React.forwardRef wrapper and define ref type
 const ChartContainer = memo(
   React.forwardRef<
     {
@@ -40,6 +48,7 @@ const ChartContainer = memo(
       lassoSelect: () => void;
       clearSelection: () => void;
       download: (format: "png" | "svg" | "pdf" | "csv" | "json") => void;
+      dispatchAction?: (action: any) => void;
     },
     ChartContainerProps
   >((props, ref) => {
@@ -53,10 +62,12 @@ const ChartContainer = memo(
       className,
       options: externalOptions,
       theme,
+      width,
+      height,
     } = props;
 
-    const chartRef = useRef<HTMLDivElement>(null);
-    const chartInstance = useRef<echarts.ECharts | null>(null);
+    const chartRef = useRef<echarts.ECharts | null>(null);
+    const chartContainerRef = useRef<HTMLDivElement>(null);
     const [isSelecting, setIsSelecting] = useState(false);
     const [selectedTool, setSelectedTool] = useState<"box" | "lasso" | null>(
       null
@@ -66,39 +77,68 @@ const ChartContainer = memo(
 
     const filteredData = React.useMemo(() => {
       if (!dateRange?.from || !dateRange?.to) return data;
-
       return data.filter((item) => {
         const itemDate = dayjs(item.date);
-        const fromDate = dayjs(dateRange.from);
-        const toDate = dayjs(dateRange.to);
-        return itemDate.isAfter(fromDate) && itemDate.isBefore(toDate);
+        const fromDate = dayjs(dateRange.from).startOf("day");
+        const toDate = dayjs(dateRange.to).endOf("day");
+        // Include both from and to dates in the range (inclusive)
+        return (
+          (itemDate.isAfter(fromDate) || itemDate.isSame(fromDate)) &&
+          (itemDate.isBefore(toDate) || itemDate.isSame(toDate))
+        );
       });
     }, [data, dateRange]);
 
     const initChart = useCallback(() => {
-      if (!chartRef.current) return;
+      if (!chartContainerRef.current) return;
 
-      if (chartInstance.current) {
-        chartInstance.current.dispose();
+      if (chartRef.current) {
+        chartRef.current.dispose();
       }
 
-      chartInstance.current = echarts.init(chartRef.current);
+      const chart = echarts.init(chartContainerRef.current);
+
+      // Add brush component during initialization
+      chart.setOption({
+        brush: {
+          toolbox: ["rect", "polygon", "keep", "clear"],
+          xAxisIndex: 0,
+          brushLink: "all",
+          outOfBrush: {
+            colorAlpha: 0.1,
+          },
+          brushStyle: {
+            borderWidth: 1,
+            color: "rgba(80, 100, 150, 0.2)",
+            borderColor: "rgba(80, 100, 150, 0.8)",
+          },
+        },
+        toolbox: {
+          feature: {
+            brush: {
+              type: ["rect", "polygon", "keep", "clear"],
+            },
+          },
+          show: false, // Hide the built-in toolbox
+        },
+      });
+
+      chartRef.current = chart;
       setMounted(true);
 
-      // Set up resize observer
       if (resizeObserverRef.current) {
         resizeObserverRef.current.disconnect();
       }
 
       resizeObserverRef.current = new ResizeObserver((entries) => {
-        if (chartInstance.current) {
+        if (chartRef.current) {
           requestAnimationFrame(() => {
-            chartInstance.current?.resize();
+            chartRef.current?.resize();
           });
         }
       });
 
-      resizeObserverRef.current.observe(chartRef.current);
+      resizeObserverRef.current.observe(chartContainerRef.current);
     }, []);
 
     useEffect(() => {
@@ -108,204 +148,106 @@ const ChartContainer = memo(
         if (resizeObserverRef.current) {
           resizeObserverRef.current.disconnect();
         }
-        if (chartInstance.current) {
-          chartInstance.current.dispose();
-          chartInstance.current = null;
+        if (chartRef.current) {
+          chartRef.current.dispose();
+          chartRef.current = null;
         }
       };
     }, [initChart]);
 
     const updateChart = useCallback(() => {
-      if (!chartInstance.current) return;
-
-      // Debug the data coming in
-      console.log("Updating chart with data:", filteredData.length, "points");
-      console.log("Active KPIs:", activeKPIs ? 
-        (activeKPIs instanceof Set ? Array.from(activeKPIs) : activeKPIs) : 'none');
-      console.log("KPI Colors:", kpiColors || 'none');
-      console.log("Current theme:", theme);
-
-      // Create a fallback for activeKPIs if it's undefined or empty
-      let effectiveActiveKPIs: Set<string> | string[] = new Set();
-      
-      if (activeKPIs) {
-        if (activeKPIs instanceof Set && activeKPIs.size > 0) {
-          effectiveActiveKPIs = activeKPIs;
-        } else if (Array.isArray(activeKPIs) && activeKPIs.length > 0) {
-          effectiveActiveKPIs = activeKPIs;
-        } else {
-          // If empty, use all categories as active
-          effectiveActiveKPIs = Array.from(
-            new Set(filteredData.map(item => item.category.toLowerCase()))
-          );
-          console.log("No active KPIs specified, using all:", effectiveActiveKPIs);
-        }
-      } else {
-        // If activeKPIs is undefined, use all categories
-        effectiveActiveKPIs = Array.from(
-          new Set(filteredData.map(item => item.category.toLowerCase()))
-        );
-        console.log("ActiveKPIs is undefined, using all categories:", effectiveActiveKPIs);
-      }
-
-      const categories = Array.from(
-        new Set(filteredData.map((item) => item.category))
-      ).filter((category) => {
-        const categoryLower = category.toLowerCase();
-        
-        // Check if category is active based on effectiveActiveKPIs type
-        if (effectiveActiveKPIs instanceof Set) {
-          return effectiveActiveKPIs.has(categoryLower);
-        } else if (Array.isArray(effectiveActiveKPIs)) {
-          return effectiveActiveKPIs.includes(categoryLower);
-        }
-        
-        return true; // Default to including the category if activeKPIs is invalid
-      });
-
-      console.log("Filtered categories:", categories);
-
-      // Handle empty categories case
-      if (categories.length === 0) {
-        console.warn("No active categories found, showing chart with no data");
-        chartInstance.current.setOption({
-          title: {
-            text: 'No data available',
-            left: 'center',
-            top: 'center',
-            textStyle: {
-              fontSize: 14,
-              fontWeight: 'normal'
-            }
-          },
-          grid: {
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0
-          }
-        });
+      if (!chartRef.current || !filteredData || filteredData.length === 0) {
+        console.warn("No data to display or chart not initialized");
         return;
       }
 
-      const dates = Array.from(new Set(filteredData.map((item) => item.date))).sort((a, b) => {
-        return new Date(a).getTime() - new Date(b).getTime();
+      const uniqueCategories = Array.from(
+        new Set(filteredData.map((item) => item.category))
+      );
+
+      const categories = uniqueCategories.filter((category) => {
+        if (!activeKPIs) return true;
+        if (Array.isArray(activeKPIs)) {
+          return activeKPIs.includes(category);
+        } else if (activeKPIs instanceof Set) {
+          return activeKPIs.has(category);
+        }
+        return true;
       });
 
-      const options: echarts.EChartsOption = {
+      if (categories.length === 0) {
+        console.warn("No categories match activeKPIs, showing all categories");
+        categories.push(...uniqueCategories);
+      }
+
+      const dates = Array.from(
+        new Set(filteredData.map((item) => item.date))
+      ).sort();
+
+      const series = categories.map((category, index) => {
+        const defaultColor =
+          theme?.colors && theme.colors.length > 0
+            ? theme.colors[index % theme.colors.length]
+            : `hsl(${(index * 60) % 360}, 70%, 50%)`;
+        const color = kpiColors?.[category]?.color || defaultColor;
+
+        const categoryData = dates.map((date) => {
+          const points = filteredData.filter(
+            (p) => p.date === date && p.category === category
+          );
+          return points.length > 0
+            ? points.reduce((sum, p) => sum + p.value, 0)
+            : null;
+        });
+
+        return {
+          name: kpiColors?.[category]?.name || category,
+          type: type,
+          data: categoryData,
+          itemStyle: { color },
+          emphasis: {
+            focus: "series",
+            itemStyle: {
+              shadowBlur: 10,
+              shadowColor: color,
+            },
+          },
+          areaStyle: type === "line" ? { opacity: 0.2 } : undefined,
+          lineStyle: type === "line" ? { width: 2 } : undefined,
+          smooth: true,
+        };
+      });
+
+      const option: echarts.EChartsOption = {
         animation: true,
-        animationDuration: 300,
-        animationEasing: "cubicOut",
-
         grid: {
-          top: 10, // Reduced from 25 to minimize space below title
-          right: "3%",
-          bottom: 35, // Reduced from 45
-          left: "3%",
-          containLabel: true,
+          top: 5, // Reduced from 10 to minimize space below chart title
+          right: 10,
+          bottom: 40, // Keep bottom space for the slider
+          left: 35, // Reduced from 50 to use more space on the left side
+          containLabel: true, // Important: this ensures labels are included in the layout calculation
         },
-
         tooltip: {
           trigger: "axis",
-          axisPointer: {
-            type: "cross",
-            label: {
-              backgroundColor: "#6a7985",
-            },
-          },
-          formatter: (params: any) => {
-            const date = params[0].axisValue;
-            let html = `<div style="font-weight: bold">${dayjs(date).format(
-              "MMM D, YYYY HH:mm"
-            )}</div>`;
-            params.forEach((param: any) => {
-              const kpiId = param.seriesName.toLowerCase();
-              const color = kpiColors && kpiColors[kpiId]?.color || param.color;
-              html += `
-              <div style="color: ${color}">
-                <span style="display: inline-block; width: 10px; height: 10px; background: ${color};  margin-right: 5px;"></span>
-                ${param.seriesName}: ${param.value.toLocaleString("en-US", {
-                style: "currency",
-                currency: "INR",
-              })}
-              </div>`;
-            });
-            return html;
-          },
+          axisPointer: { type: "cross" },
+          confine: true, // Keep tooltips within chart area
         },
-
-        xAxis: {
-          type: "category",
-          boundaryGap: type === "bar",
-          data: dates,
-          axisLabel: {
-            formatter: (value: string) => {
-              // Adjust formatter based on date density
-              const dateObj = new Date(value);
-              if (dates.length > 200) {
-                // High density - show only hours and minutes
-                return dayjs(value).format("HH:mm");
-              } else if (dates.length > 50) {
-                // Medium density
-                return dayjs(value).format("MM/DD HH:mm");
-              } else {
-                // Low density - show more detail
-                return dayjs(value).format("MM/DD HH:mm");
-              }
-            },
-            interval: Math.ceil(dates.length / 12), // Show more labels for better readability
-            rotate: 0,
-            margin: 8, // Reduced from 12
-            color: "#666",
-            fontSize: 10, // Reduced from 11
-          },
-          axisTick: {
-            alignWithLabel: true,
-          },
-          axisLine: {
-            lineStyle: {
-              color: "#ddd", // Lighter axis line
-            },
-          },
-        },
-
-        yAxis: {
-          type: "value",
-          axisLabel: {
-            formatter: (value: number) =>
-              value >= 1000000
-                ? `${(value / 1000000).toFixed(1)}M`
-                : value >= 1000
-                ? `${(value / 1000).toFixed(0)}K`
-                : value.toString(),
-            color: "#666",
-            fontSize: 10, // Reduced from 11
-            margin: 4, // Added smaller margin
-          },
-          splitLine: {
-            lineStyle: {
-              color: "#f0f0f0", // Lighter grid lines
-            },
-          },
-          axisLine: {
-            show: false, // Hide y-axis line for cleaner look
-          },
-          axisTick: {
-            show: false, // Hide y-axis ticks
-          },
-        },
-
+        // Keep the existing dataZoom configuration
         dataZoom: [
+          // Inside zoom functionality
           {
             type: "inside",
             start: 0,
             end: 100,
+            zoomOnMouseWheel: true,
+            moveOnMouseMove: true,
           },
+          // Range selector slider
           {
             show: true,
             type: "slider",
-            bottom: 30, // Adjusted position to be above parameters
-            height: 12,
+            bottom: 10, // Position from bottom
+            height: 15, // Height of slider
             borderColor: "transparent",
             backgroundColor: "rgba(200,200,200,0.15)",
             fillerColor: "rgba(144,197,237,0.1)",
@@ -317,318 +259,474 @@ const ChartContainer = memo(
               shadowOffsetY: 1,
             },
             textStyle: {
-              fontSize: 10, // Use number instead of string with unit
+              fontSize: "0.7em", // Relative font size
               color: "#666",
+              margin: 2,
             },
             moveHandleStyle: {
               opacity: 0.3,
             },
           },
         ],
-
-        series: categories.map((category, index) => {
-          // Ensure we get the lowercase version of the category for kpiId
-          const kpiId = category.toLowerCase();
+        xAxis: {
+          type: "category",
+          data: dates,
+          axisLabel: {
+            formatter: (value: string) => dayjs(value).format("MMM DD HH:mm"),
+            fontSize: 10, // Smaller font to avoid overflow
+          },
+        },
+        yAxis: {
+          type: "value",
+          splitLine: {
+            lineStyle: { color: "rgba(120, 120, 120, 0.1)" },
+          },
           
-          // Log to debug color identification
-          console.log(`Applying color for KPI: ${kpiId}`);
-
-          // Always use color from kpiColors if available - highest priority
-          let color;
-          if (kpiColors && kpiColors[kpiId] && kpiColors[kpiId].color) {
-            color = kpiColors[kpiId].color;
-            console.log(`Using kpiColors color for ${kpiId}: ${color}`);
-          } 
-          // If no color from kpiColors, try theme colors as fallback
-          else if (theme?.colors && theme.colors.length > 0) {
-            color = theme.colors[index % theme.colors.length];
-            console.log(`Using theme color for ${kpiId}: ${color}`);
-          }
-          // Final fallback to default palette
-          else {
-            color = [
-              "#3B82F6", // blue
-              "#8B5CF6", // purple
-              "#EC4899", // pink
-              "#10B981", // green
-              "#F97316", // orange
-              "#EF4444", // red
-            ][index % 6];
-            console.log(`Using fallback color for ${kpiId}: ${color}`);
-          }
-
-          return {
-            name: category,
-            type,
-            data: dates.map((date) => {
-              const point = filteredData.find(
-                (item) => item.date === date && item.category === category
-              );
-              return point ? point.value : null;
-            }),
-            smooth: true,
-            symbolSize: 5, // Larger symbols for better visibility
-            showSymbol: dates.length < 50,
-            emphasis: {
-              focus: "series",
-              scale: 1.1,
-              lineStyle: {
-                width: 3.5, // Thicker on hover
-                shadowBlur: 10,
-                shadowColor: color
-              }
+          nameLocation: "middle",
+          nameGap: 25, // Space between name and axis
+          nameTextStyle: {
+            fontSize: 10,
+            padding: [0, 0, 0, 0],
+          },
+          axisLabel: {
+            formatter: (value: number) => {
+              if (value >= 1000000) return (value / 1000000).toFixed(1) + "M";
+              if (value >= 1000) return (value / 1000).toFixed(1) + "K";
+              return value;
             },
-            // Add !important to make sure color is applied
-            itemStyle: {
-              color: color,
-              borderWidth: 1,
-              borderColor: color
-            },
-            lineStyle: {
-              width: 3, // Thicker lines for better visibility
-              color: color, // Make sure color is explicitly set
-              shadowBlur: 0,
-              join: 'round'
-            },
-            ...(type === "line" && {
-              areaStyle: {
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                  {
-                    offset: 0,
-                    color: color.startsWith("rgb")
-                      ? color.replace(")", ", 0.35)").replace("rgb", "rgba")
-                      : color + "59", // Higher opacity for better visibility
-                  },
-                  {
-                    offset: 1,
-                    color: color.startsWith("rgb")
-                      ? color.replace(")", ", 0)").replace("rgb", "rgba")
-                      : color + "00",
-                  },
-                ]),
-              },
-            }),
-          };
-        }),
+            fontSize: 10, // Smaller font size to save space
+            margin: 4, // Reduce margin to save space
+            align: "right", // Better alignment for y-axis values
+          },
+        },
+        series,
       };
 
-      requestAnimationFrame(() => {
-        chartInstance.current?.setOption(options, { notMerge: true });
-      });
-    }, [filteredData, type]);
+      try {
+        chartRef.current.setOption(option, { notMerge: true });
+      } catch (error) {
+        console.error("Error rendering chart:", error);
+      }
+    }, [filteredData, type, activeKPIs, kpiColors, theme]);
 
     useEffect(() => {
-      if (!mounted || !chartInstance.current) return;
+      if (!mounted || !chartRef.current) return;
 
       if (externalOptions) {
-        chartInstance.current?.setOption(externalOptions, { notMerge: true });
+        chartRef.current.setOption(externalOptions, { notMerge: true });
       } else {
         updateChart();
       }
     }, [mounted, updateChart, externalOptions]);
 
-    const handleZoomIn = useCallback(() => {
-      if (!chartInstance.current) return;
-      const option = chartInstance.current.getOption() as EChartsOption;
-      const dataZoom = (option.dataZoom as any)?.[0] as {
-        start: number;
-        end: number;
-      };
+    const zoomIn = useCallback(() => {
+      if (!chartRef.current) return;
+
+      const option = chartRef.current.getOption();
+      const dataZoom = option.dataZoom?.[0] as any;
+
       if (!dataZoom) return;
 
       const range = dataZoom.end - dataZoom.start;
       const center = (dataZoom.start + dataZoom.end) / 2;
-      const newRange = Math.max(range * 0.5, 10);
+      const newRange = Math.max(range * 0.5, 10); // Limit minimum range to 10%
       const newStart = Math.max(0, center - newRange / 2);
       const newEnd = Math.min(100, center + newRange / 2);
 
       requestAnimationFrame(() => {
-        chartInstance.current?.dispatchAction({
+        chartRef.current?.dispatchAction({
           type: "dataZoom",
           start: newStart,
           end: newEnd,
+          xAxisIndex: 0,
         });
       });
     }, []);
 
-    const handleZoomOut = useCallback(() => {
-      if (!chartInstance.current) return;
-      const option = chartInstance.current.getOption() as EChartsOption;
-      const dataZoom = (option.dataZoom as any)?.[0] as {
-        start: number;
-        end: number;
-      };
+    const zoomOut = useCallback(() => {
+      if (!chartRef.current) return;
+
+      const option = chartRef.current.getOption();
+      const dataZoom = option.dataZoom?.[0] as any;
+
       if (!dataZoom) return;
 
       const range = dataZoom.end - dataZoom.start;
       const center = (dataZoom.start + dataZoom.end) / 2;
-      const newRange = Math.min(range * 2, 100);
+      const newRange = Math.min(range * 2, 100); // Limit maximum range to 100%
       const newStart = Math.max(0, center - newRange / 2);
       const newEnd = Math.min(100, center + newRange / 2);
 
       requestAnimationFrame(() => {
-        chartInstance.current?.dispatchAction({
+        chartRef.current?.dispatchAction({
           type: "dataZoom",
           start: newStart,
           end: newEnd,
+          xAxisIndex: 0,
         });
       });
     }, []);
 
-    const handleDownload = useCallback(
-      (format: "png" | "svg" | "pdf" | "csv" | "json") => {
-        if (!chartInstance.current) return;
+    const boxSelect = useCallback(() => {
+      if (!chartRef.current) return;
 
-        switch (format) {
-          case "png": {
-            const url = chartInstance.current.getDataURL({
-              type: "png",
-              pixelRatio: 2,
-              backgroundColor: "#fff",
-            });
-            const link = document.createElement("a");
-            link.download = `chart-${title}.png`;
-            link.href = url;
-            link.click();
-            break;
-          }
-          case "json": {
-            const blob = new Blob([JSON.stringify(data, null, 2)], {
-              type: "application/json",
-            });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.download = `chart-${title}.json`;
-            link.href = url;
-            link.click();
-            URL.revokeObjectURL(url);
-            break;
-          }
-          // ... implement other formats similarly
-        }
-      },
-      [chartInstance, data, title]
-    );
+      // First, clear any existing brushes
+      chartRef.current.dispatchAction({
+        type: "brush",
+        command: "clear",
+        areas: [],
+      });
 
-    const handleBoxSelect = useCallback(() => {
-      if (!chartInstance.current) return;
+      // Enable box selection with proper options
+      chartRef.current.dispatchAction({
+        type: "takeGlobalCursor",
+        key: "brush",
+        brushOption: {
+          brushType: "rect",
+          brushMode: "single",
+          transformable: true,
+          brushStyle: {
+            borderWidth: 1,
+            color: "rgba(120, 140, 180, 0.3)",
+            borderColor: "rgba(120, 140, 180, 0.8)",
+          },
+        },
+      });
+
       setSelectedTool("box");
       setIsSelecting(true);
 
-      requestAnimationFrame(() => {
-        if (!chartInstance.current) return;
-
-        chartInstance.current.setOption(
-          {
-            brush: {
-              toolbox: ["rect"],
-              xAxisIndex: 0,
-              brushMode: "single",
-              brushStyle: {
-                borderWidth: 1,
-                color: "rgba(120, 140, 180, 0.2)",
-                borderColor: "rgba(120, 140, 180, 0.8)",
-              },
-              transformable: true,
-              throttleType: "debounce",
-              throttleDelay: 300,
+      // Make sure brush component is properly configured
+      chartRef.current.setOption(
+        {
+          brush: {
+            toolbox: ["rect", "keep", "clear"],
+            xAxisIndex: 0,
+            brushLink: "all",
+            outOfBrush: {
+              colorAlpha: 0.1,
             },
+            throttleType: "debounce",
+            throttleDelay: 100,
           },
-          { replaceMerge: ["brush"] }
-        );
-
-        chartInstance.current.dispatchAction({
-          type: "takeGlobalCursor",
-          key: "brush",
-          brushOption: {
-            brushType: "rect",
-            brushMode: "single",
-          },
-        });
-      });
+        },
+        { replaceMerge: ["brush"] }
+      );
     }, []);
 
-    const handleLassoSelect = useCallback(() => {
-      if (!chartInstance.current) return;
+    const lassoSelect = useCallback(() => {
+      if (!chartRef.current) return;
+
+      // First, clear any existing brushes
+      chartRef.current.dispatchAction({
+        type: "brush",
+        command: "clear",
+        areas: [],
+      });
+
+      // Enable polygon selection with proper options
+      chartRef.current.dispatchAction({
+        type: "takeGlobalCursor",
+        key: "brush",
+        brushOption: {
+          brushType: "polygon",
+          brushMode: "single",
+          transformable: true,
+          brushStyle: {
+            borderWidth: 1,
+            color: "rgba(120, 140, 180, 0.3)",
+            borderColor: "rgba(120, 140, 180, 0.8)",
+          },
+        },
+      });
+
       setSelectedTool("lasso");
       setIsSelecting(true);
 
-      requestAnimationFrame(() => {
-        if (!chartInstance.current) return;
-
-        chartInstance.current.setOption(
-          {
-            brush: {
-              toolbox: ["polygon"],
-              xAxisIndex: 0,
-              brushMode: "single",
-              brushStyle: {
-                borderWidth: 1,
-                color: "rgba(120, 140, 180, 0.2)",
-                borderColor: "rgba(120, 140, 180, 0.8)",
-              },
-              transformable: true,
-              throttleType: "debounce",
-              throttleDelay: 300,
+      // Make sure brush component is properly configured for polygon selection
+      chartRef.current.setOption(
+        {
+          brush: {
+            toolbox: ["polygon", "keep", "clear"],
+            xAxisIndex: 0,
+            brushLink: "all",
+            outOfBrush: {
+              colorAlpha: 0.1,
             },
+            throttleType: "debounce",
+            throttleDelay: 100,
           },
-          { replaceMerge: ["brush"] }
-        );
-
-        chartInstance.current.dispatchAction({
-          type: "takeGlobalCursor",
-          key: "brush",
-          brushOption: {
-            brushType: "polygon",
-            brushMode: "single",
-          },
-        });
-      });
+        },
+        { replaceMerge: ["brush"] }
+      );
     }, []);
 
-    const handleClearSelection = useCallback(() => {
-      if (!chartInstance.current) return;
+    const clearSelection = useCallback(() => {
+      if (!chartRef.current) return;
+
+      // Clear all brushes and reset selection state
+      chartRef.current.dispatchAction({
+        type: "brush",
+        command: "clear",
+        areas: [],
+      });
+
+      // Reset cursor by disabling brush mode
+      chartRef.current.dispatchAction({
+        type: "takeGlobalCursor",
+        key: "brush",
+        brushOption: null,
+      });
+
+      // Reset selection state
       setSelectedTool(null);
       setIsSelecting(false);
 
-      requestAnimationFrame(() => {
-        if (!chartInstance.current) return;
+      // Update all series to show them normally
+      const option = chartRef.current.getOption();
+      const series = option.series;
 
-        chartInstance.current.setOption(
+      if (Array.isArray(series)) {
+        chartRef.current.setOption(
           {
-            brush: undefined,
+            series: series.map((s: any) => ({
+              ...s,
+              itemStyle: {
+                ...s.itemStyle,
+                opacity: 1,
+              },
+            })),
           },
-          { replaceMerge: ["brush"] }
+          { replaceMerge: ["series"] }
         );
-
-        chartInstance.current.dispatchAction({
-          type: "brush",
-          command: "clear",
-        });
-      });
+      }
     }, []);
 
-    // Expose functions to parent component
-    useImperativeHandle(ref, () => ({
-      zoomIn: handleZoomIn,
-      zoomOut: handleZoomOut,
-      boxSelect: handleBoxSelect,
-      lassoSelect: handleLassoSelect,
-      clearSelection: handleClearSelection,
-      download: handleDownload,
-    }));
+    const download = useCallback(
+      (format: "png" | "svg" | "pdf" | "csv" | "json") => {
+        if (!chartRef.current) return;
+
+        try {
+          switch (format) {
+            case "png": {
+              const url = chartRef.current.getDataURL({
+                type: "png",
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
+              const link = document.createElement("a");
+              link.download = `${title.toLowerCase().replace(/\s+/g, "-")}.png`;
+              link.href = url;
+              link.click();
+              break;
+            }
+            case "svg": {
+              const url = chartRef.current.getDataURL({
+                type: "svg",
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
+              const link = document.createElement("a");
+              link.download = `${title.toLowerCase().replace(/\s+/g, "-")}.svg`;
+              link.href =
+                "data:image/svg+xml;charset=utf-8," + encodeURIComponent(url);
+              link.click();
+              break;
+            }
+            case "pdf": {
+              const url = chartRef.current.getDataURL({
+                type: "png",
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
+
+              const pdf = new jsPDF({
+                orientation: "landscape",
+                unit: "px",
+                format: "a4",
+              });
+
+              const pdfWidth = pdf.internal.pageSize.getWidth();
+              const pdfHeight = pdf.internal.pageSize.getHeight();
+              const imgWidth = chartRef.current.getWidth();
+              const imgHeight = chartRef.current.getHeight();
+
+              const ratio = Math.min(
+                pdfWidth / imgWidth,
+                pdfHeight / imgHeight
+              );
+              const width = imgWidth * ratio;
+              const height = imgHeight * ratio;
+              const x = (pdfWidth - width) / 2;
+              const y = (pdfHeight - height) / 2;
+
+              pdf.addImage(url, "PNG", x, y, width, height);
+              pdf.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+              break;
+            }
+            case "csv": {
+              if (!filteredData || !filteredData.length) {
+                console.error("No data available for CSV export");
+                return;
+              }
+
+              const headers = ["category", "date", "value"];
+              const csvContent = [
+                headers.join(","),
+                ...filteredData.map((row) =>
+                  headers
+                    .map((header) => {
+                      const cell = row[header as keyof DataPoint];
+                      return typeof cell === "string" && cell.includes(",")
+                        ? `"${cell}"`
+                        : cell;
+                    })
+                    .join(",")
+                ),
+              ].join("\n");
+
+              const blob = new Blob([csvContent], {
+                type: "text/csv;charset=utf-8;",
+              });
+              saveAs(blob, `${title.toLowerCase().replace(/\s+/g, "-")}.csv`);
+              break;
+            }
+            case "json": {
+              if (!filteredData) {
+                console.error("No data available for JSON export");
+                return;
+              }
+              const blob = new Blob([JSON.stringify(filteredData, null, 2)], {
+                type: "application/json",
+              });
+              saveAs(blob, `${title.toLowerCase().replace(/\s+/g, "-")}.json`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to download chart as ${format}:`, error);
+        }
+      },
+      [filteredData, title]
+    );
+
+    const dispatchAction = useCallback((action: any) => {
+      if (!chartRef.current) return;
+      chartRef.current.dispatchAction(action);
+    }, []);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        zoomIn,
+        zoomOut,
+        boxSelect,
+        lassoSelect,
+        clearSelection,
+        download,
+        dispatchAction,
+      }),
+      [
+        zoomIn,
+        zoomOut,
+        boxSelect,
+        lassoSelect,
+        clearSelection,
+        download,
+        dispatchAction,
+      ]
+    );
+
+    useEffect(() => {
+      if (!mounted || !chartRef.current) return;
+
+      const currentOption = chartRef.current.getOption();
+      const updatedOption: echarts.EChartsOption = {
+        ...currentOption,
+        brush: {
+          toolbox: ["rect", "polygon", "keep", "clear"],
+          xAxisIndex: 0,
+          brushLink: "all",
+          outOfBrush: {
+            colorAlpha: 0.1,
+          },
+        },
+        toolbox: {
+          feature: {
+            brush: {
+              type: ["rect", "polygon", "clear"],
+            },
+          },
+          show: false,
+        },
+      };
+
+      chartRef.current.setOption(updatedOption, {
+        replaceMerge: ["brush", "toolbox"],
+      });
+    }, [mounted]);
+
+    useEffect(() => {
+      if (!chartRef.current) return;
+
+      const chart = chartRef.current;
+
+      const onBrushSelected = (params: any) => {
+        console.log("Brush selected:", params);
+        setIsSelecting(false);
+        setSelectedTool(null);
+      };
+
+      chart.on("brushSelected", onBrushSelected);
+
+      return () => {
+        chart.off("brushSelected", onBrushSelected);
+      };
+    }, [mounted]);
+
+    // Add this useEffect hook for improved brush event handling
+    useEffect(() => {
+      if (!chartRef.current) return;
+
+      const chart = chartRef.current;
+
+      // Handle brush events
+      const handleBrushSelected = (params: any) => {
+        console.log("Brush selected event triggered:", params);
+
+        // Don't automatically clear selection, let user manually clear
+        if (!params.areas || params.areas.length === 0) {
+          setIsSelecting(false);
+        }
+      };
+
+      const handleBrushEnd = (params: any) => {
+        console.log("Brush end event triggered:", params);
+        // Keep the selection tool active but mark selection as complete
+        setIsSelecting(false);
+      };
+
+      // Add event listeners
+      chart.on("brushSelected", handleBrushSelected);
+      chart.on("brushEnd", handleBrushEnd);
+
+      return () => {
+        // Remove event listeners when component unmounts or re-renders
+        chart.off("brushSelected", handleBrushSelected);
+        chart.off("brushEnd", handleBrushEnd);
+      };
+    }, [mounted]);
 
     return (
-      <div className={`relative w-full h-full ${className || ""}`}>
-        <div ref={chartRef} className="w-full h-full pt-1" />{" "}
-        {/* Reduced padding-top from 2 to 1 */}
-      </div>
+      <div
+        ref={chartContainerRef}
+        className={cn("w-full h-full", className)}
+        style={{ width, height }}
+      />
     );
   })
 );
 
-// Add display name
 ChartContainer.displayName = "ChartContainer";
 
-// Change to default export
 export default ChartContainer;

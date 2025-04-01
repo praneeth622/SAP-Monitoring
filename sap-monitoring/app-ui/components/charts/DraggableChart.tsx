@@ -20,6 +20,8 @@ import {
   File,
   FileSpreadsheet,
   FileJson,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import ChartContainer from "./ChartContainer";
 import { DataPoint, ChartType } from "@/types";
@@ -111,67 +113,14 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   } = useSortable({ id });
 
   useEffect(() => {
-    setLocalActiveKPIs(() => {
-      // Convert string[] to Set if needed
-      if (Array.isArray(activeKPIs)) {
-        console.log("Converting activeKPIs array to Set:", activeKPIs);
-        return new Set(activeKPIs);
-      }
-      if (activeKPIs instanceof Set) {
-        console.log("Using activeKPIs Set:", activeKPIs);
-        return activeKPIs;
-      }
-      // Default to empty set if activeKPIs is invalid
-      console.warn("Invalid activeKPIs format, using empty set");
-      return new Set();
-    });
-  }, [activeKPIs]);
-
-  // Re-render when kpiColors or theme changes
-  useEffect(() => {
-    console.log("DraggableChart received theme update:", theme?.name);
-    console.log("DraggableChart received kpiColors update:", kpiColors);
-    // No state update needed, just trigger a re-render
-  }, [kpiColors, theme]);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const handleResize = () => {
-      const chart = chartRef.current;
-      if (chart) {
-        // Trigger chart resize after container resize
-        requestAnimationFrame(() => {
-          chart.resize?.();
-        });
-      }
-    };
-
-    const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(containerRef.current);
-
-    return () => resizeObserver.disconnect();
-  }, [isFullscreen]);
-
-  useEffect(() => {
-    const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isFullscreen) {
-        toggleFullscreen();
-      }
-    };
-
-    if (isFullscreen) {
-      document.addEventListener("keydown", handleEscKey);
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+    // Initialize local date range if it's not set and global date is available
+    if (!localDateRange && globalDateRange && useGlobalDate) {
+      setLocalDateRange({
+        from: new Date(globalDateRange.from),
+        to: new Date(globalDateRange.to),
+      });
     }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscKey);
-      document.body.style.overflow = "";
-    };
-  }, [isFullscreen]);
+  }, [globalDateRange, localDateRange, useGlobalDate]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -215,97 +164,54 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
 
   const effectiveDateRange = useGlobalDate ? globalDateRange : localDateRange;
 
-  const handleDownload = useCallback(
-    (format: "png" | "svg" | "pdf" | "csv" | "json") => {
-      if (!containerRef.current) return;
-
-      const chartElement =
-        containerRef.current.querySelector(".echarts-for-react");
-      if (!chartElement) {
-        console.error("Chart element not found");
-        return;
-      }
-
-      const chartInstance = (chartElement as any).getEchartsInstance?.();
-      if (!chartInstance) {
-        console.error("Chart instance not available");
-        return;
-      }
-
-      try {
-        switch (format) {
-          case "png": {
-            const url = chartInstance.getDataURL({
-              type: "png",
-              pixelRatio: 2,
-              backgroundColor: "#fff",
-            });
-            saveAs(url, `chart-${title}.png`);
-            break;
-          }
-          case "pdf": {
-            const url = chartInstance.getDataURL({
-              type: "png",
-              pixelRatio: 2,
-              backgroundColor: "#fff",
-            });
-            const pdf = new jsPDF({
-              orientation: "landscape",
-              unit: "px",
-            });
-            const imgProps = pdf.getImageProperties(url);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            pdf.addImage(url, "PNG", 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`chart-${title}.pdf`);
-            break;
-          }
-          case "csv": {
-            const csvContent = data
-              .map((row) => Object.values(row).join(","))
-              .join("\n");
-            const blob = new Blob([csvContent], {
-              type: "text/csv;charset=utf-8;",
-            });
-            saveAs(blob, `chart-${title}.csv`);
-            break;
-          }
-          case "json": {
-            const blob = new Blob([JSON.stringify(data, null, 2)], {
-              type: "application/json",
-            });
-            saveAs(blob, `chart-${title}.json`);
-            break;
-          }
-          default:
-            console.warn(`Unsupported download format: ${format}`);
-        }
-      } catch (error) {
-        console.error("Error downloading chart:", error);
-      }
-    },
-    [data, title]
+  // Add a state to track the selected tool
+  const [selectedTool, setSelectedTool] = useState<"box" | "lasso" | null>(
+    null
   );
 
+  // Update handlers to set the selected tool state
   const handleZoomIn = useCallback(() => {
-    chartRef.current?.zoomIn();
+    if (!chartRef.current) return;
+    chartRef.current.zoomIn();
+    // Zooming doesn't change the selected tool
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    chartRef.current?.zoomOut();
+    if (!chartRef.current) return;
+    chartRef.current.zoomOut();
+    // Zooming doesn't change the selected tool
   }, []);
 
   const handleBoxSelect = useCallback(() => {
-    chartRef.current?.boxSelect();
+    if (!chartRef.current) return;
+    chartRef.current.boxSelect();
+    setSelectedTool("box"); // Set box as selected tool
   }, []);
 
   const handleLassoSelect = useCallback(() => {
-    chartRef.current?.lassoSelect();
+    if (!chartRef.current) return;
+    chartRef.current.lassoSelect();
+    setSelectedTool("lasso"); // Set lasso as selected tool
   }, []);
 
   const handleClearSelection = useCallback(() => {
-    chartRef.current?.clearSelection();
+    if (!chartRef.current) return;
+    chartRef.current.clearSelection();
+    setSelectedTool(null); // Clear the selected tool state
   }, []);
+
+  const handleDownload = useCallback(
+    (format: "png" | "svg" | "pdf" | "csv" | "json") => {
+      if (!chartRef.current) {
+        console.error("Chart reference not available");
+        return;
+      }
+
+      // Directly call the download method from the chart ref
+      chartRef.current.download(format);
+    },
+    [data, title]
+  );
 
   return (
     <>
@@ -524,43 +430,28 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               </div>
             )}
 
-            <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-1 pb-1">
-              {/* Range Selector */}
-              <div className="px-3">
-                {/* Your existing range selector component */}
-              </div>
-
-              {/* KPI Parameters - Only render if kpiColors exists and has entries */}
+            <div className="absolute bottom-0 left-0 right-0 pb-1">
+              {/* KPI Parameters */}
               {kpiColors && Object.keys(kpiColors).length > 0 && (
-                <div className="flex items-center justify-center gap-1 px-3">
-                  {Object.entries(kpiColors || {}).map(([kpiId, kpi]) => {
-                    // Skip if kpi is missing color or name
-                    if (!kpi || !kpi.color) {
-                      console.warn(`Missing color for KPI: ${kpiId}`);
-                      return null;
-                    }
-                    
-                    const Icon = kpi.icon; // This might be undefined, handle it below
-                    const parameterButtonClasses = `flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all duration-300 text-[0.65em] md:text-[0.7em] lg:text-[0.75em] ${
-                      localActiveKPIs.has(kpiId)
-                        ? "bg-accent/70 text-accent-foreground"
-                        : "text-muted-foreground hover:bg-accent/40"
-                    }`;
-                    
+                <div className="flex flex-wrap justify-center gap-1.5 mt-1.5 px-3 bg-muted/10 py-1 border-t border-border/20">
+                  {Object.entries(kpiColors).map(([kpiId, kpi]) => {
+                    if (!kpi || !kpi.color) return null;
+
                     return (
                       <button
                         key={kpiId}
+                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs ${
+                          localActiveKPIs.has(kpiId)
+                            ? "bg-muted/20 opacity-100"
+                            : "opacity-40"
+                        } hover:bg-muted/30 transition-all`}
                         onClick={() => toggleKPI(kpiId)}
-                        className={parameterButtonClasses}
-                        style={{
-                          color: localActiveKPIs.has(kpiId)
-                            ? kpi.color
-                            : undefined,
-                        }}
-                        title={`Toggle ${kpi.name}`}
                       >
-                        {Icon && <Icon className="w-[1em] h-[1em]" />}
-                        <span className="font-medium whitespace-nowrap">
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: kpi.color }}
+                        />
+                        <span className="truncate max-w-24 text-foreground/70">
                           {kpi.name}
                         </span>
                       </button>
@@ -575,7 +466,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               layout
               className={cn(
                 "h-full",
-                !useGlobalDate ? "pt-10" : "pt-6", // Reduced padding-top
+                !useGlobalDate ? "pt-8 pb-12" : "pt-6 pb-12", // Reduced top padding from 10 to 8
                 isFullscreen && "flex items-center justify-center"
               )}
             >

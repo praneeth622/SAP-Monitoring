@@ -197,41 +197,43 @@ export default function TemplatesPage() {
       });
 
       // Map the graphs from API format to our internal format
-      const mappedGraphs = template.graphs.map((apiGraph: any, graphIndex: number) => {
-        // Extract coordinates from top_xy_pos and bottom_xy_pos
-        const [topY, topX] = apiGraph.top_xy_pos.split(":").map(Number);
-        const [bottomY, bottomX] = apiGraph.bottom_xy_pos
-          .split(":")
-          .map(Number);
+      const mappedGraphs = template.graphs.map(
+        (apiGraph: any, graphIndex: number) => {
+          // Extract coordinates from top_xy_pos and bottom_xy_pos
+          const [topY, topX] = apiGraph.top_xy_pos.split(":").map(Number);
+          const [bottomY, bottomX] = apiGraph.bottom_xy_pos
+            .split(":")
+            .map(Number);
 
-        // Get primary and secondary KPIs
-        const primaryKpi = apiGraph.primary_kpi_id;
-        const secondaryKpis = apiGraph.secondary_kpis || [];
-        const correlationKpis = secondaryKpis.map((sk: any) => sk.kpi_id);
+          // Get primary and secondary KPIs
+          const primaryKpi = apiGraph.primary_kpi_id;
+          const secondaryKpis = apiGraph.secondary_kpis || [];
+          const correlationKpis = secondaryKpis.map((sk: any) => sk.kpi_id);
 
-        // Use the utility function to generate consistent colors
-        const allKpis = [primaryKpi, ...correlationKpis];
-        const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } = 
-          generateConsistentColors(allKpis);
+          // Use the utility function to generate consistent colors
+          const allKpis = [primaryKpi, ...correlationKpis];
+          const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
+            generateConsistentColors(allKpis);
 
-        return {
-          id: apiGraph.graph_id,
-          name: apiGraph.graph_name,
-          type: "line" as "line" | "bar", // Default to line chart
-          monitoringArea: "", // We'll need to fetch this information
-          kpiGroup: "", // We'll need to fetch this information
-          primaryKpi: apiGraph.primary_kpi_id,
-          correlationKpis: correlationKpis,
-          layout: {
-            x: topX / 10,
-            y: topY / 10,
-            w: (bottomX - topX) / 10,
-            h: (bottomY - topY) / 10,
-          },
-          activeKPIs: newActiveKPIs,
-          kpiColors: newKpiColors,
-        };
-      });
+          return {
+            id: apiGraph.graph_id,
+            name: apiGraph.graph_name,
+            type: "line" as "line" | "bar", // Default to line chart
+            monitoringArea: "", // We'll need to fetch this information
+            kpiGroup: "", // We'll need to fetch this information
+            primaryKpi: apiGraph.primary_kpi_id,
+            correlationKpis: correlationKpis,
+            layout: {
+              x: topX / 10,
+              y: topY / 10,
+              w: (bottomX - topX) / 10,
+              h: (bottomY - topY) / 10,
+            },
+            activeKPIs: newActiveKPIs,
+            kpiColors: newKpiColors,
+          };
+        }
+      );
 
       setGraphs(mappedGraphs);
       setShowGraphs(mappedGraphs.length > 0);
@@ -428,7 +430,7 @@ export default function TemplatesPage() {
     try {
       // Use the utility function to generate consistent colors
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
-      const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } = 
+      const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
 
       console.log("Created KPI colors:", newKpiColors);
@@ -442,9 +444,9 @@ export default function TemplatesPage() {
         kpiColors: newKpiColors,
         layout: {
           x: (graphs.length * 4) % 12,
-          y: Math.floor(graphs.length / 3) * 3, 
+          y: Math.floor(graphs.length / 3) * 3,
           w: 4,
-          h: 2, 
+          h: 2,
         },
       };
 
@@ -653,41 +655,65 @@ export default function TemplatesPage() {
                 <div className="space-y-6">
                   <DynamicLayout
                     charts={graphs.map((graph) => {
-                      // Generate more comprehensive dummy data
-                      const allKpis = [graph.primaryKpi, ...graph.correlationKpis];
-                      console.log("Generating data for KPIs:", allKpis);
-                      console.log("Graph active KPIs:", graph.activeKPIs);
-                      console.log("Graph KPI colors:", graph.kpiColors);
-                      
-                      // Generate dummy data for each KPI
-                      const dummyData = generateDummyData(allKpis);
+                      // Ensure we have valid primary and correlation KPIs
+                      const primaryKpi = graph.primaryKpi || "DefaultKPI";
+                      const correlationKpis = Array.isArray(
+                        graph.correlationKpis
+                      )
+                        ? graph.correlationKpis
+                        : [];
 
-                      // Verify data is properly generated
-                      console.log("Generated dummy data for chart:", graph.name, dummyData);
+                      // Create a deduplicated list of all KPIs
+                      const allKpis = [primaryKpi, ...correlationKpis].filter(
+                        Boolean
+                      );
+                      console.log("Generating data for KPIs:", allKpis);
+
+                      // Generate data using our improved function
+                      const dummyData = generateDummyData(allKpis);
+                      console.log(
+                        `Generated ${dummyData.length} dummy data points for chart "${graph.name}"`
+                      );
+
+                      // Ensure we have activeKPIs and kpiColors
+                      const chartActiveKPIs = new Set(allKpis);
+                      const chartKpiColors = allKpis.reduce(
+                        (colors, kpi, index) => {
+                          colors[kpi] = {
+                            color: `hsl(${(index * 30) % 360}, 70%, 50%)`,
+                            name: kpi,
+                          };
+                          return colors;
+                        },
+                        {} as Record<string, { color: string; name: string }>
+                      );
 
                       return {
                         id: graph.id!,
-                        type: graph.type,
-                        title: graph.name,
-                        data: dummyData.length > 0
-                          ? dummyData
-                          : [
-                              // Fallback data if generateDummyData returns empty
-                              {
-                                category: graph.primaryKpi,
-                                date: new Date().toISOString(),
-                                value: 1000,
-                              },
-                              {
-                                category: graph.primaryKpi,
-                                date: new Date(Date.now() - 3600000).toISOString(),
-                                value: 1500,
-                              },
-                            ],
+                        type: graph.type || "line",
+                        title: graph.name || "Untitled Chart",
+                        data:
+                          dummyData.length > 0
+                            ? dummyData
+                            : [
+                                // Fallback data if generateDummyData returns empty
+                                {
+                                  category: primaryKpi,
+                                  date: new Date().toISOString(),
+                                  value: 1000,
+                                },
+                                {
+                                  category: primaryKpi,
+                                  date: new Date(
+                                    Date.now() - 3600000
+                                  ).toISOString(),
+                                  value: 1500,
+                                },
+                              ],
                         width: graph.layout.w * 100,
-                        height: graph.layout.h * 60, // Increased height for better visibility
-                        activeKPIs: graph.activeKPIs,
-                        kpiColors: graph.kpiColors,
+                        height: graph.layout.h * 60,
+                        activeKPIs: chartActiveKPIs,
+                        kpiColors: chartKpiColors,
                       };
                     })}
                   />
@@ -740,9 +766,9 @@ export default function TemplatesPage() {
                   // Create a proper Graph object here to match the expected type
                   handleAddGraphToTemplate({
                     ...graphData,
-                    id: "",  // This will be overwritten in handleAddGraphToTemplate
-                    activeKPIs: new Set<string>(),  // Will be populated in the handler
-                    kpiColors: {}  // Will be populated in the handler
+                    id: "", // This will be overwritten in handleAddGraphToTemplate
+                    activeKPIs: new Set<string>(), // Will be populated in the handler
+                    kpiColors: {}, // Will be populated in the handler
                   });
                 }}
               />
