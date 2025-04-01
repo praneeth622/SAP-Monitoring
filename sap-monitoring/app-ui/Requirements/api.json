@@ -1,0 +1,1545 @@
+{
+    "success": true,
+    "data": {
+      "SYSTEM": {
+        "groups": {
+          "OS": {
+            "kpis": [
+              {
+                "name": "CPU_IDLE",
+                "description": "CPU True Idle"
+              },
+              {
+                "name": "CPU_LOAD15_AVG",
+                "description": "CPU Load - 15 Mins Average"
+              },
+              {
+                "name": "CPU_LOAD1_AVG",
+                "description": "CPU Load - 1 Min Average"
+              },
+              {
+                "name": "CPU_LOAD5_AVG",
+                "description": "CPU Load - 5 Mins Average"
+              },
+              {
+                "name": "CPU_NBR",
+                "description": "Number of CPUs"
+              },
+              {
+                "name": "CPU_SYS",
+                "description": "CPU - System Utilization"
+              },
+              {
+                "name": "CPU_S_IDLE",
+                "description": "Single CPU Idle Time"
+              },
+              {
+                "name": "CPU_S_SERIAL",
+                "description": "Single CPU Serial No."
+              },
+              {
+                "name": "CPU_S_SYS",
+                "description": "Single CPU used by System"
+              },
+              {
+                "name": "CPU_S_USER",
+                "description": "Single CPU used by User"
+              },
+              {
+                "name": "CPU_USR",
+                "description": "CPU - User Utilization"
+              },
+              {
+                "name": "CPU_WAIT",
+                "description": "CPU I/O Waiting"
+              },
+              {
+                "name": "DISK_OPS_SEC",
+                "description": "Average Disk operations per Second - System"
+              },
+              {
+                "name": "DISK_QUEUE_LEN",
+                "description": "Average Disk Queue Length - System"
+              },
+              {
+                "name": "DISK_RESP_TIME",
+                "description": "Average Disk response time - System"
+              },
+              {
+                "name": "DISK_SERV_TIME",
+                "description": "Average Disk Service Time - System"
+              },
+              {
+                "name": "DISK_S_NAME",
+                "description": "Name of the Disk"
+              },
+              {
+                "name": "DISK_S_OPS_SEC",
+                "description": "Disk Operations per second"
+              },
+              {
+                "name": "DISK_S_QUEUE_LEN",
+                "description": "Disk Avg. Queue length"
+              },
+              {
+                "name": "DISK_S_RESP_TIME",
+                "description": "Disk Response time"
+              },
+              {
+                "name": "DISK_S_SERIALNR",
+                "description": "Serial No. - Single Disk"
+              },
+              {
+                "name": "DISK_S_SERV_TIME",
+                "description": "Disk Avg. Service time"
+              },
+              {
+                "name": "DISK_S_TRANSFER",
+                "description": "Disk Transfer speed"
+              },
+              {
+                "name": "DISK_S_UTIL",
+                "description": "Disk Utilization"
+              },
+              {
+                "name": "DISK_S_WAIT_TIME",
+                "description": "Disk Avg. wait time - Single Disk"
+              },
+              {
+                "name": "DISK_TRANSFER",
+                "description": "Average Disk Transfer Speed - System"
+              },
+              {
+                "name": "DISK_UTIL",
+                "description": "Average Disk utilization - System"
+              },
+              {
+                "name": "DISK_WAIT_TIME",
+                "description": "Average disk wait - System"
+              },
+              {
+                "name": "FREE_MEM_PERC",
+                "description": "Free Physical memory percentage"
+              },
+              {
+                "name": "LAN_COLLISSIONS",
+                "description": "LAN Collissions - System Level"
+              },
+              {
+                "name": "LAN_IN_ERRORS",
+                "description": "LAN Errors Inbound - System Level"
+              },
+              {
+                "name": "LAN_IN_PACKETS",
+                "description": "LAN Packets In - System Level"
+              },
+              {
+                "name": "LAN_OUT_ERRORS",
+                "description": "LAN Errors outbound - System Level"
+              },
+              {
+                "name": "LAN_OUT_PACKETS",
+                "description": "LAN Packets Out - System Level"
+              },
+              {
+                "name": "LAN_S_COLLISSIONS",
+                "description": "LAN Collissions - Node Level"
+              },
+              {
+                "name": "LAN_S_IN_ERRORS",
+                "description": "LAN Errors Inbound - Node Level"
+              },
+              {
+                "name": "LAN_S_IN_PACKETS",
+                "description": "LAN Packets In - Node Level"
+              },
+              {
+                "name": "LAN_S_LANNAME",
+                "description": "LAN Name - Node Level"
+              },
+              {
+                "name": "LAN_S_OUT_ERRORS",
+                "description": "LAN Errors Outbound - Node Level"
+              },
+              {
+                "name": "LAN_S_OUT_PACKETS",
+                "description": "LAN Packets Out - Node Level"
+              },
+              {
+                "name": "LAN_S_SERIALNR",
+                "description": "LAN Serial No. - Node Level"
+              },
+              {
+                "name": "MEM_FREE",
+                "description": "Free Physical memory"
+              },
+              {
+                "name": "MEM_PHYS",
+                "description": "Total Physical memory"
+              },
+              {
+                "name": "PAGE_IN",
+                "description": "Pages IN in kB/s"
+              },
+              {
+                "name": "PAGE_OUT",
+                "description": "Pages OUT in kB/s"
+              },
+              {
+                "name": "SWAP_CONF",
+                "description": "Configured Swap memory size"
+              },
+              {
+                "name": "SWAP_FREE",
+                "description": "Free Swap memory size"
+              },
+              {
+                "name": "SWAP_FREE_PERC",
+                "description": "Free Swap Memory percentage"
+              },
+              {
+                "name": "SWAP_MAX",
+                "description": "Maximum Swap size"
+              },
+              {
+                "name": "SWAP_SIZE",
+                "description": "Actual Swap size"
+              },
+              {
+                "name": "TOP_CPU_TIME_AVG",
+                "description": "Top 40 Processes - CPU Time Average"
+              },
+              {
+                "name": "TOP_MEM_UTIL_AVG",
+                "description": "Top 40 Processes - Memory Util. Average"
+              },
+              {
+                "name": "TOP_S_COMMAND",
+                "description": "Top 40 CPU Processes - Process Name"
+              },
+              {
+                "name": "TOP_S_CPU_TIME",
+                "description": "Top 40 CPU Processes - CPU Time"
+              },
+              {
+                "name": "TOP_S_CPU_UTIL",
+                "description": "Top 40 CPU Processes - CPU Utilization %"
+              },
+              {
+                "name": "TOP_S_PRIORITY",
+                "description": "Top 40 CPU Processes - Priority"
+              },
+              {
+                "name": "TOP_S_PRIV_PAGES",
+                "description": "Top 40 CPU Processes - Process Pages"
+              },
+              {
+                "name": "TOP_S_PROC_ID",
+                "description": "Top 40 CPU Processes - Process ID"
+              },
+              {
+                "name": "TOP_S_RES_SIZE",
+                "description": "Top 40 CPU Processes - Memory Utilization"
+              },
+              {
+                "name": "TOP_S_SERIALNR",
+                "description": "Top 40 CPU Processes - Serial No."
+              },
+              {
+                "name": "TOP_S_USERNAME",
+                "description": "Top 40 CPU Processes - Username"
+              }
+            ]
+          },
+          "ENQ": {
+            "kpis": [
+              {
+                "name": " ES2_CURR_LOCKS",
+                "description": "ENQ - Current Number of Locks"
+              },
+              {
+                "name": " ES2_PEAK_LOCKS",
+                "description": "ENQ - Peak Number of Locks"
+              },
+              {
+                "name": " ES2_CONFIG_LOCKS",
+                "description": "ENQ - Configured Number of Locks"
+              },
+              {
+                "name": " ES2_TOTAL_CNT_LOCKS",
+                "description": "ENQ - Total Number of Locks"
+              },
+              {
+                "name": " ES2_COLLISIONS_LOCK",
+                "description": "ENQ - Lock Collisions"
+              },
+              {
+                "name": " ES2_OVERFLOWS_SESSION",
+                "description": "ENQ - Session Overflows"
+              },
+              {
+                "name": " ES2_OVERFLOWS_LOCK_TAB",
+                "description": "ENQ - Lock Table Overflows"
+              },
+              {
+                "name": " ES2_TOTAL_LOCK_OPS_CNT",
+                "description": "ENQ - Total No. of Lock Operations"
+              },
+              {
+                "name": " ES2_LOCK_PROCESS_TIME",
+                "description": "ENQ - Processing Time for Lock Operations"
+              },
+              {
+                "name": " ES2_LOCK_WAIT_TIME",
+                "description": "ENQ - Waiting Time for Lock Operations"
+              },
+              {
+                "name": " ES2_OPS_ENQUEUE",
+                "description": "ENQ - Enqueue Operations"
+              },
+              {
+                "name": " ES2_OPS_DEQUEUE",
+                "description": "ENQ - Dequeue Operations"
+              },
+              {
+                "name": " ES2_OPS_ALL_DEQUEUE",
+                "description": "ENQ - Dequeue All Operations"
+              },
+              {
+                "name": " ES2_OPS_REMOVE",
+                "description": "ENQ - Remove Operations"
+              },
+              {
+                "name": " ES2_OPS_BACKUP",
+                "description": "ENQ - Backup Operations"
+              },
+              {
+                "name": " ES2_OPS_READ",
+                "description": "ENQ - Read Operations"
+              },
+              {
+                "name": " ES2_OPS_ROPO",
+                "description": "ENQ - RemoveOwnerPattern Operations"
+              },
+              {
+                "name": " ES2_OP_RAPO",
+                "description": "ENQ - RemoveArgumentPattern Operations"
+              },
+              {
+                "name": " ES2_OPS_CONF_REPL",
+                "description": "ENQ - Configure Replica Operations"
+              },
+              {
+                "name": " ES2_UPDATE_REPL_OPS",
+                "description": "ENQ - Update Replica Operations"
+              },
+              {
+                "name": " ES2_TAKEOVER_REPL_OPS",
+                "description": "ENQ - Takeover Replica Operations"
+              },
+              {
+                "name": " ES2_ROLL_OUT_CONN",
+                "description": "ENQ - Roll-Outs of Connection"
+              },
+              {
+                "name": " ES2_ROLL_IN_CONN",
+                "description": "ENQ - Roll-Ins of Connection"
+              },
+              {
+                "name": " ES2_ERRORS_SERVER",
+                "description": "ENQ - Server Errors"
+              },
+              {
+                "name": " ES2_CONN_ERRORS",
+                "description": "ENQ - Connection Errors"
+              },
+              {
+                "name": " ES2_TIMEOUTS",
+                "description": "ENQ - Timeouts"
+              },
+              {
+                "name": " ES2_NETWORK_REQ",
+                "description": "ENQ - Network Requests"
+              },
+              {
+                "name": " ES2_RECD_DATA",
+                "description": "ENQ - Received Data"
+              },
+              {
+                "name": " ES2_SENT_DATA",
+                "description": "ENQ - Sent Data"
+              },
+              {
+                "name": " ES2_SER_CPU_TIME",
+                "description": "ENQ - CPU Time of Enqueue Server"
+              },
+              {
+                "name": " ES2_BACKUP_REC_WRITTEN",
+                "description": "ENQ - Backup Records Written"
+              },
+              {
+                "name": " ES2_ADMIN_REQ",
+                "description": "ENQ - Administration Requests"
+              },
+              {
+                "name": " ES2_MAX_NUM_SEARCH",
+                "description": "ENQ - Maximum Number in Search Result"
+              },
+              {
+                "name": " ES2_AVG_NUM_SEARCH",
+                "description": "ENQ - Average Number in Search Result"
+              },
+              {
+                "name": " ES2_MAX_NUM_UPDATE",
+                "description": "ENQ - Maximum Number in Update Replica"
+              },
+              {
+                "name": " ES2_AVG_NUM_UPDATE",
+                "description": "ENQ - Average Number in Update Replica"
+              },
+              {
+                "name": " ES2_MAX_NUM_TAKEOVER",
+                "description": "ENQ - Maximum Number in Takeover Replica"
+              },
+              {
+                "name": " ES2_AVG_NUM_TAKEOVER",
+                "description": "ENQ - Average Number in Takeover Replica"
+              },
+              {
+                "name": " ENQ_REQ_CNT",
+                "description": "ENQ - Enqueue Requests"
+              },
+              {
+                "name": " ENQ_REQ_REJ_CNT",
+                "description": "ENQ - Rejects"
+              },
+              {
+                "name": " ENQ_ERR_CNT",
+                "description": "ENQ - Errors"
+              },
+              {
+                "name": " DEQ_REQ_CNT",
+                "description": "ENQ - Dequeue Requests"
+              },
+              {
+                "name": " DEQ_ERR_CNT",
+                "description": "ENQ - Errors"
+              },
+              {
+                "name": " DEQ_ALL_REQ_CNT",
+                "description": "ENQ - DequeueAll Requests"
+              },
+              {
+                "name": " ENQ_CLEAN_REQ",
+                "description": "ENQ - CleanUp Requests"
+              },
+              {
+                "name": " ENQ_BACKUP_REQ",
+                "description": "ENQ - Backup Requests"
+              },
+              {
+                "name": " ENQ_REPORT_REQ",
+                "description": "ENQ - Reporting Requests"
+              },
+              {
+                "name": " ENQ_COMPR_REQ",
+                "description": "ENQ - Compress Requests"
+              },
+              {
+                "name": " ENQ_VERIFY_REQ",
+                "description": "ENQ - Verify Requests"
+              },
+              {
+                "name": " ENQ_FILE_WRITE",
+                "description": "ENQ - Writes to File"
+              },
+              {
+                "name": " ENQ_FILE_WRT_BACKUP",
+                "description": "ENQ - Backup"
+              },
+              {
+                "name": " ENQ_OWN_MAX_CNT",
+                "description": "ENQ - Owner Names"
+              },
+              {
+                "name": " ENQ_OWN_MAX_LVL",
+                "description": "ENQ - Peak Util"
+              },
+              {
+                "name": " ENQ_OWN_NOW_LVL",
+                "description": "ENQ - Actual Util"
+              },
+              {
+                "name": " ENQ_ARG_MAX_CNT",
+                "description": "ENQ - Granule Arguments"
+              },
+              {
+                "name": " ENQ_ARG_MAX_LVL",
+                "description": "ENQ - Peak Util"
+              },
+              {
+                "name": " ENQ_ARG_NOW_LVL",
+                "description": "ENQ - Actual Util"
+              },
+              {
+                "name": " ENQ_ENTR_MAX_CNT",
+                "description": "ENQ - Granule Entries"
+              },
+              {
+                "name": " ENQ_ENTR_MAX_LVL",
+                "description": "ENQ - Peak Util"
+              },
+              {
+                "name": " ENQ_ENTR_NOW_LVL",
+                "description": "ENQ - Actual Util"
+              },
+              {
+                "name": " ENQ_UPD_MAX_CNT",
+                "description": "ENQ - Update Queue Peak"
+              },
+              {
+                "name": " ENQ_UPD_NOW_LVL",
+                "description": "ENQ - Actual"
+              },
+              {
+                "name": " ENQ_TOTAL_TIME",
+                "description": "ENQ - Total Lock Time"
+              },
+              {
+                "name": " ENQ_TOTAL_WAIT",
+                "description": "ENQ - Total Lock Wait Time"
+              },
+              {
+                "name": " ENQ_TOT_SER_TIME",
+                "description": "ENQ - Total Server Time"
+              },
+              {
+                "name": "LOCK_LONGEST_DURATION",
+                "description": "Duration of the longest lock entry"
+              },
+              {
+                "name": "LOCK_NUM_ALL",
+                "description": "Number of all existing lock entries"
+              },
+              {
+                "name": "LOCK_NUM_OBJECT",
+                "description": "Number of all existing lock Objects"
+              },
+              {
+                "name": "LOCK_NUM_USER_MAX",
+                "description": "Maximum number of locks with a single user"
+              },
+              {
+                "name": "LOCK_NUM_TCODE_MAX",
+                "description": "Maximum number of locks with a single Transaction code"
+              },
+              {
+                "name": "LOCK_NUM_MODE_E",
+                "description": "Number of exclusive locks (lock mode E)"
+              },
+              {
+                "name": "LOCK_NUM_MODE_O",
+                "description": "Number of optimistic locks (lock mode O)"
+              },
+              {
+                "name": "LOCK_NUM_MODE_S",
+                "description": "Number of shared locks (lock mode S)"
+              },
+              {
+                "name": "LOCK_NUM_MODE_X",
+                "description": "Number of exclusive non-cumulative locks (lock mode X)"
+              },
+              {
+                "name": "LOCK_S_GNAME",
+                "description": "Elementary Lock of Lock Entry (Table Name)"
+              },
+              {
+                "name": "LOCK_S_GMODE",
+                "description": "Lock Mode (Shared/Exclusive) of a Lock Entry"
+              },
+              {
+                "name": "LOCK_S_GOBJ",
+                "description": "Name of Lock Object in the Lock Entry"
+              },
+              {
+                "name": "LOCK_S_GUNAME",
+                "description": "User name in lock entry"
+              },
+              {
+                "name": "LOCK_S_GTCODE",
+                "description": "Transaction Code in the Lock Entry"
+              },
+              {
+                "name": "LOCK_S_GTHOST",
+                "description": "Host Name in the Lock Owner ID"
+              }
+            ]
+          },
+          "WP": {
+            "kpis": [
+              {
+                "name": "WP_BTC_NUM",
+                "description": "Number of Background Work Processes"
+              },
+              {
+                "name": "WP_BTC_MAX_RUN",
+                "description": "Maximum Runtime of a Background Process"
+              },
+              {
+                "name": "WP_BTC_USED",
+                "description": "Number of Used Background Work Processes"
+              },
+              {
+                "name": "WP_BTC_USED_PERC",
+                "description": "Percentage of Used Background Work Processes"
+              },
+              {
+                "name": "WP_COMMIT",
+                "description": "Work Processes in COMMIT State"
+              },
+              {
+                "name": "WP_DIA_NUM",
+                "description": "Number of Dialog Work Processes"
+              },
+              {
+                "name": "WP_DIA_MAX_RUN",
+                "description": "Maximum Runtime of a Dialog Work Process"
+              },
+              {
+                "name": "WP_DIA_USED",
+                "description": "Number of Used Dialog Work Processes"
+              },
+              {
+                "name": "WP_DIA_USED_PERC",
+                "description": "Percentage of Used Dialog Work Processes"
+              },
+              {
+                "name": "WP_MEM_MAX",
+                "description": "Work Processes - Maximum Memory Used"
+              },
+              {
+                "name": "WP_TCODE_MAX",
+                "description": "Maximum Work Processes executing same Tcode"
+              },
+              {
+                "name": "WP_PROG_MAX",
+                "description": "Maximum Work Processes executing same Program"
+              },
+              {
+                "name": "WP_BTCJOB_MAX",
+                "description": "Maximum Work Processes executing same Background Job"
+              },
+              {
+                "name": "WP_USER_MAX",
+                "description": "Maximum Work Processes used by same User"
+              },
+              {
+                "name": "WP_ENQ_NUM",
+                "description": "Number of Enqueue Work Processes"
+              },
+              {
+                "name": "WP_ENQ_USED",
+                "description": "Number of Used Enqueue Work Processes"
+              },
+              {
+                "name": "WP_UP2_NUM",
+                "description": "Number of Update-2 Work Processes"
+              },
+              {
+                "name": "WP_UP2_USED",
+                "description": "Number of Used Update-2 Work Processes"
+              },
+              {
+                "name": "WP_UPD_NUM",
+                "description": "Number of Update Work Processes"
+              },
+              {
+                "name": "WP_UPD_USED",
+                "description": "Number of Used Update Work Processes"
+              },
+              {
+                "name": "WP_SPO_NUM",
+                "description": "Number of Spool Work Processes"
+              },
+              {
+                "name": "WP_SPO_USED",
+                "description": "Number of Used Spool Work Processes"
+              },
+              {
+                "name": "WP_RUNNING",
+                "description": "Workprocesses in Running status"
+              },
+              {
+                "name": "WP_WAITING",
+                "description": "Workprocesses in Waiting status"
+              },
+              {
+                "name": "WP_STOPPED",
+                "description": "Workprocesses in Stopped status"
+              },
+              {
+                "name": "WP_ENDED",
+                "description": "Workprocesses in Ended status"
+              },
+              {
+                "name": "WP_SHUTDOWN",
+                "description": "Workprocesses in Shutdown status"
+              },
+              {
+                "name": "WP_STANDBY",
+                "description": "Workprocesses in Standby status"
+              },
+              {
+                "name": "WP_ONHOLD",
+                "description": "Workprocesses in OnHold status"
+              },
+              {
+                "name": "WP_S_SERVER",
+                "description": "Workprocesses :  Server name"
+              },
+              {
+                "name": "WP_S_BTCJOBNAME",
+                "description": "Workprocesses : Background Job name"
+              },
+              {
+                "name": "WP_S_BNAME",
+                "description": "Workprocesses : User name"
+              },
+              {
+                "name": "WP_S_REPORT",
+                "description": "Workprocesses : Program Name"
+              },
+              {
+                "name": "WP_S_TCODE",
+                "description": "Workprocesses : Transaction Code"
+              },
+              {
+                "name": "WP_S_MEMSUM",
+                "description": "Workprocesses : Memory consumed"
+              },
+              {
+                "name": "WP_S_TYP",
+                "description": "Workprocesses : Type"
+              },
+              {
+                "name": "WP_S_STATUS",
+                "description": "Workprocesses : Status"
+              },
+              {
+                "name": "WP_S_ELTIME",
+                "description": "Workprocesses : Elapsed time"
+              }
+            ]
+          },
+          "STAT": {
+            "kpis": [
+              {
+                "name": "STAT_DIA_DB_NUM_MOD",
+                "description": "STAT - Dialog DB No. of Changes"
+              },
+              {
+                "name": "STAT_DIA_DB_AVG_MOD_TIME",
+                "description": "STAT - Dialog DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_DIA_DB_NUM_READS",
+                "description": "STAT - Dialog DB No. of Reads"
+              },
+              {
+                "name": "STAT_DIA_DB_AVG_READ_TIME",
+                "description": "STAT - Dialog DB Average Read Time"
+              },
+              {
+                "name": "STAT_DIA_AVG_RESP_TIME",
+                "description": "STAT - Dialog Average Response Time"
+              },
+              {
+                "name": "STAT_DIA_AVG_PROC_TIME",
+                "description": "STAT - Dialog Average Processing Time"
+              },
+              {
+                "name": "STAT_DIA_AVG_CPU_TIME",
+                "description": "STAT - Dialog Average CPU Time"
+              },
+              {
+                "name": "STAT_UPD_DB_NUM_MOD",
+                "description": "STAT - Update DB No. of Changes"
+              },
+              {
+                "name": "STAT_UPD_DB_AVG_MOD_TIME",
+                "description": "STAT - Update DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_UPD_DB_NUM_READS",
+                "description": "STAT - Update DB No. of Reads"
+              },
+              {
+                "name": "STAT_UPD_DB_AVG_READ_TIME",
+                "description": "STAT - Update DB Average Read Time"
+              },
+              {
+                "name": "STAT_UPD_AVG_RESP_TIME",
+                "description": "STAT - Update Average Response Time"
+              },
+              {
+                "name": "STAT_UPD_AVG_PROC_TIME",
+                "description": "STAT - Update Average Processing Time"
+              },
+              {
+                "name": "STAT_UPD_AVG_CPU_TIME",
+                "description": "STAT - Update Average CPU Time"
+              },
+              {
+                "name": "STAT_SPO_DB_NUM_MOD",
+                "description": "STAT - Spool DB No. of Changes"
+              },
+              {
+                "name": "STAT_SPO_DB_AVG_MOD_TIME",
+                "description": "STAT - Spool DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_SPO_DB_NUM_READS",
+                "description": "STAT - Spool DB No. of Reads"
+              },
+              {
+                "name": "STAT_SPO_DB_AVG_READ_TIME",
+                "description": "STAT - Spool DB Average Read Time"
+              },
+              {
+                "name": "STAT_SPO_AVG_RESP_TIME",
+                "description": "STAT - Spool Average Response Time"
+              },
+              {
+                "name": "STAT_SPO_AVG_PROC_TIME",
+                "description": "STAT - Spool Average Processing Time"
+              },
+              {
+                "name": "STAT_SPO_AVG_CPU_TIME",
+                "description": "STAT - Spool Average CPU Time"
+              },
+              {
+                "name": "STAT_BATCH_DB_NUM_MOD",
+                "description": "STAT - Batch DB No. of Changes"
+              },
+              {
+                "name": "STAT_BATCH_DB_AVG_MOD_TIME",
+                "description": "STAT - Batch DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_BATCH_DB_NUM_READS",
+                "description": "STAT - Batch DB No. of Reads"
+              },
+              {
+                "name": "STAT_BATCH_DB_AVG_READ_TIME",
+                "description": "STAT - Batch DB Average Read Time"
+              },
+              {
+                "name": "STAT_BATCH_AVG_RESP_TIME",
+                "description": "STAT - Batch Average Response Time"
+              },
+              {
+                "name": "STAT_BATCH_AVG_PROC_TIME",
+                "description": "STAT - Batch Average Processing Time"
+              },
+              {
+                "name": "STAT_BATCH_AVG_CPU_TIME",
+                "description": "STAT - Batch Average CPU Time"
+              },
+              {
+                "name": "STAT_RFC_DB_NUM_MOD",
+                "description": "STAT - RFC DB No. of Changes"
+              },
+              {
+                "name": "STAT_RFC_DB_AVG_MOD_TIME",
+                "description": "STAT - RFC DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_RFC_DB_NUM_READS",
+                "description": "STAT - RFC DB No. of Reads"
+              },
+              {
+                "name": "STAT_RFC_DB_AVG_READ_TIME",
+                "description": "STAT - RFC DB Average Read Time"
+              },
+              {
+                "name": "STAT_RFC_AVG_RESP_TIME",
+                "description": "STAT - RFC Average Response Time"
+              },
+              {
+                "name": "STAT_RFC_AVG_PROC_TIME",
+                "description": "STAT - RFC Average Processing Time"
+              },
+              {
+                "name": "STAT_RFC_AVG_CPU_TIME",
+                "description": "STAT - RFC Average CPU Time"
+              },
+              {
+                "name": "STAT_HTTP_DB_NUM_MOD",
+                "description": "STAT - HTTP DB No. of Changes"
+              },
+              {
+                "name": "STAT_HTTP_DB_AVG_MOD_TIME",
+                "description": "STAT - HTTP DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_HTTP_DB_NUM_READS",
+                "description": "STAT - HTTP DB No. of Reads"
+              },
+              {
+                "name": "STAT_HTTP_DB_AVG_READ_TIME",
+                "description": "STAT - HTTP DB Average Read Time"
+              },
+              {
+                "name": "STAT_HTTP_AVG_RESP_TIME",
+                "description": "STAT - HTTP Average Response Time"
+              },
+              {
+                "name": "STAT_HTTP_AVG_PROC_TIME",
+                "description": "STAT - HTTP Average Processing Time"
+              },
+              {
+                "name": "STAT_HTTP_AVG_CPU_TIME",
+                "description": "STAT - HTTP Average CPU Time"
+              },
+              {
+                "name": "STAT_HTTPS_DB_NUM_MOD",
+                "description": "STAT - HTTPS DB No. of Changes"
+              },
+              {
+                "name": "STAT_HTTPS_DB_AVG_MOD_TIME",
+                "description": "STAT - HTTPS DB Avg. Modification Time"
+              },
+              {
+                "name": "STAT_HTTPS_DB_NUM_READS",
+                "description": "STAT - HTTPS DB No. of Reads"
+              },
+              {
+                "name": "STAT_HTTPS_DB_AVG_READ_TIME",
+                "description": "STAT - HTTPS DB Average Read Time"
+              },
+              {
+                "name": "STAT_HTTPS_AVG_RESP_TIME",
+                "description": "STAT - HTTPS Average Response Time"
+              },
+              {
+                "name": "STAT_HTTPS_AVG_PROC_TIME",
+                "description": "STAT - HTTPS Average Processing Time"
+              },
+              {
+                "name": "STAT_HTTPS_AVG_CPU_TIME",
+                "description": "STAT - HTTPS Average CPU Time"
+              }
+            ]
+          }
+        }
+      },
+      "JOBS": {
+        "groups": {
+          "JOBS": {
+            "kpis": [
+              {
+                "name": "JOB_DELAYED",
+                "description": "Number of  Background Jobs delayed"
+              },
+              {
+                "name": "JOB_CANCELLED",
+                "description": "Number of canvelled Background Jobs"
+              },
+              {
+                "name": "JOB_MAX_DELAY",
+                "description": "Maximum delay to start a Job"
+              },
+              {
+                "name": "JOB_DELAYED_TIME",
+                "description": "Total delay for the run period "
+              },
+              {
+                "name": "JOB_COMPLETED",
+                "description": "Number of completed Jobs"
+              },
+              {
+                "name": "JOB_ACTIVE",
+                "description": "Number of Active Jobs"
+              },
+              {
+                "name": "JOB_TOTAL",
+                "description": "Number of Total Jobs"
+              },
+              {
+                "name": "JOB_SCHEDULED",
+                "description": "Number of Scheduled Jobs"
+              },
+              {
+                "name": "JOB_RELEASED",
+                "description": "Number of Released Jobs"
+              },
+              {
+                "name": "JOB_MAX_RUNTIME",
+                "description": "Maximum Runtime taken by a Job"
+              },
+              {
+                "name": "JOB_S_NAME        ",
+                "description": "Job Name"
+              },
+              {
+                "name": "JOB_S_COUNT       ",
+                "description": "Job Counter"
+              },
+              {
+                "name": "JOB_S_SCHD_STRTDT ",
+                "description": "Job Scheduled Start Date"
+              },
+              {
+                "name": "JOB_S_SCHD_STRTTM ",
+                "description": "Job Scheduled Start Time"
+              },
+              {
+                "name": "JOB_S_LASTCHDT    ",
+                "description": "Job Last changed Date"
+              },
+              {
+                "name": "JOB_S_LASTCHTM    ",
+                "description": "Job Last changed Time"
+              },
+              {
+                "name": "JOB_S_REL_DATE    ",
+                "description": "Job Release Date"
+              },
+              {
+                "name": "JOB_S_REL_TIME    ",
+                "description": "Job Release Time"
+              },
+              {
+                "name": "JOB_S_ACT_STRTDT  ",
+                "description": "Job Actual Start Date"
+              },
+              {
+                "name": "JOB_S_ACT_STRTTM  ",
+                "description": "Job Actual Start Time"
+              },
+              {
+                "name": "JOB_S_ACT_ENDDT   ",
+                "description": "Job Actual End Date"
+              },
+              {
+                "name": "JOB_S_ACT_ENDTM   ",
+                "description": "Job Actual End Time"
+              },
+              {
+                "name": "JOB_S_STATUS      ",
+                "description": "Job Status"
+              },
+              {
+                "name": "JOB_S_SERVER",
+                "description": "Job execution Server"
+              }
+            ]
+          }
+        }
+      },
+      "INTERFACES": {
+        "groups": {
+          "IDOCS": {
+            "kpis": [
+              {
+                "name": "IDOC_CHANGED_CNT",
+                "description": "IDOCs changed"
+              },
+              {
+                "name": "IDOC_INB_CNT      ",
+                "description": "IDOC - Inbound count"
+              },
+              {
+                "name": "IDOC_INB_ERR_CNT ",
+                "description": "IDOC - Inbound Error count"
+              },
+              {
+                "name": "IDOC_INB_PROC_AVG",
+                "description": "IDOC - Inbound Average Processing time "
+              },
+              {
+                "name": "IDOC_OB_CNT    ",
+                "description": "IDOC - Outbound count"
+              },
+              {
+                "name": "IDOC_OB_ERR_CNT   ",
+                "description": "IDOC - Outbound Error count"
+              },
+              {
+                "name": "IDOC_OB_PROC_AVG  ",
+                "description": "IDOC - Outbound Average Processing time"
+              },
+              {
+                "name": "IDOC_OB_TRANS_AVG ",
+                "description": "IDOC  - Average Transmission Time"
+              },
+              {
+                "name": "IDOC_S_MESTYP",
+                "description": "IDOC Message Type"
+              },
+              {
+                "name": "IDOC_S_IDOCTP",
+                "description": "IDOC Type"
+              },
+              {
+                "name": "IDOC_S_DOCNUM",
+                "description": "IDOC Document No."
+              },
+              {
+                "name": "IDOC_S_DIRECT",
+                "description": "IDOC Direction"
+              },
+              {
+                "name": "IDOC_S_CREDAT",
+                "description": "IDOC - Creation Date"
+              },
+              {
+                "name": "IDOC_S_CRETIM",
+                "description": "IDOC - Creation Time"
+              },
+              {
+                "name": "IDOC_S_STATUS",
+                "description": "IDOC - Status"
+              },
+              {
+                "name": "IDOC_S_UPDDAT",
+                "description": "IDOC - Update date"
+              },
+              {
+                "name": "IDOC_S_UPDTIM",
+                "description": "IDOC - Update Time"
+              },
+              {
+                "name": "IDOC_S_RCVPRN",
+                "description": "IDOC - Receiver Port"
+              },
+              {
+                "name": "IDOC_S_SNDPRN",
+                "description": "IDOC - Sender Port"
+              },
+              {
+                "name": "IDOC_S_STATXT",
+                "description": "IDOC - Status Text"
+              }
+            ]
+          },
+          "RFC": {
+            "kpis": [
+              {
+                "name": "RFC_ARFC_FREE_P",
+                "description": "RFC - Available resource %"
+              },
+              {
+                "name": "RFC_QRFC_IN_ENTRIES",
+                "description": "RFC - Entries in Inbound Queue"
+              },
+              {
+                "name": "RFC_QRFC_IN_COUNT",
+                "description": "RFC - Inbound Queue Count"
+              },
+              {
+                "name": "RFC_QRFC_OUT_ENTRIES",
+                "description": "RFC - Entries in Outbound Queue"
+              },
+              {
+                "name": "RFC_QRFC_OUT_COUNT",
+                "description": "RFC - Outbound Queue Count"
+              },
+              {
+                "name": "RFC_QRFC_IN_ERRORS",
+                "description": "RFC - QRFC Inbound Errors"
+              },
+              {
+                "name": "RFC_QRFC_OUT_ERRORS",
+                "description": "RFC - QRFC Outbound Errors"
+              }
+            ]
+          }
+        }
+      },
+      "LOGS": {
+        "groups": {
+          "ALOGS": {
+            "kpis": [
+              {
+                "name": "ALOG_VERY_IMP",
+                "description": "Application Log - Problem Class Very Important"
+              },
+              {
+                "name": "ALOG_IMP",
+                "description": "Application Log - Problem Class Important"
+              },
+              {
+                "name": "ALOG_MEDIUM",
+                "description": "Application Log - Problem Class Medium"
+              },
+              {
+                "name": "ALOG_USER_MAX",
+                "description": "Application Log - Maximum logs with Single User"
+              },
+              {
+                "name": "ALOG_BATCH_PROC",
+                "description": "Application Log - Batch Processing"
+              },
+              {
+                "name": "ALOG_DIALOG_PROC",
+                "description": "Application Log - Dialog Processing"
+              },
+              {
+                "name": "ALOG_BI_PROC",
+                "description": "Application Log - Batch Input Processing"
+              },
+              {
+                "name": "ALOG_AUTO_ABAP_PROC",
+                "description": "Application Log - Auto ABAP Processing"
+              },
+              {
+                "name": "ALOG_PROG_MAX",
+                "description": "Application Log - Maximum logs with Single Program"
+              },
+              {
+                "name": "ALOG_TCODE_MAX",
+                "description": "Application Log - Maximum logs with Single Tcode"
+              },
+              {
+                "name": "ALOG_S_LOG_NUMBER",
+                "description": "Application Log Number"
+              },
+              {
+                "name": "ALOG_S_LOG_TIMESTMP",
+                "description": "Application Log - Time Stamp"
+              },
+              {
+                "name": "ALOG_S_LOG_MSGID",
+                "description": "Application Log - Message Class"
+              },
+              {
+                "name": "ALOG_S_LOG_MSGTY",
+                "description": "Application Log - Message Type"
+              },
+              {
+                "name": "ALOG_S-LOG_MSGNO",
+                "description": "Application Log - Message Number"
+              },
+              {
+                "name": "ALOG_S-LOG_MSGTXT",
+                "description": "Application Log - Message Text"
+              },
+              {
+                "name": "ALOG_S_LOG_USER",
+                "description": "Application Log - User name"
+              },
+              {
+                "name": "ALOG_S_PROBCLASS",
+                "description": "Application Log- Problem Class"
+              },
+              {
+                "name": "ALOG_S_ALMODE",
+                "description": "Application Log - Processing Mode"
+              },
+              {
+                "name": "ALOG_S_ALTCODE",
+                "description": "Application Log - Transaction Code"
+              },
+              {
+                "name": "ALOG_S_ALPROG",
+                "description": "Application Log - Program"
+              }
+            ]
+          },
+          "SLOGS": {
+            "kpis": [
+              {
+                "name": "SLOG_DIA",
+                "description": "System Log - Dialog Workprocess "
+              },
+              {
+                "name": "SLOG_BTC",
+                "description": "System Log - Background Workprocess "
+              },
+              {
+                "name": "SLOG_ENQ",
+                "description": "System Log - Enqueue Workprocess "
+              },
+              {
+                "name": "SLOG_MS",
+                "description": "System Log - Message Server"
+              },
+              {
+                "name": "SLOG_RD",
+                "description": "System Log - Gateway"
+              },
+              {
+                "name": "SLOG_SPO",
+                "description": "System Log - Spool"
+              },
+              {
+                "name": "SLOG_UPD",
+                "description": "System Log - Update Work Process"
+              },
+              {
+                "name": "SLOG_VERY_IMP",
+                "description": "System Log - Very Important"
+              },
+              {
+                "name": "SLOG_IMP",
+                "description": "System Log - Important"
+              },
+              {
+                "name": "SLOG_MEDIUM",
+                "description": "System Log - Medium"
+              },
+              {
+                "name": "SLOG_PROG_MAX",
+                "description": "System Log - Maximum logs with Single Program"
+              },
+              {
+                "name": "SLOG_TCODE_MAX",
+                "description": "System Log - Maximum logs with Single Tcode"
+              },
+              {
+                "name": "SLOG_USER_MAX",
+                "description": "System Log - Maximum logs with Single User"
+              },
+              {
+                "name": "SLOG_S_INSTANCE",
+                "description": "System Log - Instance name"
+              },
+              {
+                "name": "SLOG_S_WP_TYPE",
+                "description": "System Log - Work Process Type"
+              },
+              {
+                "name": "SLOG_S_PROG",
+                "description": "System Log - Program"
+              },
+              {
+                "name": "SLOG_S_TCODE",
+                "description": "System Log - Transaction Code"
+              },
+              {
+                "name": "SLOG_S_USER",
+                "description": "System Log - User name"
+              },
+              {
+                "name": "SLOG_S_SEVERITY",
+                "description": "System Log - Severity"
+              },
+              {
+                "name": "SLOG_S_MESSAGEID",
+                "description": "System Log - Message ID"
+              },
+              {
+                "name": "SLOG_S_TEXT",
+                "description": "System Log - Message Text"
+              }
+            ]
+          },
+          "RUNERR": {
+            "kpis": [
+              {
+                "name": "RUNERR_INTERNAL ",
+                "description": "Runtime Error - Internal Errors"
+              },
+              {
+                "name": "RUNERR_ABAP_RT  ",
+                "description": "Runtime Error - ABAP Runtime Errors"
+              },
+              {
+                "name": "RUNERR_DYNP_RT  ",
+                "description": "Runtime Error - Dynpro Errors"
+              },
+              {
+                "name": "RUNERR_ABAP_PR  ",
+                "description": "Runtime Error - ABAP Programming Errors"
+              },
+              {
+                "name": "RUNERR_RES_BN   ",
+                "description": "Runtime Error - Resource Bottleneck errors"
+              },
+              {
+                "name": "RUNERR_ITS      ",
+                "description": "Runtime Error - ITS errors"
+              },
+              {
+                "name": "RUNERR_SQL      ",
+                "description": "Runtime Error - Open SQL Errors"
+              },
+              {
+                "name": "RUNERR_DI       ",
+                "description": "Runtime Error - Databse Interface errors"
+              },
+              {
+                "name": "RUNERR_COMM     ",
+                "description": "Runtime Error - Communication errors"
+              },
+              {
+                "name": "RUNERR_OTHER    ",
+                "description": "Runtime Error - Other errors"
+              },
+              {
+                "name": "RUNERR_USER_MAX ",
+                "description": "Runtime Error - Maximum errors single user"
+              },
+              {
+                "name": "RUNERR_S_UNAME",
+                "description": "Runtime Error - User name"
+              },
+              {
+                "name": "RUNERR_S_HOST",
+                "description": "Runtime Error - Host name"
+              },
+              {
+                "name": "RUNERR_S_ERRID",
+                "description": "Runtime Error - Error Identifier"
+              },
+              {
+                "name": "RUNERR_S_CATEGORY",
+                "description": "Runtime Error - Error Category"
+              }
+            ]
+          }
+        }
+      },
+      "DATABASE": {
+        "groups": {
+          "HDB": {
+            "kpis": [
+              {
+                "name": "HDB_TOTAL_CPU_USER_TIME",
+                "description": "HDB - CPU time spent in user mode"
+              },
+              {
+                "name": "HDB_TOTAL_CPU_SYSTEM_TIME",
+                "description": "HDB - CPU time spent in kernel mode"
+              },
+              {
+                "name": "HDB_TOTAL_CPU_WIO_TIME",
+                "description": "HDB - CPU time spent in wait IO "
+              },
+              {
+                "name": "HDB_TOTAL_CPU_IDLE_TIME",
+                "description": "HDB - CPU idle time"
+              },
+              {
+                "name": "HDB_FREE_PHYSICAL_MEMORY",
+                "description": "HDB - Free Physical memory"
+              },
+              {
+                "name": "HDB_FREE_SWAP_SPACE",
+                "description": "HDB - Free Swap Space"
+              },
+              {
+                "name": "HDB_USED_PHYSICAL_MEMORY",
+                "description": "HDB - Used Physical Memory"
+              },
+              {
+                "name": "HDB_USED_SWAP_SPACE",
+                "description": "HDB - Used Swap Space"
+              },
+              {
+                "name": "HDB_INST_TOT_MEM_USED_SIZE",
+                "description": "HDB - Memory used from Pool"
+              },
+              {
+                "name": "HDB_INST_TOT_MEM_PEAK_USED",
+                "description": "HDB - Peak Memory used from Pool"
+              },
+              {
+                "name": "HDB_OPEN_FILE_COUNT",
+                "description": "HDB - Open File Count"
+              },
+              {
+                "name": "HDB_DISK_DATA_USED",
+                "description": "HDB - Disk Data used"
+              },
+              {
+                "name": "HDB_DISK_DBCKUP_USED",
+                "description": "HDB - Disk Backup used"
+              },
+              {
+                "name": "HDB_DISK_LOG_USED",
+                "description": "HDB - Disk Log used"
+              },
+              {
+                "name": "HDB_DISK_LBCKUP_USED",
+                "description": "HDB - Disk Log Backup used"
+              },
+              {
+                "name": "HDB_DISK_TRACE_USED",
+                "description": "HDB - Disk Trace used"
+              },
+              {
+                "name": "HDB_MEM_CACHE_P",
+                "description": "HDB - Cache Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_CS_P",
+                "description": "HDB - Column Store Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_MS_P",
+                "description": "HDB - Monitoring & STAT Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_RS_P",
+                "description": "HDB - Row Store Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_SEI_P",
+                "description": "HDB - Statement Execution Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_SYSTEM_P",
+                "description": "HDB - System Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_CODE_P",
+                "description": "HDB - Code Component Memory used"
+              },
+              {
+                "name": "HDB_MEM_STACK_P",
+                "description": "HDB - Stack Component Memory used"
+              },
+              {
+                "name": "HDB_ALERT_ERROR",
+                "description": "HDB - Alert - Error"
+              },
+              {
+                "name": "HDB_ALERT_HIGH",
+                "description": "HDB -  Alert - High"
+              },
+              {
+                "name": "HDB_ALERT_INFORMATION",
+                "description": "HDB - Alert - Information"
+              },
+              {
+                "name": "HDB_ALERT_LOW",
+                "description": "HDB - Alert - Low"
+              },
+              {
+                "name": "HDB_ALERT_MEDIUM",
+                "description": "HDB - Alert - Medium"
+              },
+              {
+                "name": "HDB_S_ALERT_DETAILS",
+                "description": "HDB - Alert Details"
+              },
+              {
+                "name": "HDB_S_ALERT_NAME",
+                "description": "HDB - Alert Name"
+              },
+              {
+                "name": "HDB_S_ALERT_RATING",
+                "description": "HDB - Alert Rating"
+              },
+              {
+                "name": "HDB_S_ALERT_USERACTION",
+                "description": "HDB - Alert User Action"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
