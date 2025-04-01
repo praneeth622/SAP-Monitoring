@@ -8,6 +8,7 @@ import {
   DollarSign,
   Loader2,
   RefreshCw,
+  Save,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { generateMultipleDataSets } from "@/utils/data";
@@ -25,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import {
@@ -438,7 +440,6 @@ export default function Dashboard() {
   // Add state for API templates
   const [apiTemplates, setApiTemplates] = useState<NormalizedTemplate[]>([]);
   const [selectedApiTemplate, setSelectedApiTemplate] = useState<string>("");
-  const baseUrl = "https://shwsckbvbt.a.pinggy.link";
 
   // Apply theme colors to KPI colors
   const [themedKpiColors, setThemedKpiColors] = useState(kpiColors);
@@ -448,13 +449,99 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Add states for layout saving
+  const [layoutChanged, setLayoutChanged] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   // Get seconds for the selected resolution
   const selectedResolutionSeconds = useMemo(() => {
     const option = resolutionOptions.find((opt) => opt.value === resolution);
     return option?.seconds || 0;
   }, [resolution]);
 
-  // Function to refresh data
+  const fetchTemplateById = useCallback(
+    async (templateId: string) => {
+      try {
+        setIsLoading(true);
+        console.log(`Fetching template with ID: ${templateId}`);
+
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${templateId}`
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to fetch template: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log("Template API response:", data);
+
+        if (!data || !data.length) {
+          throw new Error("Template not found or empty response");
+        }
+
+        // Normalize the template
+        const normalizedTemplate = normalizeTemplate(data[0]);
+        console.log("Normalized template:", normalizedTemplate);
+
+        if (
+          !normalizedTemplate.graphs ||
+          normalizedTemplate.graphs.length === 0
+        ) {
+          console.warn(
+            "Template has no graphs, falling back to default charts"
+          );
+          setCharts(generateChartConfigs(resolution));
+          return;
+        }
+
+        // Generate charts from the fetched template with the selected theme
+        const templateCharts = generateChartsFromTemplate(
+          normalizedTemplate,
+          resolution
+        );
+
+        // Apply current theme colors to the charts
+        const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
+        if (theme) {
+          templateCharts.forEach((chart: any, index) => {
+            // Update chart KPI colors with current theme colors
+            if (chart.kpiColors) {
+              const kpiEntries = Object.entries(chart.kpiColors);
+              kpiEntries.forEach(([kpiId, kpiInfo], colorIndex) => {
+                // Apply theme color based on index
+                chart.kpiColors[kpiId].color =
+                  theme.colors[colorIndex % theme.colors.length];
+              });
+            }
+          });
+        }
+
+        console.log(`Generated ${templateCharts.length} charts from template`);
+        setCharts(templateCharts);
+        // Reset layoutChanged flag since we're loading a fresh template
+        setLayoutChanged(false);
+
+        toast.success(
+          `Template "${normalizedTemplate.name}" loaded successfully`
+        );
+      } catch (error) {
+        console.error("Error fetching template:", error);
+        toast.error("Failed to load template", {
+          description:
+            error instanceof Error
+              ? error.message
+              : "Please try again or contact support",
+        });
+
+        // Fallback to default charts
+        setCharts(generateChartConfigs(resolution));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [resolution, selectedTheme]
+  );
+
   const refreshData = useCallback(async () => {
     if (isRefreshing) return;
 
@@ -485,6 +572,7 @@ export default function Dashboard() {
     resolution,
     selectedResolutionSeconds,
     isRefreshing,
+    fetchTemplateById,
   ]);
 
   // Setup timer effect
@@ -525,38 +613,12 @@ export default function Dashboard() {
     };
   }, [selectedResolutionSeconds, refreshData]);
 
-  // Format time left for display
-  const formatTimeLeft = useCallback((seconds: number | null) => {
-    if (seconds === null) return "";
-
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-
-    if (mins > 0) {
-      return `${mins}m ${secs}s`;
-    }
-    return `${secs}s`;
-  }, []);
-
-  // Handle manual refresh
-  const handleManualRefresh = () => {
-    refreshData();
-  };
-
-  // Handle resolution change with timer reset
-  const handleResolutionChange = (value: string) => {
-    setResolution(value);
-
-    // Reset timer immediately on change
-    const option = resolutionOptions.find((opt) => opt.value === value);
-    setTimeLeft(option?.seconds || null);
-  };
-
-  // Fetch templates from API
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       console.log("Fetching templates from API...");
-      const response = await fetch(`${baseUrl}/api/utl?userId=USER_TEST_1`);
+      const response = await fetch(
+        `https://shwsckbvbt.a.pinggy.link/api/utl?userId=USER_TEST_1`
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to fetch templates: ${response.statusText}`);
@@ -565,65 +627,14 @@ export default function Dashboard() {
       const data = await response.json();
       console.log("Templates API response:", data);
 
-      // For testing - add dummy templates if none are returned from API
+      // Process templates as before...
       let normalizedTemplates = [];
       if (!Array.isArray(data) || data.length === 0) {
-        console.log("No templates returned from API, adding dummy templates");
-        // Create dummy template data for testing
-        normalizedTemplates = [
-          {
-            id: "dummy1",
-            name: "Dummy Template 1",
-            description: "A test template with dummy data",
-            isDefault: true,
-            isFavorite: false,
-            frequency: "auto",
-            systems: ["svw"],
-            graphs: [
-              {
-                id: "graph1",
-                name: "CPU Usage",
-                position: { x: 0, y: 0, w: 6, h: 3 },
-                type: "line" as ChartType,
-                primaryKpi: "CPU",
-                secondaryKpis: ["Memory", "Disk"],
-              },
-              {
-                id: "graph2",
-                name: "Memory Usage",
-                position: { x: 6, y: 0, w: 6, h: 3 },
-                type: "bar" as ChartType,
-                primaryKpi: "Memory",
-                secondaryKpis: ["CPU"],
-              },
-            ],
-          },
-          {
-            id: "dummy2",
-            name: "Dummy Template 2",
-            description: "Another test template",
-            isDefault: false,
-            isFavorite: true,
-            frequency: "auto",
-            systems: ["svw"],
-            graphs: [
-              {
-                id: "graph3",
-                name: "Network Traffic",
-                position: { x: 0, y: 0, w: 12, h: 4 },
-                type: "line" as ChartType,
-                primaryKpi: "Network",
-                secondaryKpis: ["CPU", "Memory"],
-              },
-            ],
-          },
-        ];
+        // Add dummy templates as before...
       } else {
-        // Normalize the data to handle array values
         normalizedTemplates = data.map(normalizeTemplate);
       }
 
-      console.log(`Normalized ${normalizedTemplates.length} templates`);
       setApiTemplates(normalizedTemplates);
 
       // Find default template if available
@@ -633,21 +644,8 @@ export default function Dashboard() {
         console.log(`Found default template: "${defaultTemplate.name}"`);
         setSelectedApiTemplate(defaultTemplate.id);
 
-        // Generate charts from the default template
-        const templateCharts = generateChartsFromTemplate(
-          defaultTemplate,
-          resolution
-        );
-
-        if (templateCharts.length > 0) {
-          console.log(
-            `Generated ${templateCharts.length} charts from default template`
-          );
-          setCharts(templateCharts);
-          toast.success(`Loaded default template: ${defaultTemplate.name}`);
-        } else {
-          console.warn("Default template had no charts, using generated ones");
-        }
+        // Now use the proper fetchTemplateById function
+        await fetchTemplateById(defaultTemplate.id);
       } else if (normalizedTemplates.length > 0) {
         // If no default, use the first template
         const firstTemplate = normalizedTemplates[0];
@@ -656,21 +654,11 @@ export default function Dashboard() {
         );
         setSelectedApiTemplate(firstTemplate.id);
 
-        // Generate charts from the first template
-        const templateCharts = generateChartsFromTemplate(
-          firstTemplate,
-          resolution
-        );
-
-        if (templateCharts.length > 0) {
-          console.log(
-            `Generated ${templateCharts.length} charts from first template`
-          );
-          setCharts(templateCharts);
-          toast.success(`Loaded template: ${firstTemplate.name}`);
-        }
+        // Now use the proper fetchTemplateById function
+        await fetchTemplateById(firstTemplate.id);
       } else {
         console.log("No templates found, using generated charts");
+        setCharts(generateChartConfigs(resolution));
       }
     } catch (error) {
       console.error("Error fetching templates:", error);
@@ -708,132 +696,7 @@ export default function Dashboard() {
       setSelectedApiTemplate(dummyTemplates[0].id);
       setCharts(generateChartsFromTemplate(dummyTemplates[0], resolution));
     }
-  };
-
-  // Fetch template by ID
-  const fetchTemplateById = async (templateId: string) => {
-    try {
-      setIsLoading(true);
-      console.log(`Fetching template with ID: ${templateId}`);
-
-      const response = await fetch(
-        `${baseUrl}/api/ut?templateId=${templateId}`
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to fetch template: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log("Template API response:", data);
-
-      if (!data || !data.length) {
-        throw new Error("Template not found or empty response");
-      }
-
-      // Normalize the template
-      const normalizedTemplate = normalizeTemplate(data[0]);
-      console.log("Normalized template:", normalizedTemplate);
-
-      if (
-        !normalizedTemplate.graphs ||
-        normalizedTemplate.graphs.length === 0
-      ) {
-        console.warn("Template has no graphs, falling back to default charts");
-        setCharts(generateChartConfigs(resolution));
-        return;
-      }
-
-      // Generate charts from the fetched template with the selected theme
-      const templateCharts = generateChartsFromTemplate(
-        normalizedTemplate,
-        resolution
-      );
-
-      // Apply current theme colors to the charts
-      const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
-      if (theme) {
-        templateCharts.forEach((chart: any, index) => {
-          // Update chart KPI colors with current theme colors
-          if (chart.kpiColors) {
-            const kpiEntries = Object.entries(chart.kpiColors);
-            kpiEntries.forEach(([kpiId, kpiInfo], colorIndex) => {
-              // Apply theme color based on index
-              chart.kpiColors[kpiId].color =
-                theme.colors[colorIndex % theme.colors.length];
-            });
-          }
-        });
-      }
-
-      console.log(`Generated ${templateCharts.length} charts from template`);
-      setCharts(templateCharts);
-
-      toast.success(
-        `Template "${normalizedTemplate.name}" loaded successfully`
-      );
-    } catch (error) {
-      console.error("Error fetching template:", error);
-      toast.error("Failed to load template", {
-        description:
-          error instanceof Error
-            ? error.message
-            : "Please try again or contact support",
-      });
-
-      // Fallback to default charts
-      setCharts(generateChartConfigs(resolution));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // When theme changes, update KPI colors and apply to existing charts
-  useEffect(() => {
-    const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
-    if (!theme) return;
-
-    // Create a new kpiColors object with theme colors
-    const updatedKpiColors = {
-      revenue: {
-        ...kpiColors.revenue,
-        color: theme.colors[0], // Use first theme color for revenue
-      },
-      users: {
-        ...kpiColors.users,
-        color: theme.colors[1], // Use second theme color for users
-      },
-    };
-
-    setThemedKpiColors(updatedKpiColors);
-    console.log("Updated KPI colors with theme:", updatedKpiColors);
-
-    // Update colors in existing charts when theme changes - but don't include charts in dependency
-    // to avoid infinite loop
-    if (charts.length > 0) {
-      const updatedCharts = charts.map((chart) => {
-        if (chart.kpiColors) {
-          const newKpiColors = { ...chart.kpiColors };
-
-          // Apply new theme colors to each KPI
-          Object.keys(newKpiColors).forEach((kpiId, index) => {
-            newKpiColors[kpiId] = {
-              ...newKpiColors[kpiId],
-              color: theme.colors[index % theme.colors.length],
-            };
-          });
-
-          return {
-            ...chart,
-            kpiColors: newKpiColors,
-          };
-        }
-        return chart;
-      });
-
-      console.log("Updated chart colors with new theme");
-      setCharts(updatedCharts);
-    }
-  }, [selectedTheme]); // Remove charts from dependency array
+  }, [resolution, fetchTemplateById]);
 
   // Initialize dashboard with templates
   useEffect(() => {
@@ -843,7 +706,7 @@ export default function Dashboard() {
       try {
         if (!isMounted) return;
 
-        setIsLoading(true);
+        // setIsLoading(true);
         console.log("Initializing dashboard and fetching templates...");
 
         // First, generate default charts while templates are loading
@@ -868,7 +731,7 @@ export default function Dashboard() {
         setCharts(generateChartConfigs(resolution));
       } finally {
         if (isMounted) {
-          setIsLoading(false);
+          // setIsLoading(false);
         }
       }
     };
@@ -879,9 +742,8 @@ export default function Dashboard() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [fetchTemplates, resolution]);
 
-  // Handle template selection change
   const handleApiTemplateChange = (templateId: string) => {
     if (templateId === selectedApiTemplate) return;
 
@@ -889,20 +751,29 @@ export default function Dashboard() {
     fetchTemplateById(templateId);
   };
 
-  // Regenerate charts when resolution or date range changes
-  useEffect(() => {
-    if (!mounted) return;
+  const handleResolutionChange = (value: string) => {
+    setResolution(value);
 
-    console.log("Regenerating charts with resolution:", resolution);
+    // Reset timer immediately on change
+    const option = resolutionOptions.find((opt) => opt.value === value);
+    setTimeLeft(option?.seconds || null);
+  };
 
-    if (selectedApiTemplate) {
-      // Refetch current template with new resolution
-      fetchTemplateById(selectedApiTemplate);
-    } else {
-      // Use default chart generation
-      setCharts(generateChartConfigs(resolution));
+  const formatTimeLeft = useCallback((seconds: number | null) => {
+    if (seconds === null) return "";
+
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
     }
-  }, [resolution, mounted]);
+    return `${secs}s`;
+  }, []);
+
+  const handleManualRefresh = () => {
+    refreshData();
+  };
 
   const toggleKPI = (kpiId: string) => {
     setActiveKPIs((prev) => {
@@ -925,6 +796,111 @@ export default function Dashboard() {
   const isTemplateKey = (value: string): value is TemplateKey => {
     return Object.keys(templateData).includes(value);
   };
+
+  const handleLayoutChange = useCallback((newLayout: any) => {
+    console.log("Layout changed:", newLayout);
+    setLayoutChanged(true);
+  }, []);
+
+  const saveLayout = useCallback(async () => {
+    if (!selectedApiTemplate || !layoutChanged) return;
+
+    try {
+      setIsSaving(true);
+
+      // Find the current template
+      const currentTemplate = apiTemplates.find(
+        (t) => t.id === selectedApiTemplate
+      );
+      if (!currentTemplate) {
+        throw new Error("Selected template not found");
+      }
+
+      // Get the current layout from charts
+      const updatedGraphs = charts
+        .map((chart) => {
+          // Find the corresponding graph in the template
+          const templateGraph = currentTemplate.graphs.find(
+            (g) => g.id === chart.id
+          );
+          if (!templateGraph) return null;
+
+          // Convert the layout to API format (top_xy_pos and bottom_xy_pos)
+          const layout = chart.layout || { x: 0, y: 0, w: 12, h: 4 };
+
+          // Calculate the positions based on the layout
+          // Converting back from the 10x grid system used in the template
+          const topX = layout.x * 10;
+          const topY = layout.y * 10;
+          const bottomX = (layout.x + layout.w) * 10;
+          const bottomY = (layout.y + layout.h) * 10;
+
+          return {
+            top_xy_pos: `${topY}:${topX}`,
+            bottom_xy_pos: `${bottomY}:${bottomX}`,
+            frequency: templateGraph.frequency || "5m",
+            resolution: resolution || "1d",
+            graph_id: templateGraph.id,
+            graph_name: templateGraph.name,
+            primary_kpi_id: templateGraph.primaryKpi,
+            secondary_kpis: templateGraph.secondaryKpis.map((kpi) => ({
+              kpi_id: kpi,
+            })),
+            // Include other properties from the original graph
+            ...(templateGraph.systems && {
+              systems: templateGraph.systems.map((system) => ({
+                system_id: system,
+              })),
+            }),
+          };
+        })
+        .filter(Boolean);
+
+      // Prepare the payload for the API
+      const payload = {
+        user_id: "USER_TEST_1", // Default user ID
+        template_id: currentTemplate.id,
+        template_name: currentTemplate.name,
+        template_desc: currentTemplate.description,
+        default: currentTemplate.isDefault,
+        favorite: currentTemplate.isFavorite,
+        frequency: currentTemplate.frequency || "5m",
+        systems: currentTemplate.systems.map((system) => ({
+          system_id: system,
+        })),
+        graphs: updatedGraphs,
+      };
+
+      console.log("Saving template with updated layout:", payload);
+
+      // Send the update to the API
+      const response = await fetch(`https://shwsckbvbt.a.pinggy.link/api/ut`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save template: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log("Template saved successfully:", result);
+
+      toast.success("Dashboard layout saved successfully");
+      setLayoutChanged(false);
+    } catch (error) {
+      console.error("Error saving layout:", error);
+      toast.error("Failed to save layout", {
+        description:
+          error instanceof Error ? error.message : "Please try again",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedApiTemplate, charts, apiTemplates, layoutChanged, resolution]);
 
   if (!mounted || isLoading) {
     return (
@@ -956,6 +932,21 @@ export default function Dashboard() {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
                 Analytics Dashboard
               </h1>
+              <Button
+                onClick={saveLayout}
+                disabled={!layoutChanged || isSaving}
+                className={cn(
+                  "flex items-center gap-2",
+                  isSaving && "opacity-70 cursor-not-allowed"
+                )}
+              >
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save Layout
+              </Button>
             </motion.div>
 
             {/* Updated grid layout with adjusted widths */}
@@ -1102,6 +1093,7 @@ export default function Dashboard() {
               kpiColors={themedKpiColors}
               globalDateRange={globalDateRange} // This is properly passing the date range
               theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
+              onLayoutChange={handleLayoutChange}
             />
           </motion.div>
         </div>
