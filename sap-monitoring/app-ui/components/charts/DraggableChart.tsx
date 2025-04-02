@@ -92,7 +92,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<{
+  const chartRef = useRef<HTMLDivElement & {
     zoomIn: () => void;
     zoomOut: () => void;
     boxSelect: () => void;
@@ -116,8 +116,8 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     // Initialize local date range if it's not set and global date is available
     if (!localDateRange && globalDateRange && useGlobalDate) {
       setLocalDateRange({
-        from: new Date(globalDateRange.from),
-        to: new Date(globalDateRange.to),
+        from: globalDateRange.from ? new Date(globalDateRange.from) : undefined,
+        to: globalDateRange.to ? new Date(globalDateRange.to) : undefined,
       });
     }
   }, [globalDateRange, localDateRange, useGlobalDate]);
@@ -471,7 +471,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               )}
             >
               <ChartContainer
-                ref={chartRef}
+                ref={chartRef as any}
                 data={data}
                 type={chartType}
                 title={title}

@@ -30,6 +30,7 @@ interface DynamicLayoutProps {
     name: string;
     colors: string[];
   };
+  onLayoutChange?: (layout: Layout[]) => void;
 }
 
 export function DynamicLayout({
@@ -38,6 +39,7 @@ export function DynamicLayout({
   kpiColors = {},
   globalDateRange,
   theme,
+  onLayoutChange,
 }: DynamicLayoutProps) {
   const [layouts, setLayouts] = useState({});
   const [currentBreakpoint, setCurrentBreakpoint] = useState("lg");

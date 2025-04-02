@@ -66,7 +66,7 @@ const systemOptions = ["SVW", "System 1", "System 2"];
 // Utility function to create vibrant, consistent colors for KPIs
 const generateConsistentColors = (kpis: string[]) => {
   const colorPalette = [
-    "#3B82F6", // blue
+    "#4F46E5", // indigo
     "#8B5CF6", // purple
     "#EC4899", // pink
     "#10B981", // green

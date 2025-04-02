@@ -1,12 +1,6 @@
 import { DataPoint } from "@/types";
 import { subDays, format, addHours, subHours } from "date-fns";
 
-export interface DataPoint {
-  date: string;
-  category: string;
-  value: number;
-}
-
 const getBaseValueForKPI = (kpi: string): number => {
   if (kpi.includes("CPU")) return 60;
   if (kpi.includes("MEMORY")) return 80;

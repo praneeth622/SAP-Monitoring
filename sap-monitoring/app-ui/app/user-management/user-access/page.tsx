@@ -308,8 +308,8 @@ export default function ManageUsersPage() {
     setIsUpdateSheetOpen(true);
   };
 
-  const handleUserSettings = (id: number) => {
-    console.log("Settings:", id); // TODO: Implement settings
+  const handleUserSettings = (id: string) => {
+    // Implementation
   };
 
   return (

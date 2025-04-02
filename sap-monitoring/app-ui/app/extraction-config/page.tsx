@@ -990,7 +990,7 @@ const KpiSettingsSheet = ({
       setConfiguration((prev) => ({
         ...prev,
         [field]: {
-          ...prev[field as keyof typeof prev],
+          ...(prev[field as keyof typeof prev] as Record<string, any>),
           [subField]: value,
         },
       }));

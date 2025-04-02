@@ -208,7 +208,7 @@ export function Sidebar() {
   const handleSubItemClick = (label: string, path: string) => {
     setActiveSubItem(label);
     if (label === "Add Systems") {
-      router.push("/manage-systems");
+      router.push("/systems/manage-systems");
     } else {
       router.push(path);
     }
@@ -342,7 +342,7 @@ export function Sidebar() {
                 <div className="space-y-1 py-1">
                   <div className="max-w-full  overflow-hidden space-y-2">
                     {[
-                      { path: "/manage-systems", label: "Add Systems" },
+                      { path: "/systems/manage-systems", label: "Add Systems" },
                       {
                         path: "/systems/extraction-config",
                         label: "Extarction Config",

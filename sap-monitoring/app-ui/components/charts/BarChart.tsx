@@ -17,9 +17,9 @@ const BarChart: React.FC<BarChartProps> = ({ data, title, className }) => {
     return {
       animation: true,
       tooltip: {
-        trigger: 'axis',
+        trigger: 'axis' as const,
         axisPointer: {
-          type: 'shadow'
+          type: 'shadow' as const
         },
         formatter: (params: any) => {
           let html = `<div style="font-weight: bold">${params[0].name}</div>`
@@ -36,7 +36,7 @@ const BarChart: React.FC<BarChartProps> = ({ data, title, className }) => {
       toolbox: {
         feature: {
           dataZoom: {
-            yAxisIndex: 'none'
+            yAxisIndex: 'none' as 'none'
           },
           restore: {},
           saveAsImage: {}
@@ -64,45 +64,49 @@ const BarChart: React.FC<BarChartProps> = ({ data, title, className }) => {
         containLabel: true
       },
       xAxis: {
-        type: 'category',
+        type: 'category' as const,
         data: categories,
         axisLabel: {
           interval: 0,
-          rotate: 30
+          rotate: 45
         }
       },
       yAxis: {
-        type: 'value',
+        type: 'value' as const,
         axisLabel: {
-          formatter: (value: number) => 
-            value.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-              minimumFractionDigits: 0
-            })
+          formatter: (value: number) => `${value}`
         }
       },
       series: [{
-        type: 'bar',
         data: categories.map(category => {
           const point = data.find(item => item.category === category)
           return point ? point.value : null
         }),
-        itemStyle: {
-          borderRadius: [4, 4, 0, 0]
-        },
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
+        type: 'bar' as const,
+        showBackground: true,
+        backgroundStyle: {
+          color: 'rgba(180, 180, 180, 0.2)'
         }
       }]
     }
   }, [data])
 
-  return <ChartContainer options={options} title={title} className={className} />
+  return (
+    <ChartContainer
+      options={options}
+      title={title}
+      className={className}
+      data={data}
+      type="bar"
+      activeKPIs={['default']}
+      kpiColors={{
+        default: {
+          color: '#4F46E5',
+          name: title
+        }
+      }}
+    />
+  )
 }
 
 export default BarChart

@@ -35,6 +35,10 @@ import {
   DataPoint,
   TemplateConfig,
   TemplateKey,
+  Template,
+  ThemeKey,
+  ChartTheme,
+  Graph,
 } from "@/types";
 import { toast } from "sonner";
 
@@ -70,22 +74,38 @@ interface NormalizedTemplate {
   }[];
 }
 
-const chartThemes = {
+interface TemplateGraph {
+  id: string;
+  name: string;
+  position: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+  type: ChartType;
+  primaryKpi: string;
+  secondaryKpis: string[];
+  frequency?: string;
+  systems?: { system_id: string }[];
+}
+
+const chartThemes: Record<ThemeKey, ChartTheme> = {
   default: {
     name: "Default",
-    colors: ["#3B82F6", "#8B5CF6", "#EC4899", "#10B981"],
+    colors: ["#4F46E5", "#10B981", "#F59E0B", "#EF4444"],
   },
   ocean: {
     name: "Ocean",
-    colors: ["#0EA5E9", "#0D9488", "#0284C7", "#0369A1"],
+    colors: ["#0EA5E9", "#14B8A6", "#FBBF24", "#F87171"],
   },
   forest: {
     name: "Forest",
-    colors: ["#22C55E", "#15803D", "#84CC16", "#4D7C0F"],
+    colors: ["#22C55E", "#84CC16", "#EAB308", "#F97316"],
   },
   sunset: {
     name: "Sunset",
-    colors: ["#F97316", "#EA580C", "#DC2626", "#9F1239"],
+    colors: ["#F97316", "#EAB308", "#84CC16", "#22C55E"],
   },
 };
 
@@ -428,8 +448,8 @@ export default function Dashboard() {
   );
   const [globalDateRange, setGlobalDateRange] = useState<DateRange | undefined>(
     {
-      from: new Date(new Date().setDate(new Date().getDate() - 30)), // 30 days ago with time set to 00:00
-      to: new Date(), // Today with current time
+      from: new Date(new Date().setDate(new Date().getDate() - 30)),
+      to: new Date(),
     }
   );
   const [selectedTemplate, setSelectedTemplate] =
@@ -459,6 +479,7 @@ export default function Dashboard() {
     return option?.seconds || 0;
   }, [resolution]);
 
+  // Move fetchTemplateById inside the component
   const fetchTemplateById = useCallback(
     async (templateId: string) => {
       try {
@@ -468,6 +489,7 @@ export default function Dashboard() {
         const response = await fetch(
           `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${templateId}`
         );
+
         if (!response.ok) {
           throw new Error(`Failed to fetch template: ${response.statusText}`);
         }
@@ -500,24 +522,34 @@ export default function Dashboard() {
           resolution
         );
 
+        console.log(
+          `Generated ${templateCharts.length} charts from template`,
+          templateCharts
+        );
+
         // Apply current theme colors to the charts
         const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
         if (theme) {
-          templateCharts.forEach((chart: any, index) => {
+          templateCharts.forEach((chart) => {
             // Update chart KPI colors with current theme colors
             if (chart.kpiColors) {
               const kpiEntries = Object.entries(chart.kpiColors);
-              kpiEntries.forEach(([kpiId, kpiInfo], colorIndex) => {
-                // Apply theme color based on index
-                chart.kpiColors[kpiId].color =
-                  theme.colors[colorIndex % theme.colors.length];
-              });
+              kpiEntries.forEach(
+                ([kpiId, kpiInfo]: [string, any], colorIndex) => {
+                  // Apply theme color based on index
+                  if (kpiInfo && typeof kpiInfo === "object") {
+                    chart.kpiColors[kpiId].color =
+                      theme.colors[colorIndex % theme.colors.length];
+                  }
+                }
+              );
             }
           });
         }
 
-        console.log(`Generated ${templateCharts.length} charts from template`);
+        // Important: Update the charts state with the new charts
         setCharts(templateCharts);
+
         // Reset layoutChanged flag since we're loading a fresh template
         setLayoutChanged(false);
 
@@ -542,77 +574,7 @@ export default function Dashboard() {
     [resolution, selectedTheme]
   );
 
-  const refreshData = useCallback(async () => {
-    if (isRefreshing) return;
-
-    try {
-      setIsRefreshing(true);
-      console.log("Refreshing data...");
-
-      // Reset timer to full value
-      setTimeLeft(selectedResolutionSeconds);
-
-      if (selectedApiTemplate) {
-        // Refetch current template with new data
-        await fetchTemplateById(selectedApiTemplate);
-      } else {
-        // Use default chart generation with fresh data
-        setCharts(generateChartConfigs(resolution));
-      }
-
-      toast.success("Data refreshed successfully");
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      toast.error("Failed to refresh data");
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [
-    selectedApiTemplate,
-    resolution,
-    selectedResolutionSeconds,
-    isRefreshing,
-    fetchTemplateById,
-  ]);
-
-  // Setup timer effect
-  useEffect(() => {
-    // Clear any existing timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    // If auto-refresh is disabled (auto mode), don't start timer
-    if (!selectedResolutionSeconds) {
-      setTimeLeft(null);
-      return;
-    }
-
-    // Initialize timer
-    setTimeLeft(selectedResolutionSeconds);
-
-    // Start countdown
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev === null) return null;
-        if (prev <= 1) {
-          // Time's up - refresh data
-          refreshData();
-          return selectedResolutionSeconds;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    // Cleanup on unmount
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [selectedResolutionSeconds, refreshData]);
-
+  // Now your fetchTemplates function can use fetchTemplateById
   const fetchTemplates = useCallback(async () => {
     try {
       console.log("Fetching templates from API...");
@@ -628,7 +590,7 @@ export default function Dashboard() {
       console.log("Templates API response:", data);
 
       // Process templates as before...
-      let normalizedTemplates = [];
+      let normalizedTemplates: NormalizedTemplate[] = [];
       if (!Array.isArray(data) || data.length === 0) {
         // Add dummy templates as before...
       } else {
@@ -744,21 +706,136 @@ export default function Dashboard() {
     };
   }, [fetchTemplates, resolution]);
 
-  const handleApiTemplateChange = (templateId: string) => {
-    if (templateId === selectedApiTemplate) return;
+  // Update the handleApiTemplateChange function to ensure proper template loading
+  const handleApiTemplateChange = useCallback(
+    (templateId: string) => {
+      if (templateId === selectedApiTemplate) return;
 
-    setSelectedApiTemplate(templateId);
-    fetchTemplateById(templateId);
-  };
+      console.log(
+        `Changing template from ${selectedApiTemplate} to ${templateId}`
+      );
+      setSelectedApiTemplate(templateId);
 
-  const handleResolutionChange = (value: string) => {
-    setResolution(value);
+      // Set loading state while fetching the new template
+      setIsLoading(true);
 
-    // Reset timer immediately on change
-    const option = resolutionOptions.find((opt) => opt.value === value);
-    setTimeLeft(option?.seconds || null);
-  };
+      // Fetch the template data
+      fetchTemplateById(templateId);
+    },
+    [selectedApiTemplate, fetchTemplateById]
+  );
 
+  const refreshData = useCallback(async () => {
+    if (isRefreshing) return;
+
+    try {
+      setIsRefreshing(true);
+      console.log("Refreshing data...");
+
+      // Reset timer to full value
+      const option = resolutionOptions.find((opt) => opt.value === resolution);
+      setTimeLeft(option?.seconds || null);
+
+      // If a template is selected, reload that template's charts
+      if (selectedApiTemplate) {
+        // Use a lighter approach that doesn't cause layout shifts
+        const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
+        if (template) {
+          const freshCharts = generateChartsFromTemplate(template, resolution);
+
+          // Update charts without causing a layout shift
+          setCharts((prevCharts) => {
+            return freshCharts.map((newChart, i) => {
+              // Keep layout from previous chart to prevent layout shifts
+              const existingChart = prevCharts.find(
+                (c) => c.id === newChart.id
+              );
+              if (existingChart && existingChart.layout) {
+                newChart.layout = existingChart.layout;
+              }
+              return newChart;
+            });
+          });
+        }
+      } else {
+        // Generate new chart data while preserving layouts
+        const newCharts = generateChartConfigs(resolution);
+        setCharts((prevCharts) => {
+          return newCharts.map((newChart, i) => {
+            if (i < prevCharts.length) {
+              // Keep the same layout but update the data
+              return {
+                ...newChart,
+                layout: prevCharts[i].layout,
+              };
+            }
+            return newChart;
+          });
+        });
+      }
+
+      toast.success("Data refreshed successfully");
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      toast.error("Failed to refresh data");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [selectedApiTemplate, resolution, apiTemplates]);
+
+  // Setup timer effect
+  useEffect(() => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // If auto-refresh is disabled (auto mode), don't start timer
+    if (!selectedResolutionSeconds) {
+      setTimeLeft(null);
+      return;
+    }
+
+    console.log(`Setting up timer for ${selectedResolutionSeconds} seconds`);
+
+    // Initialize timer
+    setTimeLeft(selectedResolutionSeconds);
+
+    // Start countdown
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          // Time's up - refresh data
+          console.log("Timer expired, refreshing data...");
+          refreshData();
+          return selectedResolutionSeconds;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Cleanup on unmount
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [selectedResolutionSeconds, refreshData]);
+
+  // Add a cleanup effect to prevent memory leaks when component unmounts
+  useEffect(() => {
+    return () => {
+      // Cleanup any timers when component unmounts
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Improved time formatter for better display
   const formatTimeLeft = useCallback((seconds: number | null) => {
     if (seconds === null) return "";
 
@@ -766,7 +843,7 @@ export default function Dashboard() {
     const secs = seconds % 60;
 
     if (mins > 0) {
-      return `${mins}m ${secs}s`;
+      return `${mins}m ${secs.toString().padStart(2, "0")}s`;
     }
     return `${secs}s`;
   }, []);
@@ -774,6 +851,60 @@ export default function Dashboard() {
   const handleManualRefresh = () => {
     refreshData();
   };
+
+  const handleResolutionChange = useCallback(
+    (value: string) => {
+      console.log(`Resolution changed to: ${value}`);
+      setResolution(value);
+
+      // Find the corresponding seconds for this resolution
+      const option = resolutionOptions.find((opt) => opt.value === value);
+      const seconds = option?.seconds || 0;
+
+      try {
+        // Reset timer immediately on change
+        setTimeLeft(seconds);
+
+        // Clear any existing timer first to prevent memory leaks
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+
+        // If there are seconds (not 'auto'), start a new timer
+        if (seconds > 0) {
+          console.log(`Starting new timer for ${seconds} seconds`);
+
+          // Start the new timer using a safer approach
+          timerRef.current = setInterval(() => {
+            setTimeLeft((prev) => {
+              if (prev === null) return null;
+              if (prev <= 1) {
+                // Time's up - refresh data without causing a full page reload
+                console.log("Timer expired, refreshing data...");
+                // Use a try-catch to handle any refresh errors
+                try {
+                  refreshData();
+                } catch (error) {
+                  console.error("Error in refresh timer:", error);
+                }
+                return seconds; // Reset timer
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+      } catch (error) {
+        console.error("Error setting up timer:", error);
+        // Ensure we don't leave the app in a broken state
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+        setTimeLeft(null);
+      }
+    },
+    [refreshData]
+  );
 
   const toggleKPI = (kpiId: string) => {
     setActiveKPIs((prev) => {
@@ -835,23 +966,21 @@ export default function Dashboard() {
           const bottomX = (layout.x + layout.w) * 10;
           const bottomY = (layout.y + layout.h) * 10;
 
+          // Type assertion for templateGraph to handle optional properties
+          const graph = templateGraph as any;
+
           return {
             top_xy_pos: `${topY}:${topX}`,
             bottom_xy_pos: `${bottomY}:${bottomX}`,
-            frequency: templateGraph.frequency || "5m",
+            frequency: graph.frequency || "5m",
             resolution: resolution || "1d",
-            graph_id: templateGraph.id,
-            graph_name: templateGraph.name,
-            primary_kpi_id: templateGraph.primaryKpi,
-            secondary_kpis: templateGraph.secondaryKpis.map((kpi) => ({
+            graph_id: graph.id,
+            graph_name: graph.name,
+            primary_kpi_id: graph.primaryKpi,
+            secondary_kpis: graph.secondaryKpis.map((kpi: string) => ({
               kpi_id: kpi,
             })),
-            // Include other properties from the original graph
-            ...(templateGraph.systems && {
-              systems: templateGraph.systems.map((system) => ({
-                system_id: system,
-              })),
-            }),
+            systems: graph.systems || [],
           };
         })
         .filter(Boolean);
@@ -922,7 +1051,7 @@ export default function Dashboard() {
       {/* <Sidebar /> */}
       <main className={`flex-1 overflow-y-auto transition-all duration-300`}>
         <div className="container mx-auto px-2 py-6">
-          {/* Updated dashboard header layout */}
+          {/* Dashboard header with title and save button */}
           <div className="flex flex-col mb-8">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -932,24 +1061,27 @@ export default function Dashboard() {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
                 Analytics Dashboard
               </h1>
-              <Button
-                onClick={saveLayout}
-                disabled={!layoutChanged || isSaving}
-                className={cn(
-                  "flex items-center gap-2",
-                  isSaving && "opacity-70 cursor-not-allowed"
-                )}
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save Layout
-              </Button>
+              {/* Only show save button when layout has changed */}
+              {layoutChanged && (
+                <Button
+                  onClick={saveLayout}
+                  disabled={!layoutChanged || isSaving}
+                  className={cn(
+                    "flex items-center gap-2",
+                    isSaving && "opacity-70 cursor-not-allowed"
+                  )}
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {isSaving ? "Saving..." : "Save Layout"}
+                </Button>
+              )}
             </motion.div>
 
-            {/* Updated grid layout with adjusted widths */}
+            {/* Controls grid */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1020,17 +1152,17 @@ export default function Dashboard() {
                 </Select>
               </div>
 
-              {/* Resolution Dropdown with Timer - 2 columns (narrower) */}
+              {/* Resolution Dropdown with Timer - Fixed position and improved alignment */}
               <div className="md:col-span-2">
-                <label className="text-xs text-muted-foreground mb-1 block flex justify-between">
+                <label className="text-xs text-muted-foreground mb-1 block flex items-center justify-between">
                   <span>Resolution</span>
                   {timeLeft !== null && (
-                    <span className="font-mono text-xs bg-primary/10 px-2 py-0.5 rounded-full truncate ml-1">
+                    <span className="font-mono text-xs bg-primary/10 px-2 py-0.5 rounded-full whitespace-nowrap">
                       {formatTimeLeft(timeLeft)}
                     </span>
                   )}
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 relative">
                   <Select
                     value={resolution}
                     onValueChange={handleResolutionChange}
@@ -1039,7 +1171,11 @@ export default function Dashboard() {
                     <SelectTrigger className="w-full h-10">
                       <SelectValue placeholder="Resolution" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent
+                      align="start"
+                      sideOffset={4}
+                      className="w-[--radix-select-trigger-width]"
+                    >
                       {resolutionOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -1056,6 +1192,7 @@ export default function Dashboard() {
                       isRefreshing && "opacity-70 cursor-not-allowed"
                     )}
                     title="Refresh data"
+                    aria-label="Refresh data"
                   >
                     {isRefreshing ? (
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -1081,20 +1218,33 @@ export default function Dashboard() {
             </motion.div>
           </div>
 
+          {/* Charts grid */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
             className="grid gap-6 mt-4"
           >
-            <DynamicLayout
-              charts={selectedCharts}
-              activeKPIs={activeKPIs}
-              kpiColors={themedKpiColors}
-              globalDateRange={globalDateRange} // This is properly passing the date range
-              theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
-              onLayoutChange={handleLayoutChange}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : charts.length === 0 ? (
+              <div className="flex items-center justify-center h-64">
+                <p className="text-muted-foreground">
+                  No charts available for this template
+                </p>
+              </div>
+            ) : (
+              <DynamicLayout
+                charts={charts}
+                activeKPIs={activeKPIs}
+                kpiColors={themedKpiColors}
+                globalDateRange={globalDateRange}
+                theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
+                onLayoutChange={handleLayoutChange}
+              />
+            )}
           </motion.div>
         </div>
       </main>

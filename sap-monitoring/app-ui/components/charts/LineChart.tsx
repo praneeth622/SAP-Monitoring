@@ -13,22 +13,20 @@ interface LineChartProps {
 
 const LineChart: React.FC<LineChartProps> = ({ data, title, className }) => {
   const options = useMemo(() => {
-    const dates = Array.from(new Set(data.map(item => item.date)))
     const categories = Array.from(new Set(data.map(item => item.category)))
 
     return {
       animation: true,
       tooltip: {
-        trigger: 'axis',
+        trigger: 'axis' as const,
         axisPointer: {
-          type: 'cross',
+          type: 'cross' as const,
           label: {
             backgroundColor: '#6a7985'
           }
         },
         formatter: (params: any) => {
-          const date = params[0].axisValue
-          let html = `<div style="font-weight: bold">${format(new Date(date), 'MMM d, yyyy')}</div>`
+          let html = `<div style="font-weight: bold">${params[0].name}</div>`
           params.forEach((param: any) => {
             html += `
               <div style="color: ${param.color}">
@@ -42,7 +40,7 @@ const LineChart: React.FC<LineChartProps> = ({ data, title, className }) => {
       toolbox: {
         feature: {
           dataZoom: {
-            yAxisIndex: 'none'
+            yAxisIndex: 'none' as 'none'
           },
           restore: {},
           saveAsImage: {}
@@ -70,45 +68,49 @@ const LineChart: React.FC<LineChartProps> = ({ data, title, className }) => {
         containLabel: true
       },
       xAxis: {
-        type: 'category',
+        type: 'category' as const,
         boundaryGap: false,
-        data: dates,
+        data: categories,
         axisLabel: {
-          formatter: (value: string) => format(new Date(value), 'MMM d')
+          formatter: (value: string) => value
         }
       },
       yAxis: {
-        type: 'value',
+        type: 'value' as const,
         axisLabel: {
-          formatter: (value: number) => 
-            value.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-              minimumFractionDigits: 0
-            })
+          formatter: (value: number) => `${value}`
         }
       },
-      series: categories.map(category => ({
-        name: category,
-        type: 'line',
-        sampling: 'lttb',
-        data: dates.map(date => {
-          const point = data.find(item => item.date === date && item.category === category)
+      series: [{
+        data: categories.map(category => {
+          const point = data.find(item => item.category === category)
           return point ? point.value : null
         }),
-        smooth: true,
-        showSymbol: false,
-        emphasis: {
-          focus: 'series'
-        },
-        areaStyle: {
-          opacity: 0.1
+        type: 'line' as const,
+        showBackground: true,
+        backgroundStyle: {
+          color: 'rgba(180, 180, 180, 0.2)'
         }
-      }))
+      }]
     }
   }, [data])
 
-  return <ChartContainer options={options} title={title} className={className} />
+  return (
+    <ChartContainer
+      options={options}
+      title={title}
+      className={className}
+      data={data}
+      type="line"
+      activeKPIs={['default']}
+      kpiColors={{
+        default: {
+          color: '#4F46E5',
+          name: title
+        }
+      }}
+    />
+  )
 }
 
 export default LineChart

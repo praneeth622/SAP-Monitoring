@@ -1,4 +1,7 @@
+import { DateRange } from "react-day-picker";
+
 export type ChartType = 'line' | 'bar';
+export type ThemeKey = 'default' | 'ocean' | 'forest' | 'sunset';
 
 export interface DataPoint {
   date: string;
@@ -32,14 +35,16 @@ export interface Graph {
   kpiGroup: string;
   primaryKpi: string;
   correlationKpis: string[];
-  layout: {
+  position: {
     x: number;
     y: number;
     w: number;
     h: number;
   };
   activeKPIs?: Set<string> | string[];
-  kpiColors?: Record<string, { color: string; name: string }>;
+  kpiColors?: Record<string, { color: string; name: string; icon?: any }>;
+  frequency?: string;
+  systems?: { system_id: string }[];
 }
 
 export interface ChartConfig {
@@ -50,7 +55,13 @@ export interface ChartConfig {
   width: number;
   height: number;
   activeKPIs?: Set<string> | string[];
-  kpiColors?: Record<string, { color: string; name: string }>;
+  kpiColors?: Record<string, { color: string; name: string; icon?: any }>;
+  layout?: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
 }
 
 export type TemplateKey = 'default' | 'single' | 'dual' | 'triple' | 'quad' | 'five' | 'six' | 'seven' | 'eight';
@@ -60,4 +71,25 @@ export interface TemplateConfig {
   name: string;
   description: string;
   charts: number[];
+}
+
+export interface DynamicLayoutProps {
+  charts: ChartConfig[];
+  activeKPIs?: Set<string> | string[];
+  kpiColors?: Record<string, { color: string; name: string; icon?: any }>;
+  globalDateRange?: DateRange | undefined;
+  theme?: {
+    name: string;
+    colors: string[];
+  };
+  onLayoutChange?: (layout: any) => void;
+}
+
+export interface ChartTheme {
+  name: string;
+  colors: string[];
+}
+
+export interface ChartThemes {
+  [key: string]: ChartTheme;
 }

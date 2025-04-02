@@ -9,7 +9,6 @@ import { DateRange } from "react-day-picker";
 import dayjs from "dayjs";
 import type { EChartsOption, ECharts } from "echarts";
 import { cn } from "@/lib/utils";
-import { Download } from "./ChartContainer";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -99,30 +98,27 @@ const ChartContainer = memo(
       const chart = echarts.init(chartContainerRef.current);
 
       // Add brush component during initialization
-      chart.setOption({
+      const initOptions = {
         brush: {
-          toolbox: ["rect", "polygon", "keep", "clear"],
+          toolbox: ["rect", "polygon", "keep", "clear"] as const,
           xAxisIndex: 0,
           brushLink: "all",
           outOfBrush: {
             colorAlpha: 0.1,
           },
-          brushStyle: {
-            borderWidth: 1,
-            color: "rgba(80, 100, 150, 0.2)",
-            borderColor: "rgba(80, 100, 150, 0.8)",
-          },
         },
         toolbox: {
           feature: {
             brush: {
-              type: ["rect", "polygon", "keep", "clear"],
+              type: ["rect", "polygon", "clear"] as const,
             },
           },
-          show: false, // Hide the built-in toolbox
+          show: false,
         },
-      });
+        timeline: undefined,
+      } satisfies echarts.EChartsOption;
 
+      chart.setOption(initOptions);
       chartRef.current = chart;
       setMounted(true);
 
@@ -200,41 +196,48 @@ const ChartContainer = memo(
             : null;
         });
 
-        return {
+        const baseSeriesConfig = {
           name: kpiColors?.[category]?.name || category,
-          type: type,
           data: categoryData,
           itemStyle: { color },
           emphasis: {
-            focus: "series",
+            focus: "series" as const,
             itemStyle: {
               shadowBlur: 10,
               shadowColor: color,
             },
           },
-          areaStyle: type === "line" ? { opacity: 0.2 } : undefined,
-          lineStyle: type === "line" ? { width: 2 } : undefined,
           smooth: true,
         };
-      });
+
+        return type === "line"
+          ? {
+              ...baseSeriesConfig,
+              type: "line" as const,
+              areaStyle: { opacity: 0.2 },
+              lineStyle: { width: 2 },
+            }
+          : {
+              ...baseSeriesConfig,
+              type: "bar" as const,
+            };
+      }) as echarts.SeriesOption[];
 
       const option: echarts.EChartsOption = {
         animation: true,
         grid: {
-          top: 5, // Reduced from 10 to minimize space below chart title
+          top: 5,
           right: 10,
-          bottom: 40, // Keep bottom space for the slider
-          left: 35, // Reduced from 50 to use more space on the left side
-          containLabel: true, // Important: this ensures labels are included in the layout calculation
+          bottom: 40,
+          left: 35,
+          containLabel: true,
         },
         tooltip: {
           trigger: "axis",
           axisPointer: { type: "cross" },
-          confine: true, // Keep tooltips within chart area
+          confine: true,
         },
-        // Keep the existing dataZoom configuration
         dataZoom: [
-          // Inside zoom functionality
           {
             type: "inside",
             start: 0,
@@ -242,72 +245,36 @@ const ChartContainer = memo(
             zoomOnMouseWheel: true,
             moveOnMouseMove: true,
           },
-          // Range selector slider
           {
             show: true,
             type: "slider",
-            bottom: 10, // Position from bottom
-            height: 15, // Height of slider
-            borderColor: "transparent",
-            backgroundColor: "rgba(200,200,200,0.15)",
-            fillerColor: "rgba(144,197,237,0.1)",
-            handleStyle: {
-              color: "#fff",
-              shadowBlur: 2,
-              shadowColor: "rgba(0,0,0,0.2)",
-              shadowOffsetX: 0,
-              shadowOffsetY: 1,
-            },
-            textStyle: {
-              fontSize: "0.7em", // Relative font size
-              color: "#666",
-              margin: 2,
-            },
-            moveHandleStyle: {
-              opacity: 0.3,
-            },
+            bottom: 10,
+            height: 15,
           },
         ],
         xAxis: {
           type: "category",
           data: dates,
           axisLabel: {
-            formatter: (value: string) => dayjs(value).format("MMM DD HH:mm"),
-            fontSize: 10, // Smaller font to avoid overflow
+            formatter: (value: string) => value,
+            margin: 15,
           },
         },
         yAxis: {
           type: "value",
-          splitLine: {
-            lineStyle: { color: "rgba(120, 120, 120, 0.1)" },
-          },
-          
-          nameLocation: "middle",
-          nameGap: 25, // Space between name and axis
-          nameTextStyle: {
-            fontSize: 10,
-            padding: [0, 0, 0, 0],
-          },
           axisLabel: {
-            formatter: (value: number) => {
-              if (value >= 1000000) return (value / 1000000).toFixed(1) + "M";
-              if (value >= 1000) return (value / 1000).toFixed(1) + "K";
-              return value;
-            },
-            fontSize: 10, // Smaller font size to save space
-            margin: 4, // Reduce margin to save space
-            align: "right", // Better alignment for y-axis values
+            formatter: (value: number) => value.toString(),
           },
         },
         series,
       };
 
-      try {
-        chartRef.current.setOption(option, { notMerge: true });
-      } catch (error) {
-        console.error("Error rendering chart:", error);
+      if (externalOptions) {
+        Object.assign(option, externalOptions);
       }
-    }, [filteredData, type, activeKPIs, kpiColors, theme]);
+
+      chartRef.current.setOption(option);
+    }, [filteredData, type, activeKPIs, kpiColors, theme, externalOptions]);
 
     useEffect(() => {
       if (!mounted || !chartRef.current) return;
@@ -323,23 +290,25 @@ const ChartContainer = memo(
       if (!chartRef.current) return;
 
       const option = chartRef.current.getOption();
-      const dataZoom = option.dataZoom?.[0] as any;
+      const dataZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+        ? option.dataZoom[0]
+        : undefined;
 
       if (!dataZoom) return;
 
-      const range = dataZoom.end - dataZoom.start;
-      const center = (dataZoom.start + dataZoom.end) / 2;
-      const newRange = Math.max(range * 0.5, 10); // Limit minimum range to 10%
-      const newStart = Math.max(0, center - newRange / 2);
-      const newEnd = Math.min(100, center + newRange / 2);
+      const start = dataZoom.start || 0;
+      const end = dataZoom.end || 100;
+      const range = end - start;
 
-      requestAnimationFrame(() => {
-        chartRef.current?.dispatchAction({
-          type: "dataZoom",
-          start: newStart,
-          end: newEnd,
-          xAxisIndex: 0,
-        });
+      if (range <= 10) return;
+
+      const newStart = Math.max(0, start + 10);
+      const newEnd = Math.min(100, end - 10);
+
+      chartRef.current.dispatchAction({
+        type: "dataZoom",
+        start: newStart,
+        end: newEnd,
       });
     }, []);
 
@@ -347,23 +316,25 @@ const ChartContainer = memo(
       if (!chartRef.current) return;
 
       const option = chartRef.current.getOption();
-      const dataZoom = option.dataZoom?.[0] as any;
+      const dataZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+        ? option.dataZoom[0] as { start?: number; end?: number }
+        : undefined;
 
       if (!dataZoom) return;
 
-      const range = dataZoom.end - dataZoom.start;
-      const center = (dataZoom.start + dataZoom.end) / 2;
-      const newRange = Math.min(range * 2, 100); // Limit maximum range to 100%
-      const newStart = Math.max(0, center - newRange / 2);
-      const newEnd = Math.min(100, center + newRange / 2);
+      const start = dataZoom.start || 0;
+      const end = dataZoom.end || 100;
+      const range = end - start;
 
-      requestAnimationFrame(() => {
-        chartRef.current?.dispatchAction({
-          type: "dataZoom",
-          start: newStart,
-          end: newEnd,
-          xAxisIndex: 0,
-        });
+      if (range >= 100) return;
+
+      const newStart = Math.max(0, start - 10);
+      const newEnd = Math.min(100, end + 10);
+
+      chartRef.current.dispatchAction({
+        type: "dataZoom",
+        start: newStart,
+        end: newEnd,
       });
     }, []);
 
@@ -641,10 +612,10 @@ const ChartContainer = memo(
       if (!mounted || !chartRef.current) return;
 
       const currentOption = chartRef.current.getOption();
-      const updatedOption: echarts.EChartsOption = {
+      const updatedOption = {
         ...currentOption,
         brush: {
-          toolbox: ["rect", "polygon", "keep", "clear"],
+          toolbox: ["rect", "polygon", "keep", "clear"] as const,
           xAxisIndex: 0,
           brushLink: "all",
           outOfBrush: {
@@ -654,16 +625,14 @@ const ChartContainer = memo(
         toolbox: {
           feature: {
             brush: {
-              type: ["rect", "polygon", "clear"],
+              type: ["rect", "polygon", "clear"] as const,
             },
           },
           show: false,
         },
-      };
+      } as const;
 
-      chartRef.current.setOption(updatedOption, {
-        replaceMerge: ["brush", "toolbox"],
-      });
+      chartRef.current.setOption(updatedOption);
     }, [mounted]);
 
     useEffect(() => {
