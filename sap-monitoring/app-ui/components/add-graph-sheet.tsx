@@ -498,10 +498,10 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               </SelectTrigger>
               <SelectContent>
                 {kpis.map((kpi) => (
-                  <Tooltip key={kpi.kpi_name}>
+                  <Tooltip key={kpi.kpi_desc}>
                     <TooltipTrigger asChild>
-                      <SelectItem value={kpi.kpi_name}>
-                        {kpi.kpi_name}
+                      <SelectItem value={kpi.kpi_desc}>
+                        {kpi.kpi_desc}
                       </SelectItem>
                     </TooltipTrigger>
                     {kpi.kpi_desc && (
@@ -659,9 +659,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                             .map((kpi) => (
                               <SelectItem
                                 key={`${corrKpi.id}-kpi-${kpi.kpi_name}`}
-                                value={kpi.kpi_name}
+                                value={kpi.kpi_desc}
                               >
-                                {kpi.kpi_name}
+                                {kpi.kpi_desc}
                               </SelectItem>
                             ))}
                       </SelectContent>

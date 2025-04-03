@@ -50,6 +50,7 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { toast } from "sonner";
 import axios from "axios";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 interface User {
   user_id: string;
@@ -697,101 +698,154 @@ const UpdateUserSheet = ({
   userToEdit,
   role,
   setRole,
-}: UpdateUserSheetProps) => (
-  <Sheet open={open} onOpenChange={onClose}>
-    <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
-      <SheetHeader>
-        <SheetTitle>Edit User</SheetTitle>
-        <p className="text-sm text-muted-foreground">
-          Update the user details below.
-        </p>
-      </SheetHeader>
-      <form onSubmit={onSubmit} className="space-y-6">
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+}: UpdateUserSheetProps) => {
+  // State to manage multiple role selections
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(
+    role ? [role] : userToEdit?.role ? [userToEdit.role] : []
+  );
+
+  // Update parent component's role state when selections change
+  useEffect(() => {
+    if (selectedRoles.length > 0) {
+      setRole(selectedRoles.join(", ")); // Format for API as comma-separated
+    } else {
+      setRole("");
+    }
+  }, [selectedRoles, setRole]);
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
+        <SheetHeader>
+          <SheetTitle>Edit User</SheetTitle>
+          <p className="text-sm text-muted-foreground">
+            Update the user details below.
+          </p>
+        </SheetHeader>
+        <form onSubmit={onSubmit} className="space-y-6">
+          <div className="space-y-4">
+            {/* User ID field */}
             <div>
               <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-                First Name <span className="text-red-500">*</span>
+                User ID
               </label>
               <Input
-                name="firstname"
-                placeholder="Enter First name"
+                name="userId"
+                value={userToEdit?.user_id || ""}
+                disabled={true}
+                className="bg-muted/50"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                User ID cannot be changed
+              </p>
+            </div>
+
+            {/* First name and last name fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-foreground/90 block mb-1.5">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  name="firstname"
+                  placeholder="Enter First name"
+                  required
+                  disabled={isLoading}
+                  defaultValue={userToEdit ? userToEdit.name.split(" ")[0] : ""}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground/90 block mb-1.5">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  name="lastname"
+                  placeholder="Enter Last Name"
+                  required
+                  disabled={isLoading}
+                  defaultValue={
+                    userToEdit
+                      ? userToEdit.name.split(" ").slice(1).join(" ")
+                      : ""
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Email field */}
+            <div>
+              <label className="text-sm font-medium text-foreground/90 block mb-1.5">
+                E-Mail <span className="text-red-500">*</span>
+              </label>
+              <Input
+                name="email"
+                type="email"
+                placeholder="Enter your E-mail"
                 required
                 disabled={isLoading}
-                defaultValue={userToEdit?.firstName || ""}
+                defaultValue={userToEdit?.mail_id || ""}
               />
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-                Last Name <span className="text-red-500">*</span>
-              </label>
-              <Input
-                name="lastname"
-                placeholder="Enter Last Name"
-                required
+            {/* Role field - Multi-select */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="role">
+                  Role(s) <span className="text-red-500">*</span>
+                </Label>
+              </div>
+
+              <MultiSelect
+                options={[
+                  { label: "User", value: "User" },
+                  { label: "Admin", value: "Admin" },
+                  { label: "Manager", value: "Manager" },
+                  { label: "Developer", value: "Developer" },
+                  { label: "Analyst", value: "Analyst" },
+                ]}
+                value={selectedRoles}
+                onChange={setSelectedRoles}
+                placeholder="Select roles"
                 disabled={isLoading}
-                defaultValue={userToEdit?.lastName || ""}
               />
+
+              {selectedRoles.length === 0 && (
+                <p className="text-xs text-red-500">
+                  Please select at least one role
+                </p>
+              )}
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground/90 block mb-1.5">
-              E-Mail
-            </label>
-            <Input
-              name="email"
-              placeholder="Enter your E-mail"
+          <div className="flex justify-end gap-4 pt-6 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
               disabled={isLoading}
-              defaultValue={userToEdit?.email || ""}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="role">Role</Label>
-            </div>
-            <Select
-              value={role || userToEdit?.role || ""}
-              onValueChange={setRole}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="User">User</SelectItem>
-                <SelectItem value="Admin">Admin</SelectItem>
-                <SelectItem value="Manager">Manager</SelectItem>
-              </SelectContent>
-            </Select>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isLoading || selectedRoles.length === 0}
+            >
+              {isLoading ? (
+                <>
+                  <span className="animate-spin mr-2">⌛</span>
+                  Updating...
+                </>
+              ) : (
+                "Update User"
+              )}
+            </Button>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-4 pt-6 border-t border-border">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={isLoading}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <span className="animate-spin mr-2">⌛</span>
-                Updating...
-              </>
-            ) : (
-              "Update User"
-            )}
-          </Button>
-        </div>
-      </form>
-    </SheetContent>
-  </Sheet>
-);
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+};
 
 // Utility function for variant classes
 const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
