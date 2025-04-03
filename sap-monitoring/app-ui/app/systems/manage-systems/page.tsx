@@ -1252,10 +1252,10 @@ const SystemsTable = ({
                       <PopoverWarningButton
                         hint="System must be active to enable polling"
                         disabled={true}
-                        className="flex items-center justify-start p-0 m-0 bg-transparent"
+                        className="flex items-center justify-start p-0 m-0 cursor-not-allowed"
                       >
-                        <div className="h-6 w-11 rounded-full bg-gray-400 dark:bg-gray-700 flex items-center p-1 cursor-not-allowed opacity-40">
-                          <div className="h-4 w-4 rounded-full bg-gray-400 dark:bg-gray-500 shadow-lg transform translate-x-0"></div>
+                        <div className="h-6 w-11 rounded-full bg-gray-700 dark:bg-gray-500 flex items-center p-1 cursor-not-allowed opacity-40">
+                          <div className="h-4 w-4 rounded-full bg-gray-400 dark:bg-black-900 shadow-lg transform translate-x-0"></div>
                         </div>
                       </PopoverWarningButton>
                     </div>

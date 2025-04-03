@@ -51,6 +51,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import axios from "axios";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { cn } from "@/lib/utils";
 
 interface User {
   user_id: string;
@@ -113,6 +114,45 @@ interface UpdateUserSheetProps {
   role: string;
   setRole: (role: string) => void;
 }
+
+const roleColorMap: Record<string, {
+  bg: string,
+  text: string,
+  darkBg: string,
+  darkText: string
+}> = {
+  'admin': {
+    bg: 'bg-purple-50',
+    text: 'text-yellow-600',
+    darkBg: 'dark:bg-yellow-900/30',
+    darkText: 'dark:text-yellow-400'
+  },
+  'user': {
+    bg: 'bg-blue-50',
+    text: 'text-blue-600',
+    darkBg: 'dark:bg-blue-900/30',
+    darkText: 'dark:text-blue-400'
+  },
+  'viewer': {
+    bg: 'bg-green-50',
+    text: 'text-green-600',
+    darkBg: 'dark:bg-green-900/30',
+    darkText: 'dark:text-green-400'
+  },
+  'manager': {
+    bg: 'bg-amber-50',
+    text: 'text-amber-600',
+    darkBg: 'dark:bg-amber-900/30',
+    darkText: 'dark:text-amber-400'
+  },
+  // Default color for any other role
+  'default': {
+    bg: 'bg-gray-50',
+    text: 'text-gray-600',
+    darkBg: 'dark:bg-gray-900/30',
+    darkText: 'dark:text-gray-400'
+  }
+};
 
 export default function ManageUsersPage() {
   const [isAddUserSheetOpen, setIsAddUserSheetOpen] = useState(false);
@@ -467,7 +507,13 @@ const UsersTable = ({
               <TableCell>{user.name}</TableCell>
               <TableCell>{user.mail_id}</TableCell>
               <TableCell>
-                <div className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                <div className={cn(
+                  "inline-flex px-2 py-1 rounded-full text-xs font-medium",
+                  roleColorMap[user.role.toLowerCase()]?.bg || roleColorMap.default.bg,
+                  roleColorMap[user.role.toLowerCase()]?.text || roleColorMap.default.text,
+                  roleColorMap[user.role.toLowerCase()]?.darkBg || roleColorMap.default.darkBg,
+                  roleColorMap[user.role.toLowerCase()]?.darkText || roleColorMap.default.darkText
+                )}>
                   {user.role}
                 </div>
               </TableCell>
@@ -562,6 +608,33 @@ const DeleteConfirmationDialog = ({
   </AlertDialog>
 );
 
+const RoleSelect = ({ value, onChange }: { value: string, onChange: (value: string) => void }) => (
+  <Select value={value} onValueChange={onChange}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select role" />
+    </SelectTrigger>
+    <SelectContent>
+      {Object.keys(roleColorMap).filter(role => role !== 'default').map((role) => (
+        <SelectItem
+          key={role}
+          value={role}
+          className={cn(
+            "flex items-center gap-2",
+            roleColorMap[role].text
+          )}
+        >
+          <div className={cn(
+            "w-2 h-2 rounded-full",
+            roleColorMap[role].bg,
+            roleColorMap[role].text
+          )} />
+          {role.charAt(0).toUpperCase() + role.slice(1)}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+);
+
 const AddUserSheet = ({
   open,
   onClose,
@@ -650,16 +723,7 @@ const AddUserSheet = ({
                 Role <span className="text-red-500">*</span>
               </Label>
             </div>
-            <Select value={role} onValueChange={setRole} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="User">User</SelectItem>
-                <SelectItem value="Admin">Admin</SelectItem>
-                <SelectItem value="Manager">Manager</SelectItem>
-              </SelectContent>
-            </Select>
+            <RoleSelect value={role} onChange={setRole} />
           </div>
         </div>
 

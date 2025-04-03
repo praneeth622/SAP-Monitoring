@@ -128,9 +128,13 @@ export default function ConfigDashboard() {
   const [kpiSearchTerm, setKpiSearchTerm] = useState("");
 
   const filteredKpis = (kpis: KPI[]) => {
-    if (!kpiSearchTerm) return kpis;
+    // First filter by active KPI groups
+    const activeKpis = kpis.filter(kpi => activeKpiGroups.has(kpi.kpi_group));
 
-    return kpis.filter(
+    // Then apply search filter if there's a search term
+    if (!kpiSearchTerm) return activeKpis;
+
+    return activeKpis.filter(
       (kpi) =>
         kpi.kpi_name.toLowerCase().includes(kpiSearchTerm.toLowerCase()) ||
         kpi.kpi_desc.toLowerCase().includes(kpiSearchTerm.toLowerCase()) ||
@@ -1041,6 +1045,31 @@ export default function ConfigDashboard() {
             )
           );
         }
+
+        // Check if all KPI groups under this monitoring area are now inactive
+        if (!willBeActive) {
+          // Get all KPI groups for this monitoring area
+          const allGroupsForArea = [...osKpiGroup, ...jobsKpiGroup].filter(
+            (g) => g.mon_area === monArea
+          );
+
+          // Check if any KPI group for this area is still active
+          const anyGroupActive = allGroupsForArea.some(
+            (g) => g.kpi_grp_name === groupName ? willBeActive : activeKpiGroups.has(g.kpi_grp_name)
+          );
+
+          // If no KPI group is active and the monitoring area is currently active, deactivate it
+          if (!anyGroupActive && activeAreas.has(monArea)) {
+            console.log(`All KPI groups under ${monArea} are inactive. Automatically deactivating monitoring area.`);
+
+            // Call the monitoring area toggle function to deactivate it
+            await handleMonitoringAreaToggle(monArea);
+
+            toast.info(`Monitoring Area Auto-Deactivated`, {
+              description: `${monArea} monitoring area has been automatically deactivated because all its KPI groups are inactive.`,
+            });
+          }
+        }
       } else {
         throw new Error(
           `Failed to ${willBeActive ? "activate" : "deactivate"} group`
@@ -1272,9 +1301,11 @@ const KpiSettingsSheet = ({
 
       if (response.status === 200) {
         // Extract filter names from response
+        console.log("Filter names response:", response.data);
         const filterNames = response.data.map(
           (item: { filter_name: string }) => item.filter_name
         );
+        console.log("Filter names:", filterNames);
         setAvailableFilters(filterNames);
 
         // Initialize with one empty filter if there are available filters
@@ -1675,7 +1706,7 @@ const KpiSettingsSheet = ({
                                     key={filterName}
                                     value={filterName}
                                   >
-                                    {filterName}
+                                    {filterValues}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
