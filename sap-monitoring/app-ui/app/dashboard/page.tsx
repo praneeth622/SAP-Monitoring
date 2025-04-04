@@ -41,6 +41,7 @@ import {
   Graph,
 } from "@/types";
 import { toast } from "sonner";
+import { useChartTheme } from "@/components/charts/hooks/useChartTheme";
 
 // Add API template interface
 interface ApiTemplate {
@@ -532,13 +533,13 @@ export default function Dashboard() {
         if (theme) {
           templateCharts.forEach((chart) => {
             // Update chart KPI colors with current theme colors
-            if (chart.kpiColors) {
-              const kpiEntries = Object.entries(chart.kpiColors);
+            if ('kpiColors' in chart && chart.kpiColors) {
+              const kpiEntries = Object.entries(chart.kpiColors as Record<string, { color: string }>);
               kpiEntries.forEach(
                 ([kpiId, kpiInfo]: [string, any], colorIndex) => {
                   // Apply theme color based on index
                   if (kpiInfo && typeof kpiInfo === "object") {
-                    chart.kpiColors[kpiId].color =
+                    (chart.kpiColors as Record<string, { color: string }>)[kpiId].color =
                       theme.colors[colorIndex % theme.colors.length];
                   }
                 }
@@ -751,7 +752,10 @@ export default function Dashboard() {
                 (c) => c.id === newChart.id
               );
               if (existingChart && existingChart.layout) {
-                newChart.layout = existingChart.layout;
+                return {
+                    ...newChart,
+                    layout: existingChart.layout
+                };
               }
               return newChart;
             });
@@ -1166,7 +1170,6 @@ export default function Dashboard() {
                   <Select
                     value={resolution}
                     onValueChange={handleResolutionChange}
-                    className="flex-1"
                   >
                     <SelectTrigger className="w-full h-10">
                       <SelectValue placeholder="Resolution" />
