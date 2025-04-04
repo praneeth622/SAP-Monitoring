@@ -282,10 +282,30 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  const isKpiSelected = (kpiName: string) => {
+    if (formData.kpi === kpiName) return true;
+    return formData.correlationKpis.some((corrKpi) => corrKpi.kpi === kpiName);
+  };
+
+  const canAddMoreCorrelationKpis = () => {
+    if (formData.correlationKpis.length === 0) return true;
+    
+    const lastCorrelationKpi = formData.correlationKpis[formData.correlationKpis.length - 1];
+    return lastCorrelationKpi.monitoringArea && lastCorrelationKpi.kpiGroup && lastCorrelationKpi.kpi;
+  };
+
   const handleKPIChange = (value: string) => {
+    if (isKpiSelected(value)) {
+      toast({
+        title: "Error",
+        description: "This KPI is already selected",
+        variant: "destructive",
+      });
+      return;
+    }
     setFormData((prev) => ({
       ...prev,
-      kpi: value,
+      kpi: value
     }));
   };
 
@@ -311,7 +331,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   ) => {
     setFormData((prev) => {
       const newCorrelationKpis = [...prev.correlationKpis];
-
+      
       // Reset dependent fields when parent field changes
       if (field === "monitoringArea") {
         newCorrelationKpis[index] = {
@@ -330,6 +350,20 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         };
         // Fetch KPIs for this KPI group
         fetchCorrelationKpis(value);
+      } else if (field === "kpi") {
+        // Check for duplicate KPIs
+        if (isKpiSelected(value)) {
+          toast({
+            title: "Error",
+            description: "This KPI is already selected",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        newCorrelationKpis[index] = {
+          ...newCorrelationKpis[index],
+          [field]: value,
+        };
       } else {
         newCorrelationKpis[index] = {
           ...newCorrelationKpis[index],
@@ -349,11 +383,6 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       ...prev,
       correlationKpis: prev.correlationKpis.filter((_, i) => i !== index),
     }));
-  };
-
-  const isKpiSelected = (kpiName: string) => {
-    if (formData.kpi === kpiName) return true;
-    return formData.correlationKpis.some((corrKpi) => corrKpi.kpi === kpiName);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -595,11 +624,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                     <Select
                       value={corrKpi.monitoringArea}
                       onValueChange={(value) =>
-                        handleCorrelationKpiChange(
-                          index,
-                          "monitoringArea",
-                          value
-                        )
+                        handleCorrelationKpiChange(index, "monitoringArea", value)
                       }
                     >
                       <SelectTrigger>
@@ -655,10 +680,10 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                       <SelectContent>
                         {corrKpi.kpiGroup &&
                           correlationKpis[corrKpi.kpiGroup]
-                            ?.filter((kpi) => !isKpiSelected(kpi.kpi_name))
+                            ?.filter(kpi => !isKpiSelected(kpi.kpi_desc))
                             .map((kpi) => (
                               <SelectItem
-                                key={`${corrKpi.id}-kpi-${kpi.kpi_name}`}
+                                key={`${corrKpi.id}-kpi-${kpi.kpi_desc}`}
                                 value={kpi.kpi_desc}
                               >
                                 {kpi.kpi_desc}
@@ -685,7 +710,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 size="sm"
                 onClick={addCorrelationKpi}
                 disabled={
-                  formData.correlationKpis.length >= 5 || !formData.kpiGroup
+                  formData.correlationKpis.length >= 5 || 
+                  !formData.kpiGroup ||
+                  !canAddMoreCorrelationKpis()
                 }
               >
                 <Plus className="w-4 h-4 mr-1" />
