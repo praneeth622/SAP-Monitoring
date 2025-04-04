@@ -129,7 +129,7 @@ export default function ConfigDashboard() {
 
   const filteredKpis = (kpis: KPI[]) => {
     // First filter by active KPI groups
-    const activeKpis = kpis.filter(kpi => activeKpiGroups.has(kpi.kpi_group));
+    const activeKpis = kpis.filter((kpi) => activeKpiGroups.has(kpi.kpi_group));
 
     // Then apply search filter if there's a search term
     if (!kpiSearchTerm) return activeKpis;
@@ -648,7 +648,19 @@ export default function ConfigDashboard() {
         {[...osKpiGroup, ...jobsKpiGroup]
           .filter((group) => {
             // Only show groups for active monitoring areas
-            return activeAreas.has(group.mon_area);
+            const isActiveArea = activeAreas.has(group.mon_area);
+
+            // Apply search filter if there is a search term
+            const matchesSearch =
+              kpiSearch.trim() === "" ||
+              group.kpi_grp_name
+                .toLowerCase()
+                .includes(kpiSearch.toLowerCase()) ||
+              group.kpi_grp_desc
+                .toLowerCase()
+                .includes(kpiSearch.toLowerCase());
+
+            return isActiveArea && matchesSearch;
           })
           .map((group) => {
             // Initialize frequencies if not already set
@@ -1054,13 +1066,17 @@ export default function ConfigDashboard() {
           );
 
           // Check if any KPI group for this area is still active
-          const anyGroupActive = allGroupsForArea.some(
-            (g) => g.kpi_grp_name === groupName ? willBeActive : activeKpiGroups.has(g.kpi_grp_name)
+          const anyGroupActive = allGroupsForArea.some((g) =>
+            g.kpi_grp_name === groupName
+              ? willBeActive
+              : activeKpiGroups.has(g.kpi_grp_name)
           );
 
           // If no KPI group is active and the monitoring area is currently active, deactivate it
           if (!anyGroupActive && activeAreas.has(monArea)) {
-            console.log(`All KPI groups under ${monArea} are inactive. Automatically deactivating monitoring area.`);
+            console.log(
+              `All KPI groups under ${monArea} are inactive. Automatically deactivating monitoring area.`
+            );
 
             // Call the monitoring area toggle function to deactivate it
             await handleMonitoringAreaToggle(monArea);
@@ -1706,7 +1722,7 @@ const KpiSettingsSheet = ({
                                     key={filterName}
                                     value={filterName}
                                   >
-                                    {filterValues}
+                                    {filterName}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

@@ -197,7 +197,7 @@ export function Sidebar() {
         router.push("/user-management/user-access");
         break;
       case "Manage User":
-        router.push("/user-management/Manage-user");
+        router.push("/user-management/manage-user");
         break;
       default:
         break;
