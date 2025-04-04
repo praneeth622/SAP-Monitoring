@@ -37,99 +37,114 @@ export const generateTimeSeriesData = (days: number): DataPoint[] => {
 export const generateMultipleDataSets = (count: number, resolution = 'auto'): DataPoint[][] => {
   const datasets: DataPoint[][] = [];
   const categories = ["Revenue", "Users"];
-  const days = 30;
-  const now = new Date();
-  const startDate = subDays(now, days);
   
-  // Determine the step (in hours) based on resolution
-  let hourStep = 2; // default (2-hour intervals)
+  // More aggressive optimization for time range based on resolution
+  let days = 30; // default
+  let dataPoints = 500; // Default max data points
   
+  // Optimize data points based on resolution
   switch(resolution) {
     case '1m':
-      hourStep = 1/60; // 1 minute intervals
+      days = 1; // For 1-minute resolution, only generate 1 day of data
+      dataPoints = 180; // Limit to 3 hours of minute data (180 points)
       break;
     case '5m':
-      hourStep = 5/60; // 5 minute intervals
+      days = 2; 
+      dataPoints = 300; // Limit to 25 hours of 5-minute data
       break;
     case '15m':
-      hourStep = 15/60; // 15 minute intervals
+      days = 3;
+      dataPoints = 288; // 3 days of 15-minute data
       break;
     case '1h':
-      hourStep = 1; // 1 hour intervals
+      days = 7;
+      dataPoints = 168; // 7 days of hourly data
       break;
     case '1d':
-      hourStep = 24; // daily intervals
+      days = 30;
+      dataPoints = 30; // 30 days of daily data
       break;
     case 'auto':
     default:
-      hourStep = 2; // 2 hour intervals (default)
+      days = 30;
+      dataPoints = 360; // 30 days with 12 points per day (2-hour intervals)
+      break;
+  }
+  
+  const now = new Date();
+  const startDate = subDays(now, days);
+  
+  // Determine the step (in minutes) based on resolution
+  let minuteStep: number;
+  
+  switch(resolution) {
+    case '1m':
+      minuteStep = 1;
+      break;
+    case '5m':
+      minuteStep = 5;
+      break;
+    case '15m':
+      minuteStep = 15;
+      break;
+    case '1h':
+      minuteStep = 60;
+      break;
+    case '1d':
+      minuteStep = 24 * 60;
+      break;
+    case 'auto':
+    default:
+      minuteStep = 120; // 2 hour intervals (default)
       break;
   }
 
+  // Calculate total minutes in the date range
+  const totalMinutes = days * 24 * 60;
+  
+  // Calculate step size to get closest to desired number of data points
+  const adjustedStep = Math.max(minuteStep, Math.floor(totalMinutes / dataPoints));
+  
+  // Optimize data point generation for high-frequency data
+  const generateDataPoint = (date: Date, category: string): DataPoint => {
+    const hourOfDay = date.getHours() + (date.getMinutes() / 60);
+    
+    // Create more realistic patterns
+    const baseValue = category === "Revenue" ? 5000 : 1000;
+    const hourlyVariation = category === "Revenue" ? hourOfDay * 100 : hourOfDay * 20;
+    const weekendMultiplier = [0, 6].includes(date.getDay()) ? 0.7 : 1;
+    const randomVariation = Math.random() * 0.4 + 0.8; // Random variation between 0.8 and 1.2
+    
+    const value = Math.floor(
+      (baseValue + hourlyVariation) * weekendMultiplier * randomVariation
+    );
+    
+    return {
+      date: format(date, "yyyy-MM-dd HH:mm:ss"),
+      category,
+      value,
+    };
+  };
+
   for (let i = 0; i < count; i++) {
     const data: DataPoint[] = [];
-    let currentDate = startDate;
-
-    while (currentDate <= now) {
-      // For hourStep < 1, we need to handle the iteration differently
-      if (hourStep < 1) {
-        const minutesInDay = 24 * 60;
-        const minuteStep = hourStep * 60;
-        const stepsPerDay = minutesInDay / minuteStep;
-        
-        for (let step = 0; step < stepsPerDay; step++) {
-          const minutesToAdd = step * minuteStep;
-          const dateWithMinutes = addHours(currentDate, minutesToAdd / 60);
-          
-          categories.forEach((category) => {
-            const minuteOfDay = (dateWithMinutes.getHours() * 60) + dateWithMinutes.getMinutes();
-            const hourOfDay = minuteOfDay / 60;
-            
-            // Create more realistic patterns
-            const baseValue = category === "Revenue" ? 5000 : 1000;
-            const hourlyVariation = category === "Revenue" ? hourOfDay * 100 : hourOfDay * 20;
-            const weekendMultiplier = [0, 6].includes(dateWithMinutes.getDay()) ? 0.7 : 1;
-            const randomVariation = Math.random() * 0.4 + 0.8; // Random variation between 0.8 and 1.2
-            
-            const value = Math.floor(
-              (baseValue + hourlyVariation) * weekendMultiplier * randomVariation
-            );
-            
-            data.push({
-              date: format(dateWithMinutes, "yyyy-MM-dd HH:mm:ss"),
-              category,
-              value,
-            });
-          });
-        }
-      } else {
-        // Original hourly loop for hourStep >= 1
-        for (let hour = 0; hour < 24; hour += hourStep) {
-          const dateWithHour = addHours(currentDate, hour);
-          
-          categories.forEach((category) => {
-            // Create more realistic patterns
-            const baseValue = category === "Revenue" ? 5000 : 1000;
-            const hourlyVariation = category === "Revenue" ? hour * 100 : hour * 20;
-            const weekendMultiplier = [0, 6].includes(dateWithHour.getDay()) ? 0.7 : 1;
-            const randomVariation = Math.random() * 0.4 + 0.8; // Random variation between 0.8 and 1.2
-            
-            const value = Math.floor(
-              (baseValue + hourlyVariation) * weekendMultiplier * randomVariation
-            );
-            
-            data.push({
-              date: format(dateWithHour, "yyyy-MM-dd HH:mm:ss"),
-              category,
-              value,
-            });
-          });
-        }
-      }
+    const currentDate = new Date(startDate);
+    
+    // Single optimized loop for all resolutions
+    for (let minute = 0; minute < totalMinutes; minute += adjustedStep) {
+      const dateWithMinutes = new Date(currentDate.getTime() + minute * 60 * 1000);
       
-      // Always advance by full day
-      currentDate = addHours(currentDate, 24);
+      // Skip if beyond now
+      if (dateWithMinutes > now) break;
+      
+      categories.forEach(category => {
+        data.push(generateDataPoint(dateWithMinutes, category));
+      });
+      
+      // Safety check to prevent excessive data points
+      if (data.length >= dataPoints * categories.length) break;
     }
+    
     datasets.push(data);
   }
 

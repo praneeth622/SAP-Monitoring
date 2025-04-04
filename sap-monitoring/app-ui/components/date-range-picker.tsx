@@ -177,24 +177,47 @@ export function DateRangePicker({
   const displayText = React.useMemo(() => {
     if (!date?.from) return "Select dates";
 
-    const fromText = dayjs(date.from).format("MMM DD, YYYY");
-    const toText = date.to ? dayjs(date.to).format("MMM DD, YYYY") : "";
+    const fromText = dayjs(date.from).format("MMM D");
+    const toText = date.to ? dayjs(date.to).format("MMM D, YYYY") : "";
 
-    if (showTime && date?.from) {
-      const fromTime = dayjs(date.from).format("HH:mm");
-      const toTime = date.to ? dayjs(date.to).format("HH:mm") : "";
-
-      if (date.to && dayjs(date.from).isSame(date.to, "day")) {
-        // Same day, show date once
-        return `${fromText} (${fromTime} - ${toTime})`;
+    // Use more compact format for display
+    if (date.to) {
+      const sameYear = dayjs(date.from).isSame(date.to, 'year');
+      const sameMonth = dayjs(date.from).isSame(date.to, 'month');
+      
+      if (showTime) {
+        const fromTime = dayjs(date.from).format("HH:mm");
+        const toTime = date.to ? dayjs(date.to).format("HH:mm") : "";
+        
+        if (dayjs(date.from).isSame(date.to, "day")) {
+          // Same day, show date once with time
+          return `${dayjs(date.from).format("MMM D")} (${fromTime}-${toTime})`;
+        }
+        
+        // Different days with time
+        if (sameYear && sameMonth) {
+          return `${dayjs(date.from).format("MMM D")} ${fromTime}-${dayjs(date.to).format("D")} ${toTime}`;
+        }
+        
+        return `${fromText} ${fromTime}-${toText} ${toTime}`;
       }
-
-      return date.to
-        ? `${fromText} ${fromTime} - ${toText} ${toTime}`
-        : fromText;
+      
+      // Without time
+      if (sameYear && sameMonth) {
+        // Same month and year, just show once: "Jan 1-15, 2023"
+        return `${dayjs(date.from).format("MMM D")}-${dayjs(date.to).format("D, YYYY")}`;
+      } else if (sameYear) {
+        // Same year, different month: "Jan 1-Feb 15, 2023"
+        return `${fromText}-${dayjs(date.to).format("MMM D, YYYY")}`;
+      }
+      // Different years: "Dec 25, 2022-Jan 10, 2023"
+      return `${dayjs(date.from).format("MMM D, YYYY")}-${toText}`;
     }
 
-    return date.to ? `${fromText} - ${toText}` : fromText;
+    // Single date
+    return showTime 
+      ? `${dayjs(date.from).format("MMM D, YYYY")} ${dayjs(date.from).format("HH:mm")}`
+      : dayjs(date.from).format("MMM D, YYYY");
   }, [date, showTime]);
 
   // Reset functionality
@@ -212,13 +235,14 @@ export function DateRangePicker({
           <Button
             id="date"
             variant={"outline"}
+            size="sm"
             className={cn(
-              "w-full justify-start text-left font-normal h-9",
+              "justify-start text-left font-normal h-8 px-2 text-xs bg-background/50 border-muted flex items-center gap-1.5",
               !date && "text-muted-foreground"
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {displayText}
+            <CalendarIcon className="h-3 w-3 text-muted-foreground" />
+            <span className="truncate max-w-[140px]">{displayText}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-2" align={align}>

@@ -6,6 +6,8 @@ import { DraggableChart } from "./DraggableChart";
 import { DataPoint } from "@/types";
 import _ from "lodash";
 import { DateRange } from "react-day-picker";
+import { AnimatePresence, motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -19,6 +21,8 @@ interface ChartConfig {
   activeKPIs?: Set<string> | string[];
   kpiColors?: Record<string, { color: string; name: string; icon?: any }>;
   layout?: { x: number; y: number; w: number; h: number };
+  hideControls?: boolean;
+  onDeleteGraph?: (id: string) => void;
 }
 
 interface DynamicLayoutProps {
@@ -31,6 +35,8 @@ interface DynamicLayoutProps {
     colors: string[];
   };
   onLayoutChange?: (layout: Layout[]) => void;
+  hideControls?: boolean;
+  onDeleteGraph?: (id: string) => void;
 }
 
 export function DynamicLayout({
@@ -40,6 +46,8 @@ export function DynamicLayout({
   globalDateRange,
   theme,
   onLayoutChange,
+  hideControls = false,
+  onDeleteGraph,
 }: DynamicLayoutProps) {
   const [layouts, setLayouts] = useState({});
   const [currentBreakpoint, setCurrentBreakpoint] = useState("lg");
@@ -47,31 +55,34 @@ export function DynamicLayout({
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const layoutRef = useRef<Layout[]>([]);
+  const [fullscreenChartId, setFullscreenChartId] = useState<string | null>(null);
+
+  // Handle fullscreen toggle from child charts
+  const handleFullscreenChange = useCallback((chartId: string, isFullscreen: boolean) => {
+    setFullscreenChartId(isFullscreen ? chartId : null);
+  }, []);
 
   const getChartSize = (total: number) => {
     // Enhanced size calculation for different number of graphs
     switch (total) {
       case 1:
-        return { w: 12, h: 10 }; // Full width, taller for single chart
+        return { w: 12, h: 7 }; // Reduced height from 8 to 7
       case 2:
-        return { w: 6, h: 9 }; // Two charts side by side
+        return { w: 6, h: 6 }; // Reduced height from 7 to 6
       case 3:
-        return { w: 4, h: 8 }; // Three charts in a row
+        return { w: 4, h: 5 }; // Reduced height from 6 to 5
       case 4:
-        return { w: 6, h: 6 }; // 2x2 grid
+        return { w: 6, h: 4 }; // Reduced height from 5 to 4
       case 5:
       case 6:
-        return { w: 4, h: 6 }; // 2x3 grid
+        return { w: 4, h: 4 }; // Reduced height from 5 to 4
       case 7:
       case 8:
-        return { w: 4, h: 5 }; // 2x4 grid
+        return { w: 4, h: 3 }; // Reduced height from 4 to 3
       case 9:
-      case 10:
-      case 11:
-      case 12:
-        return { w: 3, h: 5 }; // 3x4 grid
+        return { w: 4, h: 3 }; // Reduced height from 4 to 3
       default:
-        return { w: 3, h: 4 }; // For many charts, make them smaller
+        return { w: 3, h: 3 }; // Reduced height from 4 to 3
     }
   };
 
@@ -224,7 +235,9 @@ export function DynamicLayout({
 
   // Initialize layouts only once on mount
   useEffect(() => {
-    if (mounted) return;
+    if (!mounted) {
+      setMounted(true);
+    }
 
     const layout = calculateOptimalLayout();
     const initialLayouts = {
@@ -237,8 +250,16 @@ export function DynamicLayout({
 
     setLayouts(initialLayouts);
     layoutRef.current = layout;
-    setMounted(true);
-  }, [calculateOptimalLayout, mounted]);
+    
+    // Add a small delay to allow the grid to properly render after layout changes
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
+    
+    resizeTimeoutRef.current = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 100);
+  }, [calculateOptimalLayout, mounted, charts.length]);
 
   // Cleanup function
   useEffect(() => {
@@ -267,59 +288,163 @@ export function DynamicLayout({
     []
   );
 
+  // Get the fullscreen chart if one is set
+  const fullscreenChart = fullscreenChartId 
+    ? charts.find(chart => chart.id === fullscreenChartId) 
+    : null;
+
+  // Added optimization to ensure all charts resize properly after chart count changes
+  useEffect(() => {
+    // Skip if not mounted yet
+    if (!mounted) return;
+    
+    // Special handling for when charts are added or removed
+    const layout = calculateOptimalLayout();
+    const updatedLayouts = {
+      lg: layout,
+      md: layout.map((item) => ({ ...item, w: Math.min(12, item.w * 2) })),
+      sm: layout.map((item) => ({ ...item, w: 12, x: 0 })),
+      xs: layout.map((item) => ({ ...item, w: 12, x: 0 })),
+      xxs: layout.map((item) => ({ ...item, w: 12, x: 0 })),
+    };
+
+    setLayouts(updatedLayouts);
+    layoutRef.current = layout;
+    
+    // Schedule multiple resize events to ensure charts render properly
+    const scheduleResize = (delay: number) => {
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, delay);
+    };
+    
+    // Stagger resize events to catch various rendering stages
+    scheduleResize(50);
+    scheduleResize(200);
+    scheduleResize(500);
+  }, [charts.length, calculateOptimalLayout, mounted]);
+
   if (!mounted) return null;
 
-  // Add more detailed logging in the render function
-  return (
-    <div className="relative w-full h-full">
-      {charts.length === 0 && (
-        <div className="p-4 text-center text-muted-foreground">
-          No charts to display. Please add some charts to your template.
-        </div>
-      )}
-
-      <ResponsiveGridLayout
-        className="layout"
-        layouts={layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-        cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }}
-        rowHeight={50} // Increased from 40 for better height
-        margin={[12, 12]}
-        containerPadding={[12, 12]}
-        onLayoutChange={handleLayoutChange}
-        useCSSTransforms={true}
-        isResizable={true}
-        isDraggable={true}
-        draggableHandle=".cursor-grab"
-        compactType="vertical"
-        preventCollision={false}
-      >
-        {charts.map((chart) => {
-          console.log(
-            `Rendering chart: ${chart.title}, data points: ${chart.data.length}`
-          );
-          return (
-            <div
-              key={chart.id}
-              className="bg-card rounded-lg shadow-sm border border-border overflow-hidden"
-            >
+  // When in fullscreen mode, render just the fullscreen chart
+  if (fullscreenChart) {
+    return (
+      <div className="relative w-full h-full">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40" />
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-8"
+        >
+          <div className="w-[90vw] h-[85vh] max-w-[1600px] max-h-[900px] relative">
+            <div className="bg-card rounded-lg shadow-xl border border-border overflow-hidden w-full h-full">
               <DraggableChart
-                id={chart.id}
-                data={chart.data}
-                type={chart.type}
-                title={chart.title}
-                width={chart.width}
-                height={chart.height}
-                activeKPIs={chart.activeKPIs || activeKPIs}
-                kpiColors={chart.kpiColors || kpiColors}
+                id={fullscreenChart.id}
+                data={fullscreenChart.data}
+                type={fullscreenChart.type}
+                title={fullscreenChart.title}
+                width={fullscreenChart.width}
+                height={fullscreenChart.height}
+                activeKPIs={fullscreenChart.activeKPIs || activeKPIs}
+                kpiColors={fullscreenChart.kpiColors || kpiColors}
                 globalDateRange={globalDateRange}
                 theme={theme}
                 className="h-full"
+                onFullscreenChange={handleFullscreenChange}
+                isFullscreenMode={true}
+                hideControls={fullscreenChart.hideControls || hideControls}
+                onDeleteGraph={fullscreenChart.onDeleteGraph || onDeleteGraph}
               />
             </div>
-          );
-        })}
-      </ResponsiveGridLayout>
-    </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Regular grid layout for non-fullscreen mode
+  return (
+    <AnimatePresence>
+      <motion.div 
+        className="relative w-full h-full"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        {charts.length === 0 && (
+          <div className="p-4 text-center text-muted-foreground">
+            No charts to display. Please add some charts to your template.
+          </div>
+        )}
+
+        <ResponsiveGridLayout
+          className="layout"
+          layouts={layouts}
+          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+          cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }}
+          rowHeight={40} // Reduced from 50 to 40
+          margin={[6, 6]} // Reduced from [8, 8] to [6, 6]
+          containerPadding={[4, 4]}
+          onLayoutChange={handleLayoutChange}
+          onResize={() => {
+            // Force charts to rerender after resize events
+            if (resizeTimeoutRef.current) {
+              clearTimeout(resizeTimeoutRef.current);
+            }
+            resizeTimeoutRef.current = setTimeout(() => {
+              window.dispatchEvent(new Event('resize'));
+            }, 50);
+          }}
+          useCSSTransforms={true}
+          isResizable={true}
+          isDraggable={true}
+          draggableHandle=".cursor-grab"
+          compactType="vertical"
+          preventCollision={false}
+          measureBeforeMount={false}
+          useStaticSize={false}
+          key={`grid-${charts.length}`} // Force rerender when charts count changes
+          style={{
+            padding: '0 4px',
+            margin: '0 auto',
+            maxWidth: '100%',
+            width: '100%',
+          }}
+        >
+          {charts.map((chart) => {
+            return (
+              <div
+                key={chart.id}
+                className={cn(
+                  "bg-card rounded-lg shadow-sm border border-border overflow-hidden",
+                  fullscreenChartId && chart.id !== fullscreenChartId && "opacity-0"
+                )}
+              >
+                <DraggableChart
+                  id={chart.id}
+                  data={chart.data}
+                  type={chart.type}
+                  title={chart.title}
+                  width={chart.width}
+                  height={chart.height}
+                  activeKPIs={chart.activeKPIs || activeKPIs}
+                  kpiColors={chart.kpiColors || kpiColors}
+                  globalDateRange={globalDateRange}
+                  theme={theme}
+                  className="h-full"
+                  onFullscreenChange={handleFullscreenChange}
+                  isFullscreenMode={chart.id === fullscreenChartId}
+                  hideControls={chart.hideControls || hideControls}
+                  onDeleteGraph={chart.onDeleteGraph || onDeleteGraph}
+                />
+              </div>
+            );
+          })}
+        </ResponsiveGridLayout>
+      </motion.div>
+    </AnimatePresence>
   );
 }

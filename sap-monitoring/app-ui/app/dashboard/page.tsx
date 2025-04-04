@@ -9,6 +9,9 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  Clock,
+  Check,
+  Calendar,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { generateMultipleDataSets } from "@/utils/data";
@@ -41,6 +44,15 @@ import {
   Graph,
 } from "@/types";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { format } from "date-fns";
 
 // Add API template interface
 interface ApiTemplate {
@@ -90,23 +102,23 @@ interface TemplateGraph {
   systems?: { system_id: string }[];
 }
 
-const chartThemes: Record<ThemeKey, ChartTheme> = {
+const chartThemes = {
   default: {
-    name: "Default",
-    colors: ["#4F46E5", "#10B981", "#F59E0B", "#EF4444"],
+    name: 'Default',
+    colors: ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981']
   },
   ocean: {
-    name: "Ocean",
-    colors: ["#0EA5E9", "#14B8A6", "#FBBF24", "#F87171"],
+    name: 'Ocean',
+    colors: ['#0EA5E9', '#0D9488', '#0284C7', '#0369A1']
   },
   forest: {
-    name: "Forest",
-    colors: ["#22C55E", "#84CC16", "#EAB308", "#F97316"],
+    name: 'Forest',
+    colors: ['#22C55E', '#15803D', '#84CC16', '#4D7C0F']
   },
   sunset: {
-    name: "Sunset",
-    colors: ["#F97316", "#EAB308", "#84CC16", "#22C55E"],
-  },
+    name: 'Sunset',
+    colors: ['#F97316', '#EA580C', '#DC2626', '#9F1239']
+  }
 };
 
 const kpiColors = {
@@ -286,6 +298,14 @@ const generateChartConfigs = (resolution = "auto") => {
     title: chartTitles[i],
     width: 400,
     height: 400,
+    kpiColors: {} as Record<string, { color: string; name: string; icon?: any }>,
+    activeKPIs: new Set<string>(),
+    layout: {
+      x: 0,
+      y: 0,
+      w: 6,
+      h: 4
+    }
   }));
 };
 
@@ -472,6 +492,21 @@ export default function Dashboard() {
   // Add states for layout saving
   const [layoutChanged, setLayoutChanged] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Add a new state for auto-refresh interval
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(null);
+  const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
+  const autoRefreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [autoRefreshDropdownOpen, setAutoRefreshDropdownOpen] = useState(false);
+  
+  // Auto-refresh options in seconds
+  const autoRefreshOptions = [
+    { label: "1 minute", value: 60 },
+    { label: "5 minutes", value: 300 },
+    { label: "15 minutes", value: 900 },
+    { label: "1 hour", value: 3600 },
+    { label: "24 hours", value: 86400 },
+  ];
 
   // Get seconds for the selected resolution
   const selectedResolutionSeconds = useMemo(() => {
@@ -736,52 +771,66 @@ export default function Dashboard() {
       const option = resolutionOptions.find((opt) => opt.value === resolution);
       setTimeLeft(option?.seconds || null);
 
-      // If a template is selected, reload that template's charts
-      if (selectedApiTemplate) {
-        // Use a lighter approach that doesn't cause layout shifts
-        const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
-        if (template) {
-          const freshCharts = generateChartsFromTemplate(template, resolution);
+      // Use requestAnimationFrame to ensure smooth UI during data update
+      requestAnimationFrame(() => {
+        // If a template is selected, reload that template's charts
+        if (selectedApiTemplate) {
+          // Use a lighter approach that doesn't cause layout shifts
+          const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
+          if (template) {
+            // Generate new charts with minimal computation
+            const freshCharts = generateChartsFromTemplate(template, resolution);
 
-          // Update charts without causing a layout shift
+            // Update charts without causing a layout shift
+            setCharts((prevCharts) => {
+              return freshCharts.map((newChart, i) => {
+                // Keep layout and other properties from previous chart to prevent layout shifts
+                const existingChart = prevCharts.find((c) => c.id === newChart.id);
+                if (existingChart) {
+                  return {
+                    ...newChart,
+                    layout: existingChart.layout,
+                    // Preserve other stable properties
+                    kpiColors: existingChart.kpiColors || newChart.kpiColors,
+                    activeKPIs: existingChart.activeKPIs || newChart.activeKPIs,
+                  };
+                }
+                return newChart;
+              });
+            });
+          }
+        } else {
+          // Generate new chart data while preserving layouts
+          const newCharts = generateChartConfigs(resolution);
           setCharts((prevCharts) => {
-            return freshCharts.map((newChart, i) => {
-              // Keep layout from previous chart to prevent layout shifts
-              const existingChart = prevCharts.find(
-                (c) => c.id === newChart.id
-              );
-              if (existingChart && existingChart.layout) {
-                newChart.layout = existingChart.layout;
+            return newCharts.map((newChart, i) => {
+              if (i < prevCharts.length) {
+                // Keep the same layout but update the data
+                return {
+                  ...newChart,
+                  layout: prevCharts[i].layout,
+                  // Preserve other stable properties
+                  kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
+                  activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
+                };
               }
               return newChart;
             });
           });
         }
-      } else {
-        // Generate new chart data while preserving layouts
-        const newCharts = generateChartConfigs(resolution);
-        setCharts((prevCharts) => {
-          return newCharts.map((newChart, i) => {
-            if (i < prevCharts.length) {
-              // Keep the same layout but update the data
-              return {
-                ...newChart,
-                layout: prevCharts[i].layout,
-              };
-            }
-            return newChart;
-          });
-        });
-      }
 
-      toast.success("Data refreshed successfully");
+        // Show success message after charts are updated
+        setTimeout(() => {
+          toast.success("Data refreshed successfully");
+          setIsRefreshing(false);
+        }, 100);
+      });
     } catch (error) {
       console.error("Error refreshing data:", error);
       toast.error("Failed to refresh data");
-    } finally {
       setIsRefreshing(false);
     }
-  }, [selectedApiTemplate, resolution, apiTemplates]);
+  }, [selectedApiTemplate, resolution, apiTemplates, generateChartConfigs]);
 
   // Setup timer effect
   useEffect(() => {
@@ -792,29 +841,13 @@ export default function Dashboard() {
     }
 
     // If auto-refresh is disabled (auto mode), don't start timer
-    if (!selectedResolutionSeconds) {
+    if (!selectedResolutionSeconds || resolution === 'auto') {
       setTimeLeft(null);
       return;
     }
 
-    console.log(`Setting up timer for ${selectedResolutionSeconds} seconds`);
-
-    // Initialize timer
-    setTimeLeft(selectedResolutionSeconds);
-
-    // Start countdown
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev === null) return null;
-        if (prev <= 1) {
-          // Time's up - refresh data
-          console.log("Timer expired, refreshing data...");
-          refreshData();
-          return selectedResolutionSeconds;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    // Do not automatically start refresh timers for regular resolution changes
+    // Only manual refresh is allowed
 
     // Cleanup on unmount
     return () => {
@@ -822,18 +855,74 @@ export default function Dashboard() {
         clearInterval(timerRef.current);
       }
     };
-  }, [selectedResolutionSeconds, refreshData]);
+  }, [selectedResolutionSeconds, resolution]);
 
-  // Add a cleanup effect to prevent memory leaks when component unmounts
-  useEffect(() => {
-    return () => {
-      // Cleanup any timers when component unmounts
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+  // Modified refresh handler to work better with resolution changes
+  const handleManualRefresh = useCallback((isAuto = false) => {
+    // Show loading state
+    setIsRefreshing(true);
+    
+    // Use requestAnimationFrame for smoother UI updates
+    requestAnimationFrame(() => {
+      try {
+        console.log(isAuto ? "Auto-refreshing data..." : "Manually refreshing data...");
+        
+        // If a template is selected, reload that template's charts
+        if (selectedApiTemplate) {
+          const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
+          if (template) {
+            const freshCharts = generateChartsFromTemplate(template, resolution);
+            
+            // Update charts while preserving layouts
+            setCharts((prevCharts) => {
+              return freshCharts.map((newChart) => {
+                const existingChart = prevCharts.find((c) => c.id === newChart.id);
+                if (existingChart) {
+                  return {
+                    ...newChart,
+                    layout: existingChart.layout,
+                    kpiColors: existingChart.kpiColors || newChart.kpiColors,
+                    activeKPIs: existingChart.activeKPIs || newChart.activeKPIs,
+                  };
+                }
+                return newChart;
+              });
+            });
+          }
+        } else {
+          // Generate new chart data while preserving layouts
+          const newCharts = generateChartConfigs(resolution);
+          setCharts((prevCharts) => {
+            return newCharts.map((newChart, i) => {
+              if (i < prevCharts.length) {
+                return {
+                  ...newChart,
+                  layout: prevCharts[i].layout,
+                  kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
+                  activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
+                };
+              }
+              return newChart;
+            });
+          });
+        }
+        
+        // Show different toast message depending on whether it was an auto-refresh or manual
+        if (isAuto) {
+          const option = autoRefreshOptions.find(opt => opt.value === autoRefreshInterval);
+          const intervalText = option ? option.label : `${autoRefreshInterval} seconds`;
+          toast.success(`Auto-refreshed data (every ${intervalText})`);
+        } else {
+          toast.success("Data refreshed successfully");
+        }
+      } catch (error) {
+        console.error("Error refreshing data:", error);
+        toast.error("Failed to refresh data");
+      } finally {
+        setIsRefreshing(false);
       }
-    };
-  }, []);
+    });
+  }, [selectedApiTemplate, apiTemplates, resolution, generateChartConfigs, autoRefreshInterval, autoRefreshOptions]);
 
   // Improved time formatter for better display
   const formatTimeLeft = useCallback((seconds: number | null) => {
@@ -848,62 +937,80 @@ export default function Dashboard() {
     return `${secs}s`;
   }, []);
 
-  const handleManualRefresh = () => {
-    refreshData();
-  };
-
   const handleResolutionChange = useCallback(
     (value: string) => {
       console.log(`Resolution changed to: ${value}`);
+      
+      // Set the resolution state immediately
       setResolution(value);
-
-      // Find the corresponding seconds for this resolution
-      const option = resolutionOptions.find((opt) => opt.value === value);
-      const seconds = option?.seconds || 0;
-
-      try {
-        // Reset timer immediately on change
-        setTimeLeft(seconds);
-
-        // Clear any existing timer first to prevent memory leaks
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
-
-        // If there are seconds (not 'auto'), start a new timer
-        if (seconds > 0) {
-          console.log(`Starting new timer for ${seconds} seconds`);
-
-          // Start the new timer using a safer approach
-          timerRef.current = setInterval(() => {
-            setTimeLeft((prev) => {
-              if (prev === null) return null;
-              if (prev <= 1) {
-                // Time's up - refresh data without causing a full page reload
-                console.log("Timer expired, refreshing data...");
-                // Use a try-catch to handle any refresh errors
-                try {
-                  refreshData();
-                } catch (error) {
-                  console.error("Error in refresh timer:", error);
+      
+      // Show loading state
+      setIsRefreshing(true);
+      
+      // Use requestAnimationFrame for smoother UI updates
+      requestAnimationFrame(() => {
+        try {
+          // Clear any existing timer to prevent unexpected refreshes
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          
+          // Reset timer display
+          setTimeLeft(null);
+          
+          // Immediately update the chart data with the new resolution
+          if (selectedApiTemplate) {
+            const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
+            if (template) {
+              // Generate new charts with the updated resolution without creating new layout
+              const freshCharts = generateChartsFromTemplate(template, value);
+              
+              // Update charts while preserving layouts and other properties
+              setCharts((prevCharts) => {
+                return freshCharts.map((newChart, i) => {
+                  const existingChart = prevCharts.find((c) => c.id === newChart.id);
+                  if (existingChart) {
+                    return {
+                      ...newChart,
+                      layout: existingChart.layout,
+                      kpiColors: existingChart.kpiColors || newChart.kpiColors,
+                      activeKPIs: existingChart.activeKPIs || newChart.activeKPIs,
+                    };
+                  }
+                  return newChart;
+                });
+              });
+            }
+          } else {
+            // Generate new chart data while preserving layouts
+            const newCharts = generateChartConfigs(value);
+            setCharts((prevCharts) => {
+              return newCharts.map((newChart, i) => {
+                if (i < prevCharts.length) {
+                  return {
+                    ...newChart,
+                    layout: prevCharts[i].layout,
+                    kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
+                    activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
+                  };
                 }
-                return seconds; // Reset timer
-              }
-              return prev - 1;
+                return newChart;
+              });
             });
-          }, 1000);
+          }
+          
+          // Success notification and complete loading
+          toast.success(`Resolution changed to ${resolutionOptions.find(opt => opt.value === value)?.label || value}`);
+        } catch (error) {
+          console.error("Error changing resolution:", error);
+          toast.error("Error changing resolution");
+        } finally {
+          setIsRefreshing(false);
         }
-      } catch (error) {
-        console.error("Error setting up timer:", error);
-        // Ensure we don't leave the app in a broken state
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-        }
-        setTimeLeft(null);
-      }
+      });
     },
-    [refreshData]
+    [selectedApiTemplate, apiTemplates, generateChartConfigs]
   );
 
   const toggleKPI = (kpiId: string) => {
@@ -1031,6 +1138,121 @@ export default function Dashboard() {
     }
   }, [selectedApiTemplate, charts, apiTemplates, layoutChanged, resolution]);
 
+  // Function to format time remaining until next refresh
+  const formatTimeRemaining = useCallback((targetTime: Date | null) => {
+    if (!targetTime) return "";
+    
+    const now = new Date();
+    const diffMs = targetTime.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return "Refreshing...";
+    
+    const diffSec = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(diffSec / 60);
+    const seconds = diffSec % 60;
+    
+    if (minutes > 0) {
+      return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+    }
+    return `${seconds}s`;
+  }, []);
+
+  // Set up auto-refresh timer
+  useEffect(() => {
+    // Clear any existing timer
+    if (autoRefreshTimerRef.current) {
+      clearInterval(autoRefreshTimerRef.current);
+      autoRefreshTimerRef.current = null;
+    }
+    
+    // If no interval set, don't start timer
+    if (!autoRefreshInterval) {
+      setNextRefreshTime(null);
+      return;
+    }
+    
+    // Set next refresh time
+    const nextRefresh = new Date();
+    nextRefresh.setSeconds(nextRefresh.getSeconds() + autoRefreshInterval);
+    setNextRefreshTime(nextRefresh);
+    
+    // Start refresh timer
+    let lastTick = Date.now();
+    
+    const refreshTimerTick = () => {
+      const now = Date.now();
+      lastTick = now;
+      
+      setNextRefreshTime(prev => {
+        if (!prev) return null;
+        
+        // Calculate remaining time
+        const remaining = prev.getTime() - now;
+        
+        // If timer expired, trigger refresh
+        if (remaining <= 0) {
+          // Use the existing handleManualRefresh function, passing true to indicate auto-refresh
+          handleManualRefresh(true);
+          
+          // Set new target time
+          const newTarget = new Date();
+          newTarget.setSeconds(newTarget.getSeconds() + autoRefreshInterval);
+          return newTarget;
+        }
+        
+        return prev;
+      });
+    };
+    
+    // Check every second
+    autoRefreshTimerRef.current = setInterval(refreshTimerTick, 1000);
+    
+    // Cleanup on unmount
+    return () => {
+      if (autoRefreshTimerRef.current) {
+        clearInterval(autoRefreshTimerRef.current);
+      }
+    };
+  }, [autoRefreshInterval, handleManualRefresh]);
+
+  // Handle selecting a new auto-refresh interval
+  const handleSelectAutoRefresh = useCallback((seconds: number) => {
+    setAutoRefreshInterval(seconds);
+    setAutoRefreshDropdownOpen(false);
+    
+    // Show toast notification
+    const option = autoRefreshOptions.find(opt => opt.value === seconds);
+    if (option) {
+      toast.success(`Auto-refresh set to ${option.label}`);
+    }
+  }, [autoRefreshOptions]);
+
+  // Stop auto-refresh
+  const stopAutoRefresh = useCallback(() => {
+    setAutoRefreshInterval(null);
+    if (autoRefreshTimerRef.current) {
+      clearInterval(autoRefreshTimerRef.current);
+      autoRefreshTimerRef.current = null;
+    }
+    toast.success("Auto-refresh stopped");
+  }, []);
+
+  // Add this function to calculate the progress percentage for the timer visualization
+  // Function to calculate progress percentage for circular indicator
+  const getProgressPercentage = useCallback((targetTime: Date, intervalSeconds: number) => {
+    if (!targetTime) return 0;
+    
+    const now = new Date();
+    const diffMs = targetTime.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return 100;
+    
+    const elapsedMs = (intervalSeconds * 1000) - diffMs;
+    const percentage = (elapsedMs / (intervalSeconds * 1000)) * 100;
+    
+    return Math.min(Math.max(percentage, 0), 100);
+  }, []);
+
   if (!mounted || isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -1050,170 +1272,248 @@ export default function Dashboard() {
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
       {/* <Sidebar /> */}
       <main className={`flex-1 overflow-y-auto transition-all duration-300`}>
-        <div className="container mx-auto px-2 py-6">
+        <div className="container mx-auto px-6 py-6 max-w-[1600px]">
           {/* Dashboard header with title and save button */}
-          <div className="flex flex-col mb-8">
+          <div className="flex flex-col mb-4">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="mb-6 flex justify-between items-center"
+              className="flex justify-between items-center bg-card/80 rounded-lg px-3 py-2 mb-4 shadow-sm border border-border/30"
             >
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
-                Analytics Dashboard
-              </h1>
-              {/* Only show save button when layout has changed */}
-              {layoutChanged && (
-                <Button
-                  onClick={saveLayout}
-                  disabled={!layoutChanged || isSaving}
-                  className={cn(
-                    "flex items-center gap-2",
-                    isSaving && "opacity-70 cursor-not-allowed"
-                  )}
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  {isSaving ? "Saving..." : "Save Layout"}
-                </Button>
-              )}
-            </motion.div>
-
-            {/* Controls grid */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4"
-            >
-              {/* Templates - 3 columns */}
-              <div className="md:col-span-3">
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Templates
-                </label>
-                <Select
-                  value={selectedApiTemplate}
-                  onValueChange={handleApiTemplateChange}
-                  disabled={apiTemplates.length === 0}
-                >
-                  <SelectTrigger className="w-full h-10">
-                    <SelectValue placeholder="Select template" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {apiTemplates.map((template) => (
-                      <SelectItem
-                        key={template.id}
-                        value={template.id}
-                        className="flex items-center gap-2"
-                      >
-                        <span>{template.name}</span>
-                        {template.isDefault && (
-                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Default
-                          </span>
-                        )}
-                        {template.isFavorite && (
-                          <span className="text-yellow-500">★</span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Theme Selection - 3 columns */}
-              <div className="md:col-span-3">
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Chart Theme
-                </label>
-                <Select value={selectedTheme} onValueChange={setSelectedTheme}>
-                  <SelectTrigger className="w-full h-10">
-                    <SelectValue placeholder="Select theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(chartThemes).map(([key, theme]) => (
-                      <SelectItem key={key} value={key}>
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-0.5">
-                            {theme.colors.map((color, i) => (
-                              <div
-                                key={i}
-                                className="w-4 h-4 rounded-sm"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                          </div>
-                          <span className="ml-2">{theme.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Resolution Dropdown with Timer - Fixed position and improved alignment */}
-              <div className="md:col-span-2">
-                <label className="text-xs text-muted-foreground mb-1 block flex items-center justify-between">
-                  <span>Resolution</span>
-                  {timeLeft !== null && (
-                    <span className="font-mono text-xs bg-primary/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-                      {formatTimeLeft(timeLeft)}
-                    </span>
-                  )}
-                </label>
-                <div className="flex gap-2 relative">
-                  <Select
-                    value={resolution}
-                    onValueChange={handleResolutionChange}
-                    className="flex-1"
-                  >
-                    <SelectTrigger className="w-full h-10">
-                      <SelectValue placeholder="Resolution" />
-                    </SelectTrigger>
-                    <SelectContent
-                      align="start"
-                      sideOffset={4}
-                      className="w-[--radix-select-trigger-width]"
+              <div className="flex items-center gap-4">
+                <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight whitespace-nowrap">
+                  SAP Analytics
+                </h1>
+                
+                <div className="flex items-center gap-2">
+                  {/* Template selector - compact design */}
+                  <div className="flex items-center">
+                    <Select
+                      value={selectedApiTemplate}
+                      onValueChange={handleApiTemplateChange}
+                      disabled={apiTemplates.length === 0}
                     >
-                      {resolutionOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <button
-                    onClick={handleManualRefresh}
-                    disabled={isRefreshing}
-                    className={cn(
-                      "h-10 w-10 rounded-md border flex items-center justify-center",
-                      "bg-background hover:bg-muted/50 transition-colors",
-                      isRefreshing && "opacity-70 cursor-not-allowed"
-                    )}
-                    title="Refresh data"
-                    aria-label="Refresh data"
-                  >
-                    {isRefreshing ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </button>
+                      <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[140px] border-muted">
+                        <SelectValue placeholder="Select template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {apiTemplates.map((template) => (
+                          <SelectItem
+                            key={template.id}
+                            value={template.id}
+                            className="text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{template.name}</span>
+                              {template.isDefault && (
+                                <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
+                                  Default
+                                </span>
+                              )}
+                              {template.isFavorite && (
+                                <span className="text-yellow-500">★</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Theme selector - icon with dropdown */}
+                  <div className="flex items-center">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-8 w-8 border-muted bg-background/50 p-1.5">
+                          <div className="relative w-full h-full rounded-full overflow-hidden">
+                            <div className="absolute inset-0" style={{ 
+                              background: `conic-gradient(${chartThemes[selectedTheme as keyof typeof chartThemes].colors[0]} 0%, 
+                                           ${chartThemes[selectedTheme as keyof typeof chartThemes].colors[1]} 25%, 
+                                           ${chartThemes[selectedTheme as keyof typeof chartThemes].colors[2]} 50%, 
+                                           ${chartThemes[selectedTheme as keyof typeof chartThemes].colors[3]} 75%, 
+                                           ${chartThemes[selectedTheme as keyof typeof chartThemes].colors[0]} 100%)` 
+                            }}></div>
+                            <div className="absolute inset-[30%] rounded-full bg-background shadow-sm"></div>
+                          </div>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[180px]">
+                        <DropdownMenuLabel className="text-xs">Chart Theme</DropdownMenuLabel>
+                        {Object.entries(chartThemes).map(([key, theme]) => (
+                          <DropdownMenuItem 
+                            key={key} 
+                            className="flex items-center justify-between cursor-pointer text-xs"
+                            onClick={() => setSelectedTheme(key)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="relative w-5 h-5 rounded-full overflow-hidden">
+                                <div className="absolute inset-0" style={{ 
+                                  background: `conic-gradient(${theme.colors[0]} 0%, 
+                                               ${theme.colors[1]} 25%, 
+                                               ${theme.colors[2]} 50%, 
+                                               ${theme.colors[3]} 75%, 
+                                               ${theme.colors[0]} 100%)` 
+                                }}></div>
+                                <div className="absolute inset-[30%] rounded-full bg-background shadow-sm"></div>
+                              </div>
+                              <span>{theme.name}</span>
+                            </div>
+                            {selectedTheme === key && (
+                              <Check className="h-3 w-3 text-primary" />
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Resolution selector - compact dropdown */}
+                  <div className="flex items-center">
+                    <Select
+                      value={resolution}
+                      onValueChange={handleResolutionChange}
+                    >
+                      <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <SelectValue placeholder="Resolution" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {resolutionOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value} className="text-xs">
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Date Range - compact inline design */}
+                  <div className="flex items-center">
+                    <DateRangePicker
+                      date={globalDateRange}
+                      onDateChange={setGlobalDateRange}
+                      align="end"
+                      className="w-auto"
+                      showTime={false}
+                    />
+                  </div>
+
+                  {/* Auto-refresh dropdown button */}
+                  <div className="relative">
+                    <DropdownMenu open={autoRefreshDropdownOpen} onOpenChange={setAutoRefreshDropdownOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          disabled={isRefreshing}
+                          variant="outline"
+                          size="icon"
+                          className={cn(
+                            "h-8 w-8 rounded-md border relative bg-background/50 border-muted",
+                            autoRefreshInterval && "ring-1 ring-primary/40",
+                            isRefreshing && "opacity-70 cursor-not-allowed"
+                          )}
+                          title={autoRefreshInterval ? `Auto-refresh: ${formatTimeRemaining(nextRefreshTime)}` : "Refresh data"}
+                          aria-label={autoRefreshInterval ? `Auto-refresh: ${formatTimeRemaining(nextRefreshTime)}` : "Refresh data"}
+                        >
+                          {isRefreshing ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                          ) : (
+                            <>
+                              <RefreshCw className={cn(
+                                "h-3.5 w-3.5",
+                                autoRefreshInterval ? "text-primary" : "text-muted-foreground"
+                              )} />
+                              {autoRefreshInterval && nextRefreshTime && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <svg className="w-7 h-7" viewBox="0 0 100 100">
+                                    <circle 
+                                      className="text-primary/20 fill-none" 
+                                      cx="50" 
+                                      cy="50" 
+                                      r="40" 
+                                      strokeWidth="8"
+                                      stroke="currentColor"
+                                    />
+                                    <circle 
+                                      className="text-primary fill-none" 
+                                      cx="50" 
+                                      cy="50" 
+                                      r="40" 
+                                      strokeWidth="8"
+                                      stroke="currentColor"
+                                      strokeDasharray={`${2.51 * getProgressPercentage(nextRefreshTime, autoRefreshInterval)} 251`}
+                                      transform="rotate(-90 50 50)"
+                                    />
+                                  </svg>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" sideOffset={4} className="w-[180px]">
+                        <DropdownMenuItem 
+                          className="flex items-center justify-between cursor-pointer text-xs" 
+                          onClick={() => handleManualRefresh(false)}
+                        >
+                          <span className="mr-4">Refresh now</span>
+                          <RefreshCw className="h-3 w-3" />
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs">Auto-refresh every:</DropdownMenuLabel>
+                        {autoRefreshOptions.map((option) => (
+                          <DropdownMenuItem 
+                            key={option.value}
+                            className="flex items-center justify-between cursor-pointer text-xs"
+                            onClick={() => handleSelectAutoRefresh(option.value)}
+                          >
+                            <span>{option.label}</span>
+                            {autoRefreshInterval === option.value && (
+                              <Check className="h-3 w-3 ml-2 text-primary" />
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                        {autoRefreshInterval !== null && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className="flex items-center justify-center cursor-pointer text-xs text-destructive"
+                              onClick={stopAutoRefresh}
+                            >
+                              Stop auto-refresh
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Only show save button when layout has changed */}
+                  {layoutChanged && (
+                    <Button
+                      onClick={saveLayout}
+                      disabled={!layoutChanged || isSaving}
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "h-8 px-2 text-xs flex items-center gap-1.5 ml-1 bg-background/50 border-muted",
+                        isSaving && "opacity-70 cursor-not-allowed"
+                      )}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isSaving ? "Saving..." : "Save"}</span>
+                    </Button>
+                  )}
                 </div>
               </div>
-
-              {/* Date Range - 4 columns (wider) */}
-              <div className="md:col-span-4">
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Date Range
-                </label>
-                <DateRangePicker
-                  date={globalDateRange}
-                  onDateChange={setGlobalDateRange}
-                  className="w-full"
-                  showTime
-                />
+              
+              <div className="flex items-center">
+                {/* This empty div maintains the space on the right side for toast messages */}
               </div>
             </motion.div>
           </div>

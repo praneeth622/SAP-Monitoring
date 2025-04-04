@@ -65,17 +65,8 @@ const systemOptions = ["SVW", "System 1", "System 2"];
 
 // Utility function to create vibrant, consistent colors for KPIs
 const generateConsistentColors = (kpis: string[]) => {
-  const colorPalette = [
-    "#4F46E5", // indigo
-    "#8B5CF6", // purple
-    "#EC4899", // pink
-    "#10B981", // green
-    "#F97316", // orange
-    "#EF4444", // red
-    "#06B6D4", // cyan
-    "#84CC16", // lime
-    "#F59E0B", // amber
-  ];
+  // Use our default theme colors for consistency
+  const colorPalette = defaultChartTheme.colors;
 
   const kpiColors: Record<string, { color: string; name: string }> = {};
   const activeKPIs = new Set<string>();
@@ -107,6 +98,12 @@ const ERROR_MESSAGES = {
 const SUCCESS_MESSAGES = {
   TEMPLATE_SAVED: "Template saved successfully",
   GRAPH_ADDED: "Graph added successfully",
+};
+
+// Add a default theme for all template charts
+const defaultChartTheme = {
+  name: 'Default',
+  colors: ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F97316', '#EF4444', '#06B6D4', '#84CC16', '#F59E0B']
 };
 
 export default function TemplatesPage() {
@@ -237,6 +234,11 @@ export default function TemplatesPage() {
 
       setGraphs(mappedGraphs);
       setShowGraphs(mappedGraphs.length > 0);
+      
+      // Force a layout refresh with a slight delay to ensure proper sizing
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 200);
     } catch (error) {
       console.error("Error fetching template for editing:", error);
       toast.error("Failed to load template for editing", {
@@ -436,15 +438,16 @@ export default function TemplatesPage() {
       console.log("Created KPI colors:", newKpiColors);
       console.log("Active KPIs:", newActiveKPIs);
 
-      // Create API-compatible graph object
+      // Create API-compatible graph object with minimal layout
+      // Let the DynamicLayout component handle actual positioning
       const newGraph: Graph = {
         ...graphData,
         id: `graph-${Date.now()}`,
         activeKPIs: newActiveKPIs,
         kpiColors: newKpiColors,
         layout: {
-          x: (graphs.length * 4) % 12,
-          y: Math.floor(graphs.length / 3) * 3,
+          x: 0,
+          y: 0,
           w: 4,
           h: 2,
         },
@@ -454,10 +457,34 @@ export default function TemplatesPage() {
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
 
+      // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 200);
+
       toast.success(SUCCESS_MESSAGES.GRAPH_ADDED);
     } catch (error) {
       console.error("Error adding graph:", error);
       toast.error(ERROR_MESSAGES.ADD_GRAPH_ERROR);
+    }
+  };
+
+  // Add function to handle graph deletion
+  const handleDeleteGraph = (graphId: string) => {
+    // Ask for confirmation
+    if (confirm("Are you sure you want to delete this graph?")) {
+      setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
+      toast.success("Graph deleted successfully");
+      
+      // If we deleted the last graph, hide the graphs section
+      if (graphs.length === 1) {
+        setShowGraphs(false);
+      }
+      
+      // Force a layout refresh
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 200);
     }
   };
 
@@ -680,7 +707,7 @@ export default function TemplatesPage() {
                       const chartKpiColors = allKpis.reduce(
                         (colors, kpi, index) => {
                           colors[kpi] = {
-                            color: `hsl(${(index * 30) % 360}, 70%, 50%)`,
+                            color: defaultChartTheme.colors[index % defaultChartTheme.colors.length],
                             name: kpi,
                           };
                           return colors;
@@ -714,8 +741,11 @@ export default function TemplatesPage() {
                         height: graph.layout.h * 60,
                         activeKPIs: chartActiveKPIs,
                         kpiColors: chartKpiColors,
+                        hideControls: true, // Hide controls in template editor
+                        onDeleteGraph: handleDeleteGraph, // Add delete functionality
                       };
                     })}
+                    theme={defaultChartTheme} // Apply default theme to all charts
                   />
                   <Card
                     className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"

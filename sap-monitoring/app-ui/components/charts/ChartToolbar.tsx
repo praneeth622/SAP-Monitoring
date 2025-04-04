@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { Square, Lasso } from "lucide-react";
 
 interface ChartToolbarProps {
   chartInstance: ECharts | null;
@@ -161,89 +162,76 @@ export function ChartToolbar({
   };
 
   const handleBoxSelect = () => {
-    onBoxSelect();
-    setSelectedTool("box");
+    try {
+      onBoxSelect();
+      setSelectedTool("box");
+    } catch (error) {
+      console.error("Error in box selection:", error);
+      setSelectedTool(null);
+    }
   };
 
   const handleLassoSelect = () => {
-    onLassoSelect();
-    setSelectedTool("lasso");
+    try {
+      onLassoSelect();
+      setSelectedTool("lasso");
+    } catch (error) {
+      console.error("Error in lasso selection:", error);
+      setSelectedTool(null);
+    }
   };
 
   const handleClearSelection = () => {
-    onClearSelection();
-    setSelectedTool(null);
+    try {
+      onClearSelection();
+      setSelectedTool(null);
+    } catch (error) {
+      console.error("Error clearing selection:", error);
+      setSelectedTool(null);
+    }
   };
 
   return (
     <div
       ref={toolbarRef}
-      className="absolute top-2 right-2 z-30 flex items-center gap-2"
+      className="absolute top-1 right-1 z-30 flex items-center gap-1"
     >
       <div className="flex items-center bg-background/80 backdrop-blur-sm rounded-md border border-border shadow-sm">
         <Button
           size="icon"
           variant="ghost"
           className={cn(
-            "h-7 w-7 rounded-none rounded-l-md",
+            "h-6 w-6 rounded-none rounded-l-md",
             selectedTool === "box" && "bg-accent text-accent-foreground"
           )}
           onClick={handleBoxSelect}
           title="Box Select"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M3 3h18v18H3z" />
-          </svg>
+          <Square className="h-3 w-3" />
         </Button>
         <Button
           size="icon"
           variant="ghost"
           className={cn(
-            "h-7 w-7 rounded-none",
+            "h-6 w-6 rounded-none",
             selectedTool === "lasso" && "bg-accent text-accent-foreground"
           )}
           onClick={handleLassoSelect}
           title="Lasso Select"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M7 22a5 5 0 0 1-2-4" />
-            <path d="M7 16.93c.96.43 1.96.74 2.99.91" />
-            <path d="M3.34 14A6.8 6.8 0 0 1 2 10c0-4.42 4.48-8 10-8s10 3.58 10 8a7.19 7.19 0 0 1-.33 2" />
-            <path d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
-            <path d="M14.33 22h-.09a.35.35 0 0 1-.24-.32v-10a.34.34 0 0 1 .33-.34c.08 0 .15.03.21.08l7.34 6a.33.33 0 0 1-.21.59h-4.49l-2.57 3.85a.35.35 0 0 1-.28.14v0z" />
-          </svg>
+          <Lasso className="h-3 w-3" />
         </Button>
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 rounded-none"
+          className="h-6 w-6 rounded-none"
           onClick={handleClearSelection}
           title="Clear Selection"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -259,14 +247,14 @@ export function ChartToolbar({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 rounded-none"
+          className="h-6 w-6 rounded-none"
           onClick={handleZoomIn}
           title="Zoom In"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -283,14 +271,14 @@ export function ChartToolbar({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 rounded-none"
+          className="h-6 w-6 rounded-none"
           onClick={handleZoomOut}
           title="Zoom Out"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -308,13 +296,13 @@ export function ChartToolbar({
             <Button
               size="icon"
               variant="ghost"
-              className="h-7 w-7 rounded-none rounded-r-md"
+              className="h-6 w-6 rounded-none rounded-r-md"
               title="Export"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
+                width="14"
+                height="14"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
