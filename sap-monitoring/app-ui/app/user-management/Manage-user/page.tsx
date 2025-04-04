@@ -1676,8 +1676,8 @@ export default function ManageUserPage() {
 
       {/* Updated Authorization Configuration Sheet */}
       <Sheet open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-        <SheetContent className="w-[550px] max-w-full flex flex-col p-0">
-          <div className="px-6 pt-6 pb-2">
+        <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
+          <div className=" pt-3 pb-2">
             <SheetHeader>
               <SheetTitle className="text-2xl font-bold">
                 {configTitle}
@@ -1694,7 +1694,7 @@ export default function ManageUserPage() {
             </SheetHeader>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6">
+          <div className="flex-1 overflow-y-auto px-2">
             <div className="py-4 space-y-8">
               {/* Monitoring Areas Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("Monitoring Areas") && (
