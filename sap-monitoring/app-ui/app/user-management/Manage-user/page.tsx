@@ -188,35 +188,82 @@ export default function ManageUserPage() {
     fetchSystems();
   }, []);
 
+  useEffect(() => {
+    // Fetch users from the API when component mounts
+    fetchAllUsers();
+  }, []);
+
   // Updated fetchUsers function to handle both multiple users and single user
   const fetchUsers = async (userId?: string) => {
     try {
       setIsLoading(true);
-      const url = userId 
-        ? `https://shwsckbvbt.a.pinggy.link/api/um?userId=${userId}` 
+      const url = userId
+        ? `https://shwsckbvbt.a.pinggy.link/api/um?userId=${userId}`
         : `https://shwsckbvbt.a.pinggy.link/api/um`;
-      
+
       const response = await axios.get(url);
-      
+
       if (response.status === 200) {
         // Handle both array and single object responses
-        const userData = Array.isArray(response.data) ? response.data : [response.data];
-        
+        const userData = Array.isArray(response.data)
+          ? response.data
+          : [response.data];
+
         if (userId) {
           // If fetching a specific user, update only that user's data
-          const userIndex = users.findIndex(u => u.user_id === userId);
+          const userIndex = users.findIndex((u) => u.user_id === userId);
           if (userIndex >= 0 && userData.length > 0) {
             const updatedUsers = [...users];
             updatedUsers[userIndex] = userData[0];
             setUsers(updatedUsers);
           } else if (userData.length > 0) {
             // Add user if not found
-            setUsers(prevUsers => [...prevUsers, userData[0]]);
+            setUsers((prevUsers) => [...prevUsers, userData[0]]);
           }
         } else {
           // If fetching all users, replace the array
           setUsers(userData);
         }
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      toast.error("Failed to fetch users", {
+        description: "Please try again or contact support",
+        dismissible: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get(
+        "https://shwsckbvbt.a.pinggy.link/api/um"
+      );
+
+      if (response.status === 200) {
+        // Store the raw users data first
+        setUsers(response.data);
+
+        // Create UserSystem objects from the API data
+        // But don't use role as auth_level - set it to N/A
+        const userSystemData = response.data.map((user: User) => ({
+          id: `${user.user_id}-system`, // Temporary ID
+          user_id: user.user_id,
+          name: user.name,
+          email: user.mail_id,
+          auth_level: "N/A", // Set auth_level to N/A initially, NOT using the role
+          system: "N/A", // This would be filled with actual system data if available
+          configurations: {
+            monitoringAreas: [],
+            kpiGroups: [],
+            kpis: [],
+          },
+        }));
+
+        setUserSystems(userSystemData);
       }
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -407,34 +454,34 @@ export default function ManageUserPage() {
       );
 
       if (response.status === 200 && response.data.message === "success") {
-    if (isEditing && editItem) {
-      // Update existing
-      setUserSystems((prevItems) =>
-        prevItems.map((item) =>
-          item.id === editItem.id ? newUserSystem : item
-        )
-      );
+        if (isEditing && editItem) {
+          // Update existing
+          setUserSystems((prevItems) =>
+            prevItems.map((item) =>
+              item.id === editItem.id ? newUserSystem : item
+            )
+          );
 
-      toast.success("Access updated", {
-        description: `Updated system access for ${user.name}`,
+          toast.success("Access updated", {
+            description: `Updated system access for ${user.name}`,
             dismissible: true,
-      });
+          });
 
-      setIsEditing(false);
-      setEditItem(null);
+          setIsEditing(false);
+          setEditItem(null);
           setEditingId(null);
-    } else {
-      // Add new
-      setUserSystems((prev) => [...prev, newUserSystem]);
+        } else {
+          // Add new
+          setUserSystems((prev) => [...prev, newUserSystem]);
 
-      toast.success("Access granted", {
+          toast.success("Access granted", {
             description: `${user.name} now has access to ${systemId}`,
             dismissible: true,
-      });
-    }
+          });
+        }
 
         // Reset form and state
-    resetForm();
+        resetForm();
         setIsAddingUser(false);
       } else {
         throw new Error("Failed to save user access");
@@ -468,35 +515,52 @@ export default function ManageUserPage() {
     setUserId(item.user_id);
     setName(item.name);
     setEmail(item.email);
-    setSelectedAuthLevels(item.auth_level.split(", "));
-    setSystemId(item.system);
-    setSelectedSystems([item.system]);
 
-    // Set configurations if available
+    // Handle the N/A case for auth_level
+    if (item.auth_level === "N/A") {
+      setSelectedAuthLevels([]);
+    } else {
+      setSelectedAuthLevels(item.auth_level.split(", "));
+    }
+
+    setSystemId(item.system === "N/A" ? "" : item.system);
+    setSelectedSystems(item.system === "N/A" ? [] : [item.system]);
+    setIsEditing(true);
+    setEditItem(item);
+    setConfigTitle(`Configure Access for ${item.name}`);
+
+    // Set configurations if available BEFORE opening the config sidebar
     if (item.configurations) {
       setSelectedMAs(new Set(item.configurations.monitoringAreas));
       setSelectedKPIGroups(new Set(item.configurations.kpiGroups));
       setSelectedKPIs(new Set(item.configurations.kpis));
     }
 
-    setIsEditing(true);
-    setEditItem(item);
-    setConfigTitle(`Edit Access for ${item.name}`);
-    setIsConfigOpen(true);
-    setIsViewMode(false);
+    // For users with no access levels yet, just open the editor without loading data
+    if (item.auth_level === "N/A") {
+      return;
+    }
 
     // Load appropriate data based on selected auth levels
-    if (item.auth_level.includes("Monitoring Areas")) {
-      fetchMonitoringAreas();
-    }
+    const loadData = async () => {
+      if (item.auth_level.includes("Monitoring Areas")) {
+        await fetchMonitoringAreas();
+      }
 
-    if (item.auth_level.includes("KPI Group")) {
-      fetchAllKPIGroups();
-    }
+      if (item.auth_level.includes("KPI Group")) {
+        await fetchAllKPIGroups();
+      }
 
-    if (item.auth_level.includes("KPIs")) {
-      fetchAllKPIs();
-    }
+      if (item.auth_level.includes("KPIs")) {
+        await fetchAllKPIs();
+      }
+
+      // Open the config sidebar AFTER data is loaded
+      setIsConfigOpen(true);
+      setIsViewMode(false);
+    };
+
+    loadData();
   };
 
   // Delete confirmation
@@ -523,8 +587,8 @@ export default function ManageUserPage() {
   // Cancel operations
   const handleCancel = () => {
     resetForm();
-      setIsEditing(false);
-      setEditItem(null);
+    setIsEditing(false);
+    setEditItem(null);
     setIsAddingUser(false);
     setEditingId(null);
   };
@@ -536,164 +600,177 @@ export default function ManageUserPage() {
     setIsViewMode(false);
 
     // Reset data collections
-          setMonitoringAreas([]);
-          setKpiGroups([]);
-          setKpis([]);
+    setMonitoringAreas([]);
+    setKpiGroups([]);
+    setKpis([]);
 
     // Load appropriate data based on selected auth levels
     if (selectedAuthLevels.includes("Monitoring Areas")) {
-          fetchMonitoringAreas();
+      fetchMonitoringAreas();
     }
 
     if (selectedAuthLevels.includes("KPI Group")) {
-          fetchAllKPIGroups();
+      fetchAllKPIGroups();
     }
 
     if (selectedAuthLevels.includes("KPIs")) {
-          fetchAllKPIs();
-        }
+      fetchAllKPIs();
+    }
   };
 
   // API fetch functions for sidebar
-    const fetchMonitoringAreas = async () => {
-      setIsLoadingMA(true);
-      try {
-        const response = await axios.get(
-          `https://shwsckbvbt.a.pinggy.link/api/ma?system=${systemId}`
-        );
-        if (response.status === 200) {
-          setMonitoringAreas(response.data);
-        } else {
-          throw new Error("Failed to fetch monitoring areas");
-        }
-      } catch (error) {
-        console.error("Error fetching monitoring areas:", error);
-        toast.error("Failed to fetch monitoring areas", {
+  const fetchMonitoringAreas = async () => {
+    setIsLoadingMA(true);
+    try {
+      console.log("Fetching monitoring areas for system:", systemId);
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/ma?system=${systemId}`
+      );
+      if (response.status === 200) {
+        console.log("Monitoring areas loaded:", response.data.length);
+        setMonitoringAreas(response.data);
+      } else {
+        throw new Error("Failed to fetch monitoring areas");
+      }
+    } catch (error) {
+      console.error("Error fetching monitoring areas:", error);
+      toast.error("Failed to fetch monitoring areas", {
         description: "Please try again or contact support",
         dismissible: true,
-        });
-      } finally {
-        setIsLoadingMA(false);
-      }
-    };
+      });
+    } finally {
+      setIsLoadingMA(false);
+    }
+  };
 
-    const fetchAllKPIGroups = async () => {
-      setIsLoadingKPIGroups(true);
-      try {
-        const response = await axios.get(
-          `https://shwsckbvbt.a.pinggy.link/api/kpigrp?system=${systemId}`
-        );
-        if (response.status === 200) {
-          setKpiGroups(response.data);
-        } else {
-          throw new Error("Failed to fetch KPI groups");
-        }
-      } catch (error) {
-        console.error("Error fetching KPI groups:", error);
-        toast.error("Failed to fetch KPI groups", {
+  const fetchAllKPIGroups = async () => {
+    setIsLoadingKPIGroups(true);
+    try {
+      console.log("Fetching all KPI groups for system:", systemId);
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/kpigrp?system=${systemId}`
+      );
+      if (response.status === 200) {
+        console.log("KPI groups loaded:", response.data.length);
+        setKpiGroups(response.data);
+      } else {
+        throw new Error("Failed to fetch KPI groups");
+      }
+    } catch (error) {
+      console.error("Error fetching KPI groups:", error);
+      toast.error("Failed to fetch KPI groups", {
         description: "Please try again or contact support",
         dismissible: true,
-        });
-      } finally {
-        setIsLoadingKPIGroups(false);
-      }
-    };
+      });
+    } finally {
+      setIsLoadingKPIGroups(false);
+    }
+  };
 
-    const fetchKPIGroups = async (monArea: string) => {
-      setIsLoadingKPIGroups(true);
-      try {
-        const response = await axios.get(
-          `https://shwsckbvbt.a.pinggy.link/api/kpigrp?mon_area=${monArea}&system=${systemId}`
+  const fetchKPIGroups = async (monArea: string) => {
+    setIsLoadingKPIGroups(true);
+    try {
+      console.log("Fetching KPI groups for monitoring area:", monArea);
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/kpigrp?mon_area=${monArea}&system=${systemId}`
+      );
+      if (response.status === 200) {
+        console.log(
+          "KPI groups loaded for monitoring area:",
+          response.data.length
         );
-        if (response.status === 200) {
-          // Add to existing KPI groups instead of replacing
+        // Add to existing KPI groups instead of replacing
         setKpiGroups((prev) => {
-            const newGroups = response.data;
-            // Filter out duplicates based on kpi_grp_name
+          const newGroups = response.data;
+          // Filter out duplicates based on kpi_grp_name
           const existingGroupNames = new Set(
             prev.map((g: KpiGroup) => g.kpi_grp_name)
           );
-            const filteredNewGroups = newGroups.filter(
+          const filteredNewGroups = newGroups.filter(
             (g: KpiGroup) => !existingGroupNames.has(g.kpi_grp_name)
-            );
-            return [...prev, ...filteredNewGroups];
-          });
-        } else {
-          throw new Error(`Failed to fetch KPI groups for ${monArea}`);
-        }
-      } catch (error) {
-        console.error(`Error fetching KPI groups for ${monArea}:`, error);
-        toast.error(`Failed to fetch KPI groups for ${monArea}`, {
+          );
+          return [...prev, ...filteredNewGroups];
+        });
+      } else {
+        throw new Error(`Failed to fetch KPI groups for ${monArea}`);
+      }
+    } catch (error) {
+      console.error(`Error fetching KPI groups for ${monArea}:`, error);
+      toast.error(`Failed to fetch KPI groups for ${monArea}`, {
         description: "Please try again or contact support",
         dismissible: true,
-        });
-      } finally {
-        setIsLoadingKPIGroups(false);
-      }
-    };
+      });
+    } finally {
+      setIsLoadingKPIGroups(false);
+    }
+  };
 
-    const fetchAllKPIs = async () => {
-      setIsLoadingKPIs(true);
-      try {
-        const response = await axios.get(
-          `https://shwsckbvbt.a.pinggy.link/api/kpi?system=${systemId}`
-        );
-        if (response.status === 200) {
-          setKpis(response.data);
-        } else {
-          throw new Error("Failed to fetch KPIs");
-        }
-      } catch (error) {
-        console.error("Error fetching KPIs:", error);
-        toast.error("Failed to fetch KPIs", {
+  const fetchAllKPIs = async () => {
+    setIsLoadingKPIs(true);
+    try {
+      console.log("Fetching all KPIs for system:", systemId);
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/kpi?system=${systemId}`
+      );
+      if (response.status === 200) {
+        console.log("KPIs loaded:", response.data.length);
+        setKpis(response.data);
+      } else {
+        throw new Error("Failed to fetch KPIs");
+      }
+    } catch (error) {
+      console.error("Error fetching KPIs:", error);
+      toast.error("Failed to fetch KPIs", {
         description: "Please try again or contact support",
         dismissible: true,
-        });
-      } finally {
-        setIsLoadingKPIs(false);
-      }
-    };
+      });
+    } finally {
+      setIsLoadingKPIs(false);
+    }
+  };
 
-    const fetchKPIs = async (kpiGroup: string) => {
-      setIsLoadingKPIs(true);
-      try {
-        const response = await axios.get(
-          `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${kpiGroup}&system=${systemId}`
-        );
-        if (response.status === 200) {
-          // Add to existing KPIs instead of replacing
+  const fetchKPIs = async (kpiGroup: string) => {
+    setIsLoadingKPIs(true);
+    try {
+      console.log("Fetching KPIs for KPI group:", kpiGroup);
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${kpiGroup}&system=${systemId}`
+      );
+      if (response.status === 200) {
+        console.log("KPIs loaded for KPI group:", response.data.length);
+        // Add to existing KPIs instead of replacing
         setKpis((prev) => {
-            const newKpis = response.data;
-            // Filter out duplicates based on kpi_name
+          const newKpis = response.data;
+          // Filter out duplicates based on kpi_name
           const existingKpiNames = new Set(prev.map((k: Kpi) => k.kpi_name));
-            const filteredNewKpis = newKpis.filter(
+          const filteredNewKpis = newKpis.filter(
             (k: Kpi) => !existingKpiNames.has(k.kpi_name)
-            );
-            return [...prev, ...filteredNewKpis];
-          });
-        } else {
-          throw new Error(`Failed to fetch KPIs for ${kpiGroup}`);
-        }
-      } catch (error) {
-        console.error(`Error fetching KPIs for ${kpiGroup}:`, error);
-        toast.error(`Failed to fetch KPIs for ${kpiGroup}`, {
+          );
+          return [...prev, ...filteredNewKpis];
+        });
+      } else {
+        throw new Error(`Failed to fetch KPIs for ${kpiGroup}`);
+      }
+    } catch (error) {
+      console.error(`Error fetching KPIs for ${kpiGroup}:`, error);
+      toast.error(`Failed to fetch KPIs for ${kpiGroup}`, {
         description: "Please try again or contact support",
         dismissible: true,
-        });
-      } finally {
-        setIsLoadingKPIs(false);
-      }
-    };
+      });
+    } finally {
+      setIsLoadingKPIs(false);
+    }
+  };
 
   // Add these handler functions for the sidebar
-    const handleMAChange = async (maName: string, checked: boolean) => {
-      const newSelection = new Set(selectedMAs);
+  const handleMAChange = async (maName: string, checked: boolean) => {
+    const newSelection = new Set(selectedMAs);
 
-      if (checked) {
-        newSelection.add(maName);
+    if (checked) {
+      newSelection.add(maName);
 
       // Fetch KPI Groups for this MA
-        await fetchKPIGroups(maName);
+      await fetchKPIGroups(maName);
 
       // If KPI Group is selected in auth levels, auto-select KPI groups from this MA
       if (selectedAuthLevels.includes("KPI Group")) {
@@ -728,8 +805,8 @@ export default function ManageUserPage() {
 
         setSelectedKPIGroups(newKPIGroupSelection);
       }
-      } else {
-        newSelection.delete(maName);
+    } else {
+      newSelection.delete(maName);
 
       // Only if user explicitly wants to deselect an MA and its related items
       if (
@@ -765,16 +842,16 @@ export default function ManageUserPage() {
 
         setSelectedKPIGroups(newKPIGroupSelection);
       }
-      }
+    }
 
-      setSelectedMAs(newSelection);
-    };
+    setSelectedMAs(newSelection);
+  };
 
-    const handleKPIGroupChange = async (kpiGroup: string, checked: boolean) => {
-      const newSelection = new Set(selectedKPIGroups);
+  const handleKPIGroupChange = async (kpiGroup: string, checked: boolean) => {
+    const newSelection = new Set(selectedKPIGroups);
 
-      if (checked) {
-        newSelection.add(kpiGroup);
+    if (checked) {
+      newSelection.add(kpiGroup);
 
       // If KPIs is selected in auth levels, fetch and auto-select KPIs from this group
       if (selectedAuthLevels.includes("KPIs")) {
@@ -793,8 +870,8 @@ export default function ManageUserPage() {
           return newSelection;
         });
       }
-      } else {
-        newSelection.delete(kpiGroup);
+    } else {
+      newSelection.delete(kpiGroup);
 
       // If KPIs is selected in auth levels, deselect related KPIs
       if (selectedAuthLevels.includes("KPIs")) {
@@ -811,25 +888,25 @@ export default function ManageUserPage() {
           return newSelection;
         });
       }
-      }
+    }
 
-      setSelectedKPIGroups(newSelection);
-    };
+    setSelectedKPIGroups(newSelection);
+  };
 
-    const handleKPIChange = (kpiName: string, checked: boolean) => {
+  const handleKPIChange = (kpiName: string, checked: boolean) => {
     setSelectedKPIs((prev) => {
-        const newSelection = new Set(prev);
-        if (checked) {
-          newSelection.add(kpiName);
-        } else {
-          newSelection.delete(kpiName);
-        }
-        return newSelection;
-      });
-    };
+      const newSelection = new Set(prev);
+      if (checked) {
+        newSelection.add(kpiName);
+      } else {
+        newSelection.delete(kpiName);
+      }
+      return newSelection;
+    });
+  };
 
-    // Handle saving the selections
-    const handleSaveSelections = () => {
+  // Handle saving the selections
+  const handleSaveSelections = () => {
     setIsConfigOpen(false);
     toast.success("Configuration saved", {
       description: "User access configuration has been updated",
@@ -841,6 +918,16 @@ export default function ManageUserPage() {
   const handleView = async (id: string) => {
     const userSystem = userSystems.find((item) => item.id === id);
     if (!userSystem) return;
+
+    // If no access has been assigned yet, there's nothing to view
+    if (userSystem.auth_level === "N/A" && userSystem.system === "N/A") {
+      toast.info("No access assigned", {
+        description: "This user doesn't have any access assigned yet.",
+      });
+      // Instead of viewing, offer to edit the user
+      handleEdit(userSystem);
+      return;
+    }
 
     setConfigTitle(`View Access for ${userSystem.name}`);
     setIsConfigOpen(true);
@@ -869,13 +956,19 @@ export default function ManageUserPage() {
 
       if (accessResponse.status === 200 && accessResponse.data) {
         console.log("User access details:", accessResponse.data);
-        
+
         // If API provides configuration details, use them
         // Otherwise use what we have stored locally
         if (accessResponse.data.configurations) {
-          setSelectedMAs(new Set(accessResponse.data.configurations.monitoringAreas || []));
-          setSelectedKPIGroups(new Set(accessResponse.data.configurations.kpiGroups || []));
-          setSelectedKPIs(new Set(accessResponse.data.configurations.kpis || []));
+          setSelectedMAs(
+            new Set(accessResponse.data.configurations.monitoringAreas || [])
+          );
+          setSelectedKPIGroups(
+            new Set(accessResponse.data.configurations.kpiGroups || [])
+          );
+          setSelectedKPIs(
+            new Set(accessResponse.data.configurations.kpis || [])
+          );
         } else if (userSystem.configurations) {
           // Fall back to stored configurations
           setSelectedMAs(new Set(userSystem.configurations.monitoringAreas));
@@ -885,14 +978,14 @@ export default function ManageUserPage() {
       }
     } catch (error) {
       console.error("Error fetching user details:", error);
-      
+
       // Fallback to stored configurations if API fails
       if (userSystem.configurations) {
         setSelectedMAs(new Set(userSystem.configurations.monitoringAreas));
         setSelectedKPIGroups(new Set(userSystem.configurations.kpiGroups));
         setSelectedKPIs(new Set(userSystem.configurations.kpis));
       }
-      
+
       toast.error("Failed to fetch complete user details", {
         description: "Using locally stored data instead",
         dismissible: true,
@@ -931,9 +1024,9 @@ export default function ManageUserPage() {
         setSystemId(""); // No systems left
       }
     }
-    };
+  };
 
-    return (
+  return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col gap-6">
         {/* Page Header */}
@@ -1021,9 +1114,7 @@ export default function ManageUserPage() {
                                   >
                                     {selectedSystems.length > 0
                                       ? `${selectedSystems.length} system${
-                                          selectedSystems.length > 1
-                                            ? "s"
-                                            : ""
+                                          selectedSystems.length > 1 ? "s" : ""
                                         } selected`
                                       : "Select System"}
                                     <Filter className="h-4 w-4 ml-2" />
@@ -1109,7 +1200,9 @@ export default function ManageUserPage() {
                                             className="flex items-center space-x-2"
                                           >
                                             <Checkbox
-                                              id={`level-${level}-${editingId || 'new'}`}
+                                              id={`level-${level}-${
+                                                editingId || "new"
+                                              }`}
                                               checked={selectedAuthLevels.includes(
                                                 level
                                               )}
@@ -1125,7 +1218,7 @@ export default function ManageUserPage() {
                                                       ...selectedAuthLevels,
                                                       level,
                                                     ]);
-                                                    
+
                                                     // Show notification to guide users to configure access
                                                     toast.info(
                                                       "Action required",
@@ -1151,7 +1244,9 @@ export default function ManageUserPage() {
                                               disabled={!systemId}
                                             />
                                             <Label
-                                              htmlFor={`level-${level}-${editingId || 'new'}`}
+                                              htmlFor={`level-${level}-${
+                                                editingId || "new"
+                                              }`}
                                               className="text-sm cursor-pointer flex-1"
                                             >
                                               {level}
@@ -1179,12 +1274,14 @@ export default function ManageUserPage() {
                                         }}
                                       >
                                         {level}
-                                        <span className="ml-1 group-hover:text-red-500">×</span>
+                                        <span className="ml-1 group-hover:text-red-500">
+                                          ×
+                                        </span>
                                       </Badge>
                                     ))}
                                   </div>
                                 )}
-                                
+
                                 {selectedAuthLevels.length > 0 && systemId && (
                                   <div className="mt-2">
                                     <Button
@@ -1195,9 +1292,12 @@ export default function ManageUserPage() {
                                     >
                                       <Settings className="h-4 w-4 mr-1" />
                                       Configure Access
-                                      {!isConfigured && selectedAuthLevels.length > 0 && (
-                                        <span className="ml-1 text-red-500">●</span>
-                                      )}
+                                      {!isConfigured &&
+                                        selectedAuthLevels.length > 0 && (
+                                          <span className="ml-1 text-red-500">
+                                            ●
+                                          </span>
+                                        )}
                                     </Button>
                                   </div>
                                 )}
@@ -1237,15 +1337,24 @@ export default function ManageUserPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-1">
-                                {item.auth_level.split(", ").map((level) => (
+                                {item.auth_level === "N/A" ? (
                                   <Badge
-                                    key={level}
-                                    variant="secondary"
-                                    className="text-xs"
+                                    variant="outline"
+                                    className="text-muted-foreground"
                                   >
-                                    {level}
+                                    No access assigned
                                   </Badge>
-                                ))}
+                                ) : (
+                                  item.auth_level.split(", ").map((level) => (
+                                    <Badge
+                                      key={level}
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
+                                      {level}
+                                    </Badge>
+                                  ))
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
@@ -1510,9 +1619,7 @@ export default function ManageUserPage() {
                                 Config
                                 {!isConfigured &&
                                   selectedAuthLevels.length > 0 && (
-                                    <span className="ml-1 text-red-500">
-                                      ●
-                                    </span>
+                                    <span className="ml-1 text-red-500">●</span>
                                   )}
                               </Button>
                             </div>
@@ -1571,191 +1678,199 @@ export default function ManageUserPage() {
       <Sheet open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <SheetContent className="w-[550px] max-w-full flex flex-col p-0">
           <div className="px-6 pt-6 pb-2">
-          <SheetHeader>
-            <SheetTitle className="text-2xl font-bold">
+            <SheetHeader>
+              <SheetTitle className="text-2xl font-bold">
                 {configTitle}
-            </SheetTitle>
-            <p className="text-sm text-muted-foreground">
-                {isViewMode ? "Viewing" : "Configuring"} access for {name} on system {systemId}
-            </p>
-          </SheetHeader>
+              </SheetTitle>
+              <p className="text-sm text-muted-foreground">
+                {isViewMode ? "Viewing" : "Configuring"} access for {name} on
+                system {systemId}
+              </p>
+              {/* Add this to verify data is loaded */}
+              <p className="text-xs text-muted-foreground">
+                Monitoring Areas: {selectedMAs.size}, KPI Groups:{" "}
+                {selectedKPIGroups.size}, KPIs: {selectedKPIs.size}
+              </p>
+            </SheetHeader>
           </div>
 
           <div className="flex-1 overflow-y-auto px-6">
             <div className="py-4 space-y-8">
               {/* Monitoring Areas Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("Monitoring Areas") && (
-              <div className="space-y-4">
+                <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
-                  <h3 className="text-lg font-semibold">Monitoring Areas</h3>
+                    <h3 className="text-lg font-semibold">Monitoring Areas</h3>
                     <Badge variant="outline">{selectedMAs.size} selected</Badge>
-                </div>
+                  </div>
 
-                {isLoadingMA ? (
-                  <div className="space-y-2">
+                  {isLoadingMA ? (
+                    <div className="space-y-2">
                       {[1, 2, 3].map((i) => (
                         <div
                           key={i}
                           className="h-12 bg-muted animate-pulse rounded"
                         />
-                    ))}
-                  </div>
-                ) : monitoringAreas.length > 0 ? (
-                  <div className="space-y-2">
+                      ))}
+                    </div>
+                  ) : monitoringAreas.length > 0 ? (
+                    <div className="space-y-2">
                       {monitoringAreas.map((ma) => (
-                      <div
-                        key={ma.mon_area_name}
-                        className="flex items-center space-x-4 p-3 rounded-lg border hover:bg-accent/5"
-                      >
-                        <Checkbox
-                          id={`ma-${ma.mon_area_name}`}
-                          checked={selectedMAs.has(ma.mon_area_name)}
-                          onCheckedChange={(checked) =>
+                        <div
+                          key={ma.mon_area_name}
+                          className="flex items-center space-x-4 p-3 rounded-lg border hover:bg-accent/5"
+                        >
+                          <Checkbox
+                            id={`ma-${ma.mon_area_name}`}
+                            checked={selectedMAs.has(ma.mon_area_name)}
+                            onCheckedChange={(checked) =>
                               handleMAChange(ma.mon_area_name, checked === true)
-                          }
+                            }
                             disabled={isViewMode}
-                        />
-                        <div className="flex-1">
-                            <Label 
-                            htmlFor={`ma-${ma.mon_area_name}`}
+                          />
+                          <div className="flex-1">
+                            <Label
+                              htmlFor={`ma-${ma.mon_area_name}`}
                               className="text-sm text-muted-foreground"
-                          >
-                            {ma.mon_area_desc}
+                            >
+                              {ma.mon_area_desc}
                             </Label>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    No monitoring areas available for this system
-                  </div>
-                )}
-              </div>
-            )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      No monitoring areas available for this system
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* KPI Groups Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("KPI Group") && (
-              <div className="space-y-4">
+                <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
-                  <h3 className="text-lg font-semibold">KPI Groups</h3>
-                  <Badge variant="outline">
-                    {selectedKPIGroups.size} selected
-                  </Badge>
-                </div>
+                    <h3 className="text-lg font-semibold">KPI Groups</h3>
+                    <Badge variant="outline">
+                      {selectedKPIGroups.size} selected
+                    </Badge>
+                  </div>
 
-                {isLoadingKPIGroups ? (
-                  <div className="space-y-2">
+                  {isLoadingKPIGroups ? (
+                    <div className="space-y-2">
                       {[1, 2, 3].map((i) => (
                         <div
                           key={i}
                           className="h-12 bg-muted animate-pulse rounded"
                         />
-                    ))}
-                  </div>
-                ) : kpiGroups.length > 0 ? (
-                  <div className="space-y-2">
+                      ))}
+                    </div>
+                  ) : kpiGroups.length > 0 ? (
+                    <div className="space-y-2">
                       {kpiGroups.map((kg) => (
-                      <div
-                        key={kg.kpi_grp_name}
-                        className="flex items-center space-x-4 p-3 rounded-lg border hover:bg-accent/5"
-                      >
-                        <Checkbox
-                          id={`kg-${kg.kpi_grp_name}`}
-                          checked={selectedKPIGroups.has(kg.kpi_grp_name)}
-                          onCheckedChange={(checked) =>
+                        <div
+                          key={kg.kpi_grp_name}
+                          className="flex items-center space-x-4 p-3 rounded-lg border hover:bg-accent/5"
+                        >
+                          <Checkbox
+                            id={`kg-${kg.kpi_grp_name}`}
+                            checked={selectedKPIGroups.has(kg.kpi_grp_name)}
+                            onCheckedChange={(checked) =>
                               handleKPIGroupChange(
                                 kg.kpi_grp_name,
                                 checked === true
                               )
-                          }
+                            }
                             disabled={isViewMode}
-                        />
-                        <div className="flex-1">
-                            <Label 
-                            htmlFor={`kg-${kg.kpi_grp_name}`}
+                          />
+                          <div className="flex-1">
+                            <Label
+                              htmlFor={`kg-${kg.kpi_grp_name}`}
                               className="text-sm text-muted-foreground"
-                          >
-                            {kg.kpi_grp_desc}
+                            >
+                              {kg.kpi_grp_desc}
                             </Label>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                      {selectedAuthLevels.includes("Monitoring Areas") && selectedMAs.size === 0
-                      ? "Select a monitoring area to view KPI groups"
-                      : "No KPI groups available for this system"}
-                  </div>
-                )}
-              </div>
-            )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      {selectedAuthLevels.includes("Monitoring Areas") &&
+                      selectedMAs.size === 0
+                        ? "Select a monitoring area to view KPI groups"
+                        : "No KPI groups available for this system"}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* KPIs Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("KPIs") && (
-            <div className="space-y-4">
+                <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
-                <h3 className="text-lg font-semibold">KPIs</h3>
-                    <Badge variant="outline">{selectedKPIs.size} selected</Badge>
-              </div>
+                    <h3 className="text-lg font-semibold">KPIs</h3>
+                    <Badge variant="outline">
+                      {selectedKPIs.size} selected
+                    </Badge>
+                  </div>
 
-              {isLoadingKPIs ? (
-                <div className="space-y-2">
+                  {isLoadingKPIs ? (
+                    <div className="space-y-2">
                       {[1, 2, 3].map((i) => (
                         <div
                           key={i}
                           className="h-12 bg-muted animate-pulse rounded"
                         />
-                  ))}
-                </div>
-              ) : kpis.length > 0 ? (
+                      ))}
+                    </div>
+                  ) : kpis.length > 0 ? (
                     <div className="space-y-2">
                       {kpis.map((kpi) => (
-                    <div
-                      key={kpi.kpi_name}
-                      className="flex items-center space-x-4 p-3 rounded-lg border hover:bg-accent/5"
-                    >
-                      <Checkbox
-                        id={`kpi-${kpi.kpi_name}`}
-                        checked={selectedKPIs.has(kpi.kpi_name)}
-                        onCheckedChange={(checked) =>
-                              handleKPIChange(kpi.kpi_name, checked === true)
-                        }
-                            disabled={isViewMode}
-                      />
-                      <div className="flex-1">
-                            <Label 
-                          htmlFor={`kpi-${kpi.kpi_name}`}
-                              className="text-sm text-muted-foreground"
+                        <div
+                          key={kpi.kpi_name}
+                          className="flex items-center space-x-4 p-3 rounded-lg border hover:bg-accent/5"
                         >
-                          {kpi.kpi_desc}
+                          <Checkbox
+                            id={`kpi-${kpi.kpi_name}`}
+                            checked={selectedKPIs.has(kpi.kpi_name)}
+                            onCheckedChange={(checked) =>
+                              handleKPIChange(kpi.kpi_name, checked === true)
+                            }
+                            disabled={isViewMode}
+                          />
+                          <div className="flex-1">
+                            <Label
+                              htmlFor={`kpi-${kpi.kpi_name}`}
+                              className="text-sm text-muted-foreground"
+                            >
+                              {kpi.kpi_desc}
                             </Label>
-                      </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                      {selectedAuthLevels.includes("KPI Group") && selectedKPIGroups.size === 0
-                      ? "Select a KPI group to view KPIs"
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      {selectedAuthLevels.includes("KPI Group") &&
+                      selectedKPIGroups.size === 0
+                        ? "Select a KPI group to view KPIs"
                         : "No KPIs available for this system"}
-                </div>
-              )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-            </div>
+          </div>
 
           {/* Action buttons - now in a sticky footer */}
           <div className="flex justify-end space-x-2 p-4 border-t sticky bottom-0 bg-background">
             <Button variant="outline" onClick={() => setIsConfigOpen(false)}>
               {isViewMode ? "Close" : "Cancel"}
-              </Button>
+            </Button>
             {!isViewMode && (
-              <Button onClick={handleSaveSelections}>
-                Save Configuration
-              </Button>
+              <Button onClick={handleSaveSelections}>Save Configuration</Button>
             )}
           </div>
         </SheetContent>

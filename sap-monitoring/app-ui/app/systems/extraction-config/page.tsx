@@ -34,6 +34,9 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
+// Table styles
+const tableContainerStyles = "max-h-[60vh] overflow-y-auto";
+
 // Initialize empty KPI data arrays
 const jobsKpiData: KPI[] = [];
 const osKpiData: KPI[] = [];
@@ -125,9 +128,13 @@ export default function ConfigDashboard() {
   const [kpiSearchTerm, setKpiSearchTerm] = useState("");
 
   const filteredKpis = (kpis: KPI[]) => {
-    if (!kpiSearchTerm) return kpis;
+    // First filter by active KPI groups
+    const activeKpis = kpis.filter((kpi) => activeKpiGroups.has(kpi.kpi_group));
 
-    return kpis.filter(
+    // Then apply search filter if there's a search term
+    if (!kpiSearchTerm) return activeKpis;
+
+    return activeKpis.filter(
       (kpi) =>
         kpi.kpi_name.toLowerCase().includes(kpiSearchTerm.toLowerCase()) ||
         kpi.kpi_desc.toLowerCase().includes(kpiSearchTerm.toLowerCase()) ||
@@ -153,6 +160,41 @@ export default function ConfigDashboard() {
 
   // Add these state declarations at the top of your ConfigDashboard component
   const [isUpdating, setIsUpdating] = useState<string>("");
+
+  // Add this helper function for activating KPI groups
+  // Make sure it's defined before any useEffect that calls it
+  const activateKpiGroup = async (groupName: string, monArea: string) => {
+    try {
+      console.log(`Auto-activating KPI group: ${groupName}`);
+
+      // Add to active KPI groups
+      setActiveKpiGroups((prev) => new Set(prev).add(groupName));
+
+      // Fetch KPIs for this group
+      const response = await fetch(
+        `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch KPIs for ${groupName}`);
+      }
+
+      const kpiData = await response.json();
+
+      // Update KPIs state based on monitoring area
+      if (monArea === "OS") {
+        setOsKpis((prev) => [...prev, ...kpiData]);
+      } else if (monArea === "JOBS") {
+        setJobsKpis((prev) => [...prev, ...kpiData]);
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Error activating KPI group ${groupName}:`, error);
+      // Don't show error toast here to avoid multiple notifications
+      return false;
+    }
+  };
 
   // Add useEffect to initialize activeKpiGroups from API data
   useEffect(() => {
@@ -217,13 +259,47 @@ export default function ConfigDashboard() {
         const data = await response.json();
         setMonitoringAreas(data);
 
-        // Reset states when system changes
-        setActiveAreas(new Set());
+        // Set all monitoring areas as active by default and fetch their KPI groups
+        const activeAreasSet = new Set<string>(
+          data.map((area: MonitoringArea) => area.mon_area_name)
+        );
+        setActiveAreas(activeAreasSet);
+
+        // Reset other states
         setKpiGroups([]);
         setOsKpiGroup([]);
         setJobsKpiGroup([]);
         setOsKpis([]);
         setJobsKpis([]);
+
+        // Fetch KPI groups for all active areas
+        for (const area of data) {
+          try {
+            const groupResponse = await fetch(
+              `https://shwsckbvbt.a.pinggy.link/api/kpigrp?mon_area=${area.mon_area_name}`
+            );
+            if (!groupResponse.ok) continue;
+
+            const kpiGroupData = await groupResponse.json();
+
+            // Set KPI groups based on area
+            if (area.mon_area_name === "OS") {
+              setOsKpiGroup(kpiGroupData);
+            } else if (area.mon_area_name === "JOBS") {
+              setJobsKpiGroup(kpiGroupData);
+            }
+
+            // Activate all KPI groups by default
+            for (const group of kpiGroupData) {
+              await activateKpiGroup(group.kpi_grp_name, area.mon_area_name);
+            }
+          } catch (error) {
+            console.error(
+              `Error loading KPI groups for ${area.mon_area_name}:`,
+              error
+            );
+          }
+        }
       } catch (error) {
         console.error("Error loading monitoring areas:", error);
         toast.error("Failed to load monitoring areas", {
@@ -287,8 +363,6 @@ export default function ConfigDashboard() {
         // Set KPI groups based on area
         if (areaName === "OS") {
           setOsKpiGroup(kpiGroupData);
-          if (kpiGroupData.mon_area_name) {
-          }
         } else if (areaName === "JOBS") {
           setJobsKpiGroup(kpiGroupData);
         }
@@ -296,6 +370,11 @@ export default function ConfigDashboard() {
         toast.success(`Monitoring Area Activated`, {
           description: `${areaName} monitoring area has been activated`,
         });
+
+        // AUTOMATICALLY ACTIVATE ALL KPI GROUPS IN THIS MONITORING AREA
+        for (const group of kpiGroupData) {
+          await activateKpiGroup(group.kpi_grp_name, areaName);
+        }
       }
     } catch (error) {
       console.error("Error toggling monitoring area:", error);
@@ -342,85 +421,168 @@ export default function ConfigDashboard() {
     });
   };
 
-  // Add this function inside your component
+  const isValidFrequency = (sapFreq: number, sysFreq: number): boolean => {
+    if (sysFreq <= 0 || sapFreq <= 0) return false;
+    return sysFreq % sapFreq === 0; // System frequency must be a multiple of SAP frequency
+  };
+
+  const incrementFrequency = (groupName: string, currentValue: string) => {
+    const group = [...osKpiGroup, ...jobsKpiGroup].find(
+      (g) => g.kpi_grp_name === groupName
+    );
+    if (!group) return;
+
+    const sapFreq = parseInt(group.sapfrequency);
+    const currentSysFreq = parseInt(currentValue) || sapFreq;
+
+    // Increase by SAP frequency to ensure it stays a multiple
+    const newValue = (currentSysFreq + sapFreq).toString();
+
+    handleFrequencyChange(groupName, "sys", newValue);
+  };
+
+  const decrementFrequency = (groupName: string, currentValue: string) => {
+    const group = [...osKpiGroup, ...jobsKpiGroup].find(
+      (g) => g.kpi_grp_name === groupName
+    );
+    if (!group) return;
+
+    const sapFreq = parseInt(group.sapfrequency);
+    const currentSysFreq = parseInt(currentValue) || sapFreq;
+
+    // Don't go below SAP frequency
+    if (currentSysFreq <= sapFreq) {
+      handleFrequencyChange(groupName, "sys", sapFreq.toString());
+      return;
+    }
+
+    // Decrease by SAP frequency to ensure it stays a multiple
+    const newValue = (currentSysFreq - sapFreq).toString();
+
+    handleFrequencyChange(groupName, "sys", newValue);
+  };
+
   const handleFrequencyChange = (
     groupName: string,
     type: "sap" | "sys",
     value: string
   ) => {
-    // Ensure value is a positive number or empty
+    // We're only modifying system frequency now
+    if (type !== "sys") return;
+
+    // Ensure value is a positive number
     if (value && !/^\d+$/.test(value)) return;
 
-    setFrequencies((prev) => ({
-      ...prev,
-      [groupName]: {
-        ...prev[groupName],
-        [type]: value,
-      },
-    }));
+    const numValue = parseInt(value) || 0;
+    const group = [...osKpiGroup, ...jobsKpiGroup].find(
+      (g) => g.kpi_grp_name === groupName
+    );
+
+    if (group) {
+      const sapFreq = parseInt(group.sapfrequency);
+
+      // Only allow values that are multiples of SAP frequency
+      if (numValue > 0 && numValue % sapFreq !== 0) {
+        // Round to nearest multiple
+        const multiplier = Math.round(numValue / sapFreq);
+        const adjustedValue = (multiplier * sapFreq).toString();
+
+        setFrequencies((prev) => ({
+          ...prev,
+          [groupName]: {
+            ...prev[groupName],
+            [type]: adjustedValue,
+          },
+        }));
+
+        // Call API to update the system frequency
+        updateKpiGroupFrequency(groupName, adjustedValue);
+      } else {
+        setFrequencies((prev) => ({
+          ...prev,
+          [groupName]: {
+            ...prev[groupName],
+            [type]: value,
+          },
+        }));
+
+        // Call API to update the system frequency
+        if (numValue > 0) {
+          updateKpiGroupFrequency(groupName, value);
+        }
+      }
+    }
   };
 
-  // Add the handleKpiStatusChange function
-  const handleKpiStatusChange = async (kpi: KPI) => {
-    try {
-      setIsUpdating(kpi.kpi_name);
+  // Update the updateKpiGroupFrequency function with the correct API endpoint and axios
 
-      const response = await fetch(
-        `https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi.kpi_name}/status`,
+  const updateKpiGroupFrequency = async (
+    groupName: string,
+    frequency: string
+  ) => {
+    try {
+      setIsUpdating(`frequency-${groupName}`);
+
+      const group = [...osKpiGroup, ...jobsKpiGroup].find(
+        (g) => g.kpi_grp_name === groupName
+      );
+
+      if (!group) {
+        throw new Error(`KPI group ${groupName} not found`);
+      }
+
+      // Create FormData for the request
+      const formData = new FormData();
+      formData.append("kpiGroupName", groupName);
+      formData.append("sysFrequency", frequency);
+
+      // Use axios with the correct API endpoint
+      const response = await axios.post(
+        "https://shwsckbvbt.a.pinggy.link/api/kpigrp?updSysFrequency=X",
+        formData,
         {
-          method: "PUT",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "multipart/form-data",
           },
-          body: JSON.stringify({
-            is_active: !kpi.is_active,
-          }),
         }
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to update KPI status");
-      }
+      if (response.status === 200) {
+        toast.success("Frequency Updated", {
+          description: `System frequency for ${groupName} has been updated to ${frequency}`,
+        });
 
-      // Update local state based on monitoring area
-      if (kpi.kpi_group.startsWith("OS")) {
-        setOsKpis((prev) =>
-          prev.map((item) =>
-            item.kpi_name === kpi.kpi_name
-              ? { ...item, is_active: !item.is_active }
-              : item
-          )
-        );
-      } else if (kpi.kpi_group.startsWith("JOBS")) {
-        setJobsKpis((prev) =>
-          prev.map((item) =>
-            item.kpi_name === kpi.kpi_name
-              ? { ...item, is_active: !item.is_active }
-              : item
-          )
-        );
+        // Update the local state to reflect the change
+        if (group.mon_area === "OS") {
+          setOsKpiGroup((prev) =>
+            prev.map((g) =>
+              g.kpi_grp_name === groupName
+                ? { ...g, sysfrequency: frequency }
+                : g
+            )
+          );
+        } else if (group.mon_area === "JOBS") {
+          setJobsKpiGroup((prev) =>
+            prev.map((g) =>
+              g.kpi_grp_name === groupName
+                ? { ...g, sysfrequency: frequency }
+                : g
+            )
+          );
+        }
+      } else {
+        throw new Error("Failed to update frequency");
       }
-
-      toast.success(`KPI Status Updated`, {
-        description: `KPI ${kpi.kpi_name} has been ${
-          !kpi.is_active ? "activated" : "deactivated"
-        }`,
-      });
     } catch (error) {
-      console.error("Error updating KPI status:", error);
-      toast.error(`Failed to update KPI ${kpi.kpi_name} status`, {
-        description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+      console.error(`Error updating frequency for ${groupName}:`, error);
+      toast.error("Update Failed", {
+        description: "Failed to update system frequency. Please try again.",
       });
     } finally {
       setIsUpdating("");
     }
   };
 
-  // Update card styles for tables
-  const tableContainerStyles = "max-h-[600px] overflow-y-auto custom-scrollbar";
-
-  // Update the Monitoring Areas table render
   const renderMonitoringAreas = () => (
     <Card className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -433,18 +595,17 @@ export default function ConfigDashboard() {
         />
       </div>
 
-      <div className="sticky top-0 z-10 bg-background grid grid-cols-4 gap-4 mb-2 px-2 font-medium text-sm text-gray-500">
+      <div className="sticky top-0 z-10 bg-background grid grid-cols-3 gap-4 mb-2 px-2 font-medium text-sm text-gray-500">
         <div>Area</div>
         <div>Description</div>
         <div className="text-center">Active</div>
-        <div className="text-center">Select</div>
       </div>
 
       <div className={tableContainerStyles}>
         {filteredMonitoringAreas.map((area) => (
           <div
             key={area.mon_area_name}
-            className="grid grid-cols-4 gap-4 items-center p-2 hover:bg-accent/5 rounded-lg"
+            className="grid grid-cols-3 gap-4 items-center p-2 hover:bg-accent/5 rounded-lg"
           >
             <div>{area.mon_area_name}</div>
             <div className="text-sm text-gray-600">{area.mon_area_desc}</div>
@@ -454,10 +615,8 @@ export default function ConfigDashboard() {
                 onCheckedChange={() =>
                   handleMonitoringAreaToggle(area.mon_area_name)
                 }
+                disabled={isLoading}
               />
-            </div>
-            <div className="flex justify-center">
-              <Checkbox />
             </div>
           </div>
         ))}
@@ -465,7 +624,6 @@ export default function ConfigDashboard() {
     </Card>
   );
 
-  // Update the KPI Groups table render
   const renderKPIGroups = () => (
     <Card className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -487,62 +645,86 @@ export default function ConfigDashboard() {
       </div>
 
       <div className={tableContainerStyles}>
-        {[...osKpiGroup, ...jobsKpiGroup].map((group) => {
-          // Initialize frequencies if not already set
-          if (!frequencies[group.kpi_grp_name]) {
-            frequencies[group.kpi_grp_name] = {
-              sap: group.sapfrequency || "60",
-              sys: group.sysfrequency || "60",
-            };
-          }
+        {[...osKpiGroup, ...jobsKpiGroup]
+          .filter((group) => {
+            // Only show groups for active monitoring areas
+            const isActiveArea = activeAreas.has(group.mon_area);
 
-          return (
-            <div
-              key={group.kpi_grp_name}
-              className="grid grid-cols-5 gap-4 items-center p-2 hover:bg-accent/5 rounded-lg"
-            >
-              <div>{group.kpi_grp_name}</div>
-              <div className="text-sm text-gray-600">{group.kpi_grp_desc}</div>
-              <div className="flex justify-center">
-                <Input
-                  type="text"
-                  value={frequencies[group.kpi_grp_name]?.sap || ""}
-                  className="w-20 text-center"
-                  disabled
-                />
+            // Apply search filter if there is a search term
+            const matchesSearch =
+              kpiSearch.trim() === "" ||
+              group.kpi_grp_name
+                .toLowerCase()
+                .includes(kpiSearch.toLowerCase()) ||
+              group.kpi_grp_desc
+                .toLowerCase()
+                .includes(kpiSearch.toLowerCase());
+
+            return isActiveArea && matchesSearch;
+          })
+          .map((group) => {
+            // Initialize frequencies if not already set
+            if (!frequencies[group.kpi_grp_name]) {
+              const sapFreq = group.sapfrequency || "60";
+              frequencies[group.kpi_grp_name] = {
+                sap: sapFreq,
+                sys: group.sysfrequency || sapFreq, // Use the actual system frequency from API
+              };
+            }
+
+            return (
+              <div
+                key={group.kpi_grp_name}
+                className="grid grid-cols-5 gap-4 items-center p-2 hover:bg-accent/5 rounded-lg"
+              >
+                <div>{group.kpi_grp_name}</div>
+                <div className="text-sm text-gray-600">
+                  {group.kpi_grp_desc}
+                </div>
+                <div className="flex justify-center">
+                  <Input
+                    type="text"
+                    value={frequencies[group.kpi_grp_name]?.sap || ""}
+                    className="w-20 text-center"
+                    disabled
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <Input
+                    type="number"
+                    value={frequencies[group.kpi_grp_name]?.sys || ""}
+                    onChange={(e) =>
+                      handleFrequencyChange(
+                        group.kpi_grp_name,
+                        "sys",
+                        e.target.value
+                      )
+                    }
+                    className="w-20 text-center"
+                    min={parseInt(group.sapfrequency)} // Minimum value is SAP frequency
+                    step={parseInt(group.sapfrequency)} // Step value is SAP frequency
+                    disabled={isUpdating === `frequency-${group.kpi_grp_name}`}
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <Switch
+                    checked={activeKpiGroups.has(group.kpi_grp_name)}
+                    onCheckedChange={() =>
+                      handleKpiGroupToggle(group.kpi_grp_name, group.mon_area)
+                    }
+                    disabled={isUpdating === `toggle-${group.kpi_grp_name}`}
+                  />
+                  {isUpdating === `toggle-${group.kpi_grp_name}` && (
+                    <span className="animate-spin ml-2">⌛</span>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-center">
-                <Input
-                  type="nu"
-                  value={frequencies[group.kpi_grp_name]?.sys || ""}
-                  onChange={(e) =>
-                    handleFrequencyChange(
-                      group.kpi_grp_name,
-                      "sys",
-                      e.target.value
-                    )
-                  }
-                  className="w-20 text-center"
-                  disabled={!activeAreas.has(group.mon_area)}
-                />
-              </div>
-              <div className="flex justify-center">
-                <Switch
-                  checked={activeKpiGroups.has(group.kpi_grp_name)}
-                  onCheckedChange={() =>
-                    handleKpiGroupToggle(group.kpi_grp_name, group.mon_area)
-                  }
-                  disabled={!activeAreas.has(group.mon_area)}
-                />
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
     </Card>
   );
 
-  // Update the KPIs table render with proper alignment
   const renderKPIs = () => {
     const parentKpis = filteredKpis(
       [...osKpis, ...jobsKpis].filter((kpi) => kpi.parent === true)
@@ -550,6 +732,60 @@ export default function ConfigDashboard() {
     const childKpis = [...osKpis, ...jobsKpis].filter((kpi) => !kpi.parent);
     const [showChildren, setShowChildren] = useState(false);
 
+    const handleKpiStatusChange = async (kpi: KPI) => {
+      try {
+        // Set the updating state to show loading indication on this specific KPI
+        setIsUpdating(kpi.kpi_name);
+
+        // Toggle the KPI's active status
+        const newStatus = !kpi.is_active;
+
+        // Make API request to update the KPI status
+        const response = await axios.put(
+          `https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi.kpi_name}/status`,
+          { is_active: newStatus }
+        );
+
+        if (response.status !== 200) {
+          throw new Error(`Failed to update status for ${kpi.kpi_desc}`);
+        }
+
+        // Update the local state based on which monitoring area the KPI belongs to
+        if (
+          kpi.kpi_group.startsWith("OS") ||
+          osKpis.some((k) => k.kpi_name === kpi.kpi_name)
+        ) {
+          setOsKpis((prev) =>
+            prev.map((k) =>
+              k.kpi_name === kpi.kpi_name ? { ...k, is_active: newStatus } : k
+            )
+          );
+        } else {
+          setJobsKpis((prev) =>
+            prev.map((k) =>
+              k.kpi_name === kpi.kpi_name ? { ...k, is_active: newStatus } : k
+            )
+          );
+        }
+
+        // Show success notification
+        toast.success(newStatus ? "KPI Activated" : "KPI Deactivated", {
+          description: `${kpi.kpi_desc} has been ${
+            newStatus ? "activated" : "deactivated"
+          }`,
+        });
+      } catch (error) {
+        console.error("Error updating KPI status:", error);
+        toast.error("Failed to update KPI status", {
+          description:
+            error instanceof Error ? error.message : "Please try again",
+        });
+
+        // Revert UI changes in case of error - optional
+      } finally {
+        setIsUpdating(""); // Clear the updating state
+      }
+    };
     return (
       <Card className="p-6">
         {/* Header with Search */}
@@ -719,102 +955,149 @@ export default function ConfigDashboard() {
     );
   };
 
-  // Move handleKpiGroupToggle inside the component
+  // Update the handleKpiGroupToggle function to use FormData
   const handleKpiGroupToggle = async (groupName: string, monArea: string) => {
     try {
-      setIsLoading(true);
+      setIsUpdating(`toggle-${groupName}`);
       const willBeActive = !activeKpiGroups.has(groupName);
 
-      if (willBeActive) {
-        // First update the UI state
-        setActiveKpiGroups((prev) => new Set(prev).add(groupName));
+      // Get the current group data
+      const group = [...osKpiGroup, ...jobsKpiGroup].find(
+        (g) => g.kpi_grp_name === groupName
+      );
 
-        // Immediately fetch KPIs for this group
-        const response = await fetch(
-          `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
-        );
+      if (!group) {
+        throw new Error(`KPI group ${groupName} not found`);
+      }
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(
-            `Failed to fetch KPIs for ${groupName}. Server response: ${response.status} ${errorText}`
+      // Create FormData object
+      const formData = new FormData();
+      formData.append("kpi_grp", groupName);
+      formData.append("is_active", willBeActive.toString());
+
+      const response = await fetch(
+        "https://shwsckbvbt.a.pinggy.link/api/kpigrp",
+        {
+          method: "POST",
+          body: formData,
+          redirect: "follow",
+        }
+      );
+
+      if (response.ok) {
+        // Update local state
+        if (willBeActive) {
+          setActiveKpiGroups((prev) => new Set(prev).add(groupName));
+
+          // Fetch KPIs for this group if activated
+          const kpiResponse = await fetch(
+            `https://shwsckbvbt.a.pinggy.link/api/kpi?kpi_grp=${groupName}`
+          );
+
+          if (kpiResponse.ok) {
+            const kpiData = await kpiResponse.json();
+
+            // Update appropriate KPI state based on monitoring area
+            if (monArea === "OS") {
+              setOsKpis((prev) => [...prev, ...kpiData]);
+            } else if (monArea === "JOBS") {
+              setJobsKpis((prev) => [...prev, ...kpiData]);
+            }
+          }
+
+          toast.success("KPI Group Activated", {
+            description: `${groupName} has been activated with its KPIs`,
+          });
+        } else {
+          setActiveKpiGroups((prev) => {
+            const next = new Set(prev);
+            next.delete(groupName);
+            return next;
+          });
+
+          // Remove KPIs for this group if deactivated
+          if (monArea === "OS") {
+            const removedCount = osKpis.filter(
+              (kpi) => kpi.kpi_group === groupName
+            ).length;
+            setOsKpis((prev) =>
+              prev.filter((kpi) => kpi.kpi_group !== groupName)
+            );
+            toast.info("OS KPIs removed", {
+              description: `${removedCount} KPIs deactivated for ${groupName}`,
+            });
+          } else if (monArea === "JOBS") {
+            const removedCount = jobsKpis.filter(
+              (kpi) => kpi.kpi_group === groupName
+            ).length;
+            setJobsKpis((prev) =>
+              prev.filter((kpi) => kpi.kpi_group !== groupName)
+            );
+            toast.info("Job KPIs removed", {
+              description: `${removedCount} KPIs deactivated for ${groupName}`,
+            });
+          }
+        }
+
+        // Update the local KPI group state to reflect the change
+        if (monArea === "OS") {
+          setOsKpiGroup((prev) =>
+            prev.map((g) =>
+              g.kpi_grp_name === groupName
+                ? { ...g, is_active: willBeActive }
+                : g
+            )
+          );
+        } else if (monArea === "JOBS") {
+          setJobsKpiGroup((prev) =>
+            prev.map((g) =>
+              g.kpi_grp_name === groupName
+                ? { ...g, is_active: willBeActive }
+                : g
+            )
           );
         }
 
-        const kpiData = await response.json();
+        // Check if all KPI groups under this monitoring area are now inactive
+        if (!willBeActive) {
+          // Get all KPI groups for this monitoring area
+          const allGroupsForArea = [...osKpiGroup, ...jobsKpiGroup].filter(
+            (g) => g.mon_area === monArea
+          );
 
-        if (kpiData.length === 0) {
-          toast.warning(`No KPIs found for ${groupName}`, {
-            description: "The KPI group is active but contains no KPIs.",
-          });
-        }
+          // Check if any KPI group for this area is still active
+          const anyGroupActive = allGroupsForArea.some((g) =>
+            g.kpi_grp_name === groupName
+              ? willBeActive
+              : activeKpiGroups.has(g.kpi_grp_name)
+          );
 
-        // Update KPIs state based on monitoring area
-        if (monArea === "OS") {
-          setOsKpis((prev) => [...prev, ...kpiData]);
-          toast.success("OS KPIs loaded successfully", {
-            description: `${kpiData.length} KPIs activated for ${groupName}`,
-          });
-        } else if (monArea === "JOBS") {
-          setJobsKpis((prev) => [...prev, ...kpiData]);
-          toast.success("Job KPIs loaded successfully", {
-            description: `${kpiData.length} KPIs activated for ${groupName}`,
-          });
+          // If no KPI group is active and the monitoring area is currently active, deactivate it
+          if (!anyGroupActive && activeAreas.has(monArea)) {
+            console.log(
+              `All KPI groups under ${monArea} are inactive. Automatically deactivating monitoring area.`
+            );
+
+            // Call the monitoring area toggle function to deactivate it
+            await handleMonitoringAreaToggle(monArea);
+
+            toast.info(`Monitoring Area Auto-Deactivated`, {
+              description: `${monArea} monitoring area has been automatically deactivated because all its KPI groups are inactive.`,
+            });
+          }
         }
       } else {
-        // Deactivate the KPI group
-        setActiveKpiGroups((prev) => {
-          const next = new Set(prev);
-          next.delete(groupName);
-          return next;
-        });
-
-        // Clear KPIs for this group
-        if (monArea === "OS") {
-          const removedCount = osKpis.filter(
-            (kpi) => kpi.kpi_group === groupName
-          ).length;
-          setOsKpis((prev) =>
-            prev.filter((kpi) => kpi.kpi_group !== groupName)
-          );
-          toast.info("OS KPIs removed", {
-            description: `${removedCount} KPIs deactivated for ${groupName}`,
-          });
-        } else if (monArea === "JOBS") {
-          const removedCount = jobsKpis.filter(
-            (kpi) => kpi.kpi_group === groupName
-          ).length;
-          setJobsKpis((prev) =>
-            prev.filter((kpi) => kpi.kpi_group !== groupName)
-          );
-          toast.info("Job KPIs removed", {
-            description: `${removedCount} KPIs deactivated for ${groupName}`,
-          });
-        }
+        throw new Error(
+          `Failed to ${willBeActive ? "activate" : "deactivate"} group`
+        );
       }
     } catch (error) {
       console.error("Error toggling KPI group:", error);
-      toast.error(`Failed to toggle KPI group ${groupName}`, {
-        description:
-          error instanceof Error
-            ? error.message
-            : "An unexpected error occurred. Please try again or contact support.",
+      toast.error("Update Failed", {
+        description: "Failed to update KPI group status. Please try again.",
       });
-
-      // Roll back the UI state on error
-      if (activeKpiGroups.has(groupName)) {
-        // If we were trying to deactivate it, don't change the state
-        // as the KPIs are still active on the server
-      } else {
-        // If we were trying to activate it but failed, remove it from active groups
-        setActiveKpiGroups((prev) => {
-          const next = new Set(prev);
-          next.delete(groupName);
-          return next;
-        });
-      }
     } finally {
-      setIsLoading(false);
+      setIsUpdating("");
     }
   };
 
@@ -822,9 +1105,6 @@ export default function ConfigDashboard() {
     e.stopPropagation(); // Prevent expanding when clicking settings
     setSelectedKpiSettings(kpi);
     setIsSettingsOpen(true);
-    toast.info("Opening KPI Settings", {
-      description: `Configuring settings for ${kpi.kpi_name}`,
-    });
   };
 
   return (
@@ -1037,9 +1317,11 @@ const KpiSettingsSheet = ({
 
       if (response.status === 200) {
         // Extract filter names from response
+        console.log("Filter names response:", response.data);
         const filterNames = response.data.map(
           (item: { filter_name: string }) => item.filter_name
         );
+        console.log("Filter names:", filterNames);
         setAvailableFilters(filterNames);
 
         // Initialize with one empty filter if there are available filters
@@ -1548,5 +1830,3 @@ const KpiSettingsSheet = ({
     </Sheet>
   );
 };
-
-

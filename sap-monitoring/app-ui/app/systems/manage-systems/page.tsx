@@ -45,6 +45,8 @@ import { Switch } from "@/components/ui/switch";
 import axios from "axios";
 import EditSystemSheet from "@/components/edit-system-sheet";
 import { toast } from "sonner";
+import { PopoverWarningButton } from "@/components/ui/popover-warning-button";
+import { cn } from "@/lib/utils";
 
 // Update the System interface
 interface System {
@@ -125,6 +127,13 @@ export default function ManageSystemsPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [systemToDelete, setSystemToDelete] = useState<number | null>(null);
+
+  // First, let's add a new confirmation dialog state and component for system status changes
+  const [systemStatusChange, setSystemStatusChange] = useState<{
+    id: number;
+    systemName: string;
+    newStatus: boolean;
+  } | null>(null);
 
   useEffect(() => {
     fetchSystemStats();
@@ -278,6 +287,65 @@ export default function ManageSystemsPage() {
     setSystemToDelete(null);
   };
 
+  // Add this function to handle system status toggle
+  const handleToggleSystemStatus = (system: System, newStatus: boolean) => {
+    // If turning off an active system, show confirmation dialog
+    if (system.activeStatus && !newStatus) {
+      setSystemStatusChange({
+        id: parseInt(system.id),
+        systemName: system.systemId,
+        newStatus,
+      });
+    } else {
+      // Otherwise, just update the status directly
+      updateSystemStatus(parseInt(system.id), newStatus);
+    }
+  };
+
+  // Add this function to handle the actual status update
+  const updateSystemStatus = async (systemId: number, isActive: boolean) => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(
+        `http://localhost:3000/api/systems/${systemId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ isActive }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to update system status");
+
+      // Refresh data after update
+      await Promise.all([fetchSystemStats(), fetchSystems()]);
+
+      toast.success(
+        isActive
+          ? "System activated successfully"
+          : "System deactivated and polling stopped"
+      );
+    } catch (error) {
+      toast.error("Failed to update system status", {
+        description:
+          error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Add this function to the ManageSystemsPage component
+  const handleUpdateStats = (updatedStats: SystemStats) => {
+    setStats(updatedStats);
+  };
+
+  const handleRefreshStats = () => {
+    fetchSystemStats();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-background/95">
       <main className="container mx-auto px-4 py-8">
@@ -327,6 +395,9 @@ export default function ManageSystemsPage() {
               onDelete={setSystemToDelete}
               onEdit={(id) => console.log("Edit:", id)} // TODO: Implement edit
               onSettings={(id) => console.log("Settings:", id)} // TODO: Implement settings
+              onToggleStatus={handleToggleSystemStatus}
+              onUpdateStats={handleUpdateStats} // Add this line
+              onRefreshStats={handleRefreshStats} // Pass refresh stats function
             />
           )}
         </Card>
@@ -346,6 +417,22 @@ export default function ManageSystemsPage() {
         onClose={() => setSystemToDelete(null)}
         onConfirm={() => systemToDelete && handleDeleteSystem(systemToDelete)}
       />
+
+      {/* System Status Confirmation Dialog */}
+      {systemStatusChange && (
+        <SystemStatusConfirmationDialog
+          open={!!systemStatusChange}
+          onClose={() => setSystemStatusChange(null)}
+          onConfirm={() => {
+            updateSystemStatus(
+              systemStatusChange.id,
+              systemStatusChange.newStatus
+            );
+            setSystemStatusChange(null);
+          }}
+          systemName={systemStatusChange.systemName}
+        />
+      )}
     </div>
   );
 }
@@ -380,70 +467,89 @@ interface SystemsTableProps {
   onDelete: (id: number) => void;
   onEdit: (id: number) => void;
   onSettings: (id: number) => void;
+  onToggleStatus: (system: System, newStatus: boolean) => void;
+  onUpdateStats: (stats: SystemStats) => void; // Add this prop
+  onRefreshStats?: () => void; // Add this prop
 }
 
-// First, add a custom hook for polling connection status
-const useConnectionStatusPolling = (systems: System[], interval = 60000) => {
-  const [connectionStatuses, setConnectionStatuses] = useState<
-    Record<string, boolean>
-  >({});
+// Update the useConnectionStatusPolling hook to prevent any stats updates
+const useConnectionStatusPolling = (systems: System[], interval = 30000) => {
+  const [connectionStatuses, setConnectionStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const checkConnectionStatus = async (systemId: string) => {
       try {
         const response = await fetch(
-          `https://shwsckbvbt.a.pinggy.link/api/conn?system_id=${systemId}`
+            `https://shwsckbvbt.a.pinggy.link/api/conn?system_id=${systemId}`
         );
         if (!response.ok) throw new Error("Failed to fetch connection status");
         const data = await response.json();
         return { systemId, active: data.active };
-      } catch (error) {
+    } catch (error) {
         console.error(
-          `Error checking connection for system ${systemId}:`,
-          error
+            `Error checking connection for system ${systemId}:`,
+            error
         );
         return { systemId, active: false };
-      }
+    }
     };
 
-    const updateAllStatuses = async () => {
-      const statusUpdates = await Promise.all(
-        systems.map((system) => checkConnectionStatus(system.systemId))
+    const updateConnectionStatuses = async () => {
+      // Only check connection statuses, don't update any other data
+      const statusChecks = systems.map((system) =>
+        checkConnectionStatus(system.systemId)
       );
 
-      setConnectionStatuses(
-        statusUpdates.reduce((acc, { systemId, active }) => {
-          acc[systemId] = active;
-          return acc;
-        }, {} as Record<string, boolean>)
-      );
+      const results = await Promise.all(statusChecks);
+
+      // Only update the connection statuses, nothing else
+      setConnectionStatuses((prev) => {
+        let hasChanges = false;
+        const newStatuses = { ...prev };
+
+        results.forEach(({ systemId, active }) => {
+          if (newStatuses[systemId] !== active) {
+            newStatuses[systemId] = active;
+            hasChanges = true;
+          }
+        });
+
+        // Only trigger a re-render if there are actual changes
+        return hasChanges ? newStatuses : prev;
+      });
     };
 
     // Initial check
-    updateAllStatuses();
+    updateConnectionStatuses();
 
     // Set up polling interval
-    const pollInterval = setInterval(updateAllStatuses, interval);
+    const pollInterval = setInterval(updateConnectionStatuses, interval);
 
-    // Cleanup
+    // Clean up interval on unmount
     return () => clearInterval(pollInterval);
   }, [systems, interval]);
 
   return connectionStatuses;
 };
 
-// Update in your page.tsx
 const SystemsTable = ({
   systems,
   onDelete,
   onEdit,
   onSettings,
+  onToggleStatus,
+  onUpdateStats,
+  onRefreshStats,
 }: SystemsTableProps) => {
   const [selectedSystem, setSelectedSystem] = useState<System | null>(null);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string>("");
   const [localSystems, setLocalSystems] = useState<System[]>(systems);
   const connectionStatuses = useConnectionStatusPolling(localSystems);
+  const [connectionDisplay, setConnectionDisplay] = useState({
+    connected: 0,
+    disconnected: 0,
+  });
 
   // First, add these state variables in the SystemsTable component
   const [showPollingConfirmDialog, setShowPollingConfirmDialog] =
@@ -455,12 +561,34 @@ const SystemsTable = ({
     type: "polling" | "active";
     description?: string;
     activeStatus?: boolean;
+    pollingStatus?: boolean;
   } | null>(null);
+
+  // Add a new state for the activation reminder dialog
+  const [showActivationReminderDialog, setShowActivationReminderDialog] =
+    useState(false);
 
   // Update local state when systems prop changes
   useEffect(() => {
     setLocalSystems(systems);
   }, [systems]);
+
+  useEffect(() => {
+    // This effect ONLY updates the visual display of connection status
+    // It does NOT update the API or global stats
+    if (Object.keys(connectionStatuses).length > 0) {
+      // Count connected and disconnected systems for visual display only
+      const connectedCount = Object.values(connectionStatuses).filter(
+        (status) => status
+      ).length;
+
+      // Update local state variable for display purposes only
+      setConnectionDisplay({
+        connected: connectedCount,
+        disconnected: localSystems.length - connectedCount,
+      });
+    }
+  }, [connectionStatuses, localSystems.length]);
 
   const handlePollingStatusChange = async (
     systemId: string,
@@ -499,13 +627,16 @@ const SystemsTable = ({
         throw new Error("Failed to update polling status");
 
       // Update local state after successful API call
-      setLocalSystems((prev) =>
-        prev.map((sys) =>
-          sys.systemId === systemId
-            ? { ...sys, pollingStatus: !currentStatus }
-            : sys
-        )
+      const updatedSystems = localSystems.map((sys) =>
+        sys.systemId === systemId
+          ? { ...sys, pollingStatus: !currentStatus }
+          : sys
       );
+
+      setLocalSystems(updatedSystems);
+
+      // Update stats based on the local state change
+      updateLocalStats(updatedSystems);
 
       // FIXED: Correct toast.success usage
       toast.success(`Polling status updated`, {
@@ -536,19 +667,25 @@ const SystemsTable = ({
       // Create FormData object
       const formData = new FormData();
       formData.append("systemId", systemId);
-      formData.append("activeStatus", (!currentStatus).toString());
 
-      // Get the current system to include its description and polling status
+      // Set the new active status (opposite of current)
+      const newActiveStatus = !currentStatus;
+      formData.append("activeStatus", newActiveStatus.toString());
+
+      // Get the current system to include its description
       const currentSystem = localSystems.find(
         (sys) => sys.systemId === systemId
       );
-      if (currentSystem) {
-        formData.append("description", currentSystem.description || "");
-        formData.append(
-          "pollingStatus",
-          currentSystem.pollingStatus.toString()
-        );
-      }
+      if (!currentSystem) throw new Error("System not found");
+
+      formData.append("description", currentSystem.description || "");
+
+      // When turning active status OFF, also set polling to OFF
+      // When turning active status ON, keep polling status as is
+      const newPollingStatus = newActiveStatus
+        ? currentSystem.pollingStatus
+        : false;
+      formData.append("pollingStatus", newPollingStatus.toString());
 
       // Make the API request using FormData
       const response = await axios.post(
@@ -565,23 +702,55 @@ const SystemsTable = ({
       if (response.status !== 200)
         throw new Error("Failed to update active status");
 
-      // Update local state after successful API call
-      setLocalSystems((prev) =>
-        prev.map((sys) =>
-          sys.systemId === systemId
-            ? { ...sys, activeStatus: !currentStatus }
-            : sys
-        )
+      // Update local state after successful API call - update BOTH active and polling status
+      const updatedSystems = localSystems.map((sys) =>
+        sys.systemId === systemId
+          ? {
+              ...sys,
+              activeStatus: !currentStatus,
+              // If turning active OFF, also turn polling OFF
+              pollingStatus: newActiveStatus ? sys.pollingStatus : false,
+            }
+          : sys
       );
 
-      toast.success(
-        `System ${!currentStatus ? "activated" : "deactivated"} successfully`,
-        {
-          description: `The system ${systemId} has been ${
-            !currentStatus ? "activated" : "deactivated"
-          }`,
+      setLocalSystems(updatedSystems);
+
+      // Update stats based on the local state change
+      updateLocalStats(updatedSystems);
+
+      // Different messages for activation vs deactivation
+      if (newActiveStatus) {
+        // System was activated
+        toast.success(`System activated successfully`, {
+          description: `The system ${systemId} has been activated`,
+        });
+
+        // Show a reminder toast for polling if it's not enabled
+        if (!currentSystem.pollingStatus) {
+          toast.info(`Reminder: Turn on polling`, {
+            description: `Remember to enable polling for ${systemId} to start collecting data`,
+            duration: 5000,
+            action: {
+              label: "Enable Now",
+              onClick: () => {
+                // Enable polling for this system
+                handlePollingStatusChange(
+                  systemId,
+                  false, // current status (false = not polling)
+                  true, // active status is now true
+                  currentSystem.description || ""
+                );
+              },
+            },
+          });
         }
-      );
+      } else {
+        // System was deactivated
+        toast.success(`System deactivated successfully`, {
+          description: `The system ${systemId} has been deactivated and polling has been stopped`,
+        });
+      }
     } catch (error) {
       toast.error("Failed to update active status", {
         description:
@@ -626,13 +795,37 @@ const SystemsTable = ({
     }
   };
 
-  // Update the toggle handlers to show confirmation first
+  // Update the toggle handlers to handle both cases
   const handlePollingToggleClick = (
     systemId: string,
     currentStatus: boolean,
     currentActiveStatus: boolean,
     description: string
   ) => {
+    // If trying to turn ON polling while system is NOT active, show warning
+    if (!currentStatus && !currentActiveStatus) {
+      // Show a more prominent toast warning
+      toast.error("System Must Be Active First", {
+        description:
+          "You need to activate the system before enabling polling for data collection.",
+        duration: 5000,
+        position: "top-center",
+        action: {
+          label: "Activate System",
+          onClick: () => {
+            // Turn on active status first
+            handleActiveToggleClick(
+              systemId,
+              false, // current active status (false = not active)
+              false // current polling status (false)
+            );
+          },
+        },
+      });
+      return;
+    }
+
+    // Continue with normal polling toggle logic for other cases
     setPendingChange({
       systemId,
       currentStatus,
@@ -645,63 +838,135 @@ const SystemsTable = ({
 
   const handleActiveToggleClick = (
     systemId: string,
-    currentStatus: boolean
+    currentStatus: boolean,
+    pollingStatus: boolean
   ) => {
-    setPendingChange({
-      systemId,
-      currentStatus,
-      type: "active",
-    });
-    setShowActiveConfirmDialog(true);
+    // If turning OFF an active system, show deactivation warning
+    if (currentStatus) {
+      setPendingChange({
+        systemId,
+        currentStatus,
+        type: "active",
+        pollingStatus: pollingStatus,
+      });
+      setShowActiveConfirmDialog(true);
+    }
+    // When turning ON, no need for warning about deactivation,
+    // but remind about polling if needed
+    else {
+      // Set pending change for the system being activated
+      setPendingChange({
+        systemId,
+        currentStatus,
+        type: "active",
+        pollingStatus: pollingStatus,
+      });
+
+      // If polling is already on, no need for reminder, just activate
+      if (pollingStatus) {
+        handleActiveStatusChange(systemId, currentStatus);
+      }
+      // If polling is off, show the reminder dialog
+      else {
+        setShowActivationReminderDialog(true);
+      }
+    }
   };
 
   // Add confirmation dialog components
-  const PollingConfirmationDialog = () => (
-    <AlertDialog
-      open={showPollingConfirmDialog}
-      onOpenChange={() => {
-        setShowPollingConfirmDialog(false);
-        setPendingChange(null);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Change Polling Status</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to{" "}
-            {pendingChange?.currentStatus ? "disable" : "enable"} polling for
-            this system? This will affect the system's monitoring status.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            onClick={() => {
-              setShowPollingConfirmDialog(false);
-              setPendingChange(null);
-            }}
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              if (pendingChange) {
-                handlePollingStatusChange(
-                  pendingChange.systemId,
-                  pendingChange.currentStatus,
-                  pendingChange.activeStatus!,
-                  pendingChange.description!
-                );
-              }
-              setShowPollingConfirmDialog(false);
-              setPendingChange(null);
-            }}
-          >
-            Confirm
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  const PollingConfirmationDialog = () => {
+    // Check if trying to enable polling on inactive system (defensive)
+    const isEnablingPollingOnInactiveSystem =
+      pendingChange &&
+      !pendingChange.currentStatus &&
+      !pendingChange.activeStatus;
+
+    return (
+      <AlertDialog
+        open={showPollingConfirmDialog}
+        onOpenChange={() => {
+          setShowPollingConfirmDialog(false);
+          setPendingChange(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Polling Status</AlertDialogTitle>
+            {isEnablingPollingOnInactiveSystem ? (
+              <AlertDialogDescription className="space-y-2">
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md p-3 text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">System must be active first</p>
+                    <p className="text-sm">
+                      You cannot enable polling for an inactive system. Please
+                      activate the system first.
+                    </p>
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            ) : (
+              <AlertDialogDescription>
+                Are you sure you want to{" "}
+                {pendingChange?.currentStatus ? "disable" : "enable"} polling
+                for this system? This will affect the system's monitoring
+                status.
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowPollingConfirmDialog(false);
+                setPendingChange(null);
+              }}
+            >
+              {isEnablingPollingOnInactiveSystem ? "Understood" : "Cancel"}
+            </AlertDialogCancel>
+            {!isEnablingPollingOnInactiveSystem && (
+              <AlertDialogAction
+                onClick={() => {
+                  if (pendingChange) {
+                    handlePollingStatusChange(
+                      pendingChange.systemId,
+                      pendingChange.currentStatus,
+                      pendingChange.activeStatus!,
+                      pendingChange.description!
+                    );
+                  }
+                  setShowPollingConfirmDialog(false);
+                  setPendingChange(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            )}
+            {isEnablingPollingOnInactiveSystem && (
+              <Button
+                onClick={() => {
+                  // Close this dialog
+                  setShowPollingConfirmDialog(false);
+                  setPendingChange(null);
+
+                  // If we have system details, attempt to activate it
+                  if (pendingChange) {
+                    handleActiveToggleClick(
+                      pendingChange.systemId,
+                      false, // current active status (false)
+                      false // current polling status (false)
+                    );
+                  }
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Activate System
+              </Button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  };
 
   const ActiveConfirmationDialog = () => (
     <AlertDialog
@@ -713,11 +978,30 @@ const SystemsTable = ({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Change Active Status</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to{" "}
-            {pendingChange?.currentStatus ? "deactivate" : "activate"} this
-            system? This will affect the system's overall functionality.
+          <AlertDialogTitle>
+            Deactivate System and Stop Polling?
+          </AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2">
+            <p>
+              You are about to deactivate system{" "}
+              <strong>{pendingChange?.systemId}</strong>.
+            </p>
+
+            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md p-3 text-red-800 dark:text-red-300 flex items-start gap-2">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">
+                  Note: Deactivating the system will automatically disable
+                  Polling
+                </p>
+                {pendingChange?.pollingStatus && (
+                  <p className="text-sm mt-1 font-bold">
+                    Warning: Polling is currently active. Deactivating this
+                    system will immediately stop data collection.
+                  </p>
+                )}
+              </div>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -740,13 +1024,177 @@ const SystemsTable = ({
               setShowActiveConfirmDialog(false);
               setPendingChange(null);
             }}
+            className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
           >
-            Confirm
+            Deactivate System
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
+
+  const ActivationReminderDialog = () => (
+    <AlertDialog
+      open={showActivationReminderDialog}
+      onOpenChange={() => {
+        setShowActivationReminderDialog(false);
+        setPendingChange(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Activate System</AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2">
+            <p>
+              You are activating system{" "}
+              <strong>{pendingChange?.systemId}</strong>, but polling is
+              currently disabled.
+            </p>
+
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-blue-800 dark:text-blue-300 flex items-start gap-2">
+              <Activity className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">
+                  Enable Polling for Data Collection
+                </p>
+                <p className="text-sm">
+                  For the system to collect data, you'll need to turn on polling
+                  after activation. Would you like to activate the system with
+                  polling turned on?
+                </p>
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setShowActivationReminderDialog(false);
+              setPendingChange(null);
+            }}
+          >
+            Cancel
+          </AlertDialogCancel>
+          <Button
+            variant="outline"
+            onClick={() => {
+              // Just activate the system without turning on polling
+              if (pendingChange) {
+                handleActiveStatusChange(
+                  pendingChange.systemId,
+                  pendingChange.currentStatus
+                );
+              }
+              setShowActivationReminderDialog(false);
+              setPendingChange(null);
+            }}
+          >
+            Activate Only
+          </Button>
+          <AlertDialogAction
+            onClick={() => {
+              // Activate the system WITH polling in a single API call
+              if (pendingChange) {
+                handleActivateWithPolling(
+                  pendingChange.systemId,
+                  pendingChange.currentStatus
+                );
+              }
+              setShowActivationReminderDialog(false);
+              setPendingChange(null);
+            }}
+            className="bg-green-600 hover:bg-green-700 focus:ring-green-600"
+          >
+            Activate with Polling
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  // Update this function to separate connection status from other stats
+  const updateLocalStats = (systems: System[]) => {
+    // NEVER update connection stats here - those are handled separately
+    const updatedStats = {
+      totalSystems: systems.length,
+      activeSystems: systems.filter((sys) => sys.activeStatus).length,
+      inactiveSystems: systems.filter((sys) => !sys.activeStatus).length,
+      // Keep the connectionStats unchanged - handled by the useConnectionStatusPolling hook
+      connectionStats: {
+        connected: connectionDisplay.connected, // Use the local connection display state
+        disconnected: connectionDisplay.disconnected,
+      },
+    };
+
+    onUpdateStats(updatedStats);
+  };
+
+  // Add this new function to handle activating with polling in one API call
+  const handleActivateWithPolling = async (
+    systemId: string,
+    currentActiveStatus: boolean
+  ) => {
+    setIsUpdating(`active-${systemId}`);
+
+    try {
+      // Get the current system to include its description
+      const currentSystem = localSystems.find(
+        (sys) => sys.systemId === systemId
+      );
+      if (!currentSystem) throw new Error("System not found");
+
+      // Create FormData for a single API call that sets both statuses
+      const formData = new FormData();
+      formData.append("systemId", systemId);
+      formData.append("activeStatus", "true"); // Always true when activating
+      formData.append("pollingStatus", "true"); // Always true with this function
+      formData.append("description", currentSystem.description || "");
+
+      // Make the API request using FormData
+      const response = await axios.post(
+        "https://shwsckbvbt.a.pinggy.link/api/sys",
+        formData,
+        {
+          headers: {
+            Accept: "*/*",
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.status !== 200) {
+        throw new Error("Failed to update system status");
+      }
+
+      // Update local state after successful API call
+      const updatedSystems = localSystems.map((sys) =>
+        sys.systemId === systemId
+          ? {
+              ...sys,
+              activeStatus: true, // Set active to true
+              pollingStatus: true, // Set polling to true
+            }
+          : sys
+      );
+
+      setLocalSystems(updatedSystems);
+
+      // Update stats based on the local state change
+      updateLocalStats(updatedSystems);
+
+      // Success toast for both activations
+      toast.success(`System activated with polling`, {
+        description: `System ${systemId} has been activated and polling has been enabled`,
+      });
+    } catch (error) {
+      toast.error("Failed to update system status", {
+        description:
+          error instanceof Error ? error.message : "Please try again",
+      });
+    } finally {
+      setIsUpdating("");
+    }
+  };
 
   return (
     <>
@@ -783,33 +1231,78 @@ const SystemsTable = ({
                         : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"
                     }`}
                   >
-                    {connectionStatuses[system.systemId]
-                      ? "Connected"
-                      : "Disconnected"}
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          connectionStatuses[system.systemId]
+                            ? "bg-blue-600 dark:bg-blue-400 animate-pulse"
+                            : "bg-red-600 dark:bg-red-400"
+                        }`}
+                      ></div>
+                      {connectionStatuses[system.systemId]
+                        ? "Connected"
+                        : "Disconnected"}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Switch
-                    checked={system.pollingStatus}
-                    disabled={isUpdating === `polling-${system.systemId}`}
-                    onCheckedChange={() =>
-                      handlePollingToggleClick(
-                        system.systemId,
-                        system.pollingStatus,
-                        system.activeStatus,
-                        system.description
-                      )
-                    }
-                  />
+                  {!system.activeStatus ? (
+                    // Use PopoverWarningButton for inactive systems
+                    <div className="flex items-center">
+                      <PopoverWarningButton
+                        hint="System must be active to enable polling"
+                        disabled={true}
+                        className="flex items-center justify-start p-0 m-0 cursor-not-allowed"
+                      >
+                        <Switch
+                        />
+                      </PopoverWarningButton>
+                    </div>
+                  ) : (
+                    // Use standard Switch with improved tooltip for active systems
+                    <div className="group relative">
+                      <Switch
+                        checked={system.pollingStatus}
+                        disabled={isUpdating === `polling-${system.systemId}`}
+                        onCheckedChange={() =>
+                          handlePollingToggleClick(
+                            system.systemId,
+                            system.pollingStatus,
+                            system.activeStatus,
+                            system.description
+                          )
+                        }
+                      />
+                      {/* Enhanced tooltip with arrow for active systems */}
+                      <div
+                        className={cn(
+                          "absolute z-10 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200",
+                          "w-max max-w-xs bottom-full left-1/2 -translate-x-1/2 mb-2",
+                          "bg-black/90 text-white border border-gray-700",
+                          "rounded-md shadow-lg py-2 px-3 text-xs",
+                          "after:content-[''] after:absolute after:left-1/2 after:-translate-x-1/2 after:top-full",
+                          "after:border-5 after:border-transparent",
+                          "after:border-t-black/90"
+                        )}
+                      >
+                        <span>
+                          {system.pollingStatus
+                            ? "Click to disable polling"
+                            : "Click to enable polling"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Switch
                     checked={system.activeStatus}
-                    disabled={isUpdating === `active-${system.systemId}`}
+                    // disabled={isUpdating === `active-${system.systemId}`}
                     onCheckedChange={() =>
                       handleActiveToggleClick(
                         system.systemId,
-                        system.activeStatus
+                        system.activeStatus,
+                        system.pollingStatus // Pass the current polling status
                       )
                     }
                   />
@@ -827,7 +1320,7 @@ const SystemsTable = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => onSettings(system.id)}
+                      onClick={() => onSettings(parseInt(system.id))}
                     >
                       <Settings className="h-4 w-4" />
                     </Button>
@@ -841,6 +1334,7 @@ const SystemsTable = ({
 
       <PollingConfirmationDialog />
       <ActiveConfirmationDialog />
+      <ActivationReminderDialog />
       <EditSystemSheet
         open={isEditSheetOpen}
         onClose={() => {
@@ -1026,9 +1520,6 @@ const AddSystemSheet = ({
 const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
   switch (variant) {
     case "blue":
-      return "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
-    case "green":
-      return "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400";
     case "red":
       return "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400";
     default:
@@ -1061,4 +1552,39 @@ const StatsCards = ({ stats, isLoading }: StatsCardsProps) => (
       variant="red"
     />
   </div>
+);
+
+// Now let's create the confirmation dialog component
+const SystemStatusConfirmationDialog = ({
+  open,
+  onClose,
+  onConfirm,
+  systemName,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  systemName: string;
+}) => (
+  <AlertDialog open={open} onOpenChange={onClose}>
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Deactivate System and Stop Polling?</AlertDialogTitle>
+        <AlertDialogDescription>
+          You are about to deactivate system <strong>{systemName}</strong>. This
+          will automatically stop the polling process for this system. Data
+          collection will cease until the system is activated again.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogAction
+          onClick={onConfirm}
+          className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
+        >
+          Deactivate System
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 );

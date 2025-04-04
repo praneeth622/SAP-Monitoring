@@ -209,7 +209,7 @@ export function Sidebar() {
         router.push("/user-management/user-access");
         break;
       case "Manage User":
-        router.push("/user-management/Manage-user");
+        router.push("/user-management/manage-user");
         break;
       default:
         break;
@@ -354,7 +354,6 @@ export function Sidebar() {
                 <div className="space-y-1 py-1">
                   <div className="max-w-full  overflow-hidden space-y-2">
                     {[
-                      { path: "/systems/manage-systems", label: "Add Systems" },
                       {
                         path: "/systems/extraction-config",
                         label: "Extarction Config",
