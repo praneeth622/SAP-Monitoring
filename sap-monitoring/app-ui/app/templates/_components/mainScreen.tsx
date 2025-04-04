@@ -123,21 +123,63 @@ export default function Mainscreen() {
     fetchTemplates();
   }, []);
 
+  // Update the fetchTemplates function in mainScreen.tsx to fetch detailed template data
   const fetchTemplates = async () => {
     try {
       setLoading(true);
+      // First, fetch the list of templates
       const response = await fetch(`${baseUrl}/api/utl?userId=USER_TEST_1`);
       if (!response.ok) {
         throw new Error("Failed to fetch templates");
       }
+
       const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        setTemplates([]);
+        return;
+      }
 
-      // Normalize the data to handle array values
-      const normalizedTemplates = Array.isArray(data)
-        ? data.map(normalizeTemplate)
-        : [];
+      // Get basic template info
+      const basicTemplates = data.map(normalizeTemplate);
 
-      setTemplates(normalizedTemplates);
+      // Now fetch detailed data for each template
+      const detailedTemplatesPromises = basicTemplates.map(async (template) => {
+        const templateId = Array.isArray(template.template_id)
+          ? template.template_id[0]
+          : template.template_id;
+
+        try {
+          // Fetch detailed template data
+          const detailResponse = await fetch(
+            `${baseUrl}/api/ut?templateId=${templateId}`
+          );
+
+          if (!detailResponse.ok) {
+            console.warn(`Could not fetch details for template ${templateId}`);
+            return template; // Return the basic template if details can't be fetched
+          }
+
+          const detailData = await detailResponse.json();
+          if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+            return template; // Return the basic template if no details are returned
+          }
+
+          // Normalize and return the detailed template data
+          return normalizeTemplate(detailData[0]);
+        } catch (error) {
+          console.error(
+            `Error fetching details for template ${templateId}:`,
+            error
+          );
+          return template; // Return the basic template on error
+        }
+      });
+
+      // Wait for all detailed template data to be fetched
+      const detailedTemplates = await Promise.all(detailedTemplatesPromises);
+
+      // Set the templates state with the detailed data
+      setTemplates(detailedTemplates);
     } catch (error) {
       console.error("Error fetching templates:", error);
       toast.error("Failed to fetch templates", {

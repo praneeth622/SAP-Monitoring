@@ -250,12 +250,12 @@ export function DynamicLayout({
 
     setLayouts(initialLayouts);
     layoutRef.current = layout;
-    
+
     // Add a small delay to allow the grid to properly render after layout changes
     if (resizeTimeoutRef.current) {
       clearTimeout(resizeTimeoutRef.current);
     }
-    
+
     resizeTimeoutRef.current = setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
     }, 100);
@@ -289,15 +289,15 @@ export function DynamicLayout({
   );
 
   // Get the fullscreen chart if one is set
-  const fullscreenChart = fullscreenChartId 
-    ? charts.find(chart => chart.id === fullscreenChartId) 
+  const fullscreenChart = fullscreenChartId
+    ? charts.find(chart => chart.id === fullscreenChartId)
     : null;
 
   // Added optimization to ensure all charts resize properly after chart count changes
   useEffect(() => {
     // Skip if not mounted yet
     if (!mounted) return;
-    
+
     // Special handling for when charts are added or removed
     const layout = calculateOptimalLayout();
     const updatedLayouts = {
@@ -310,14 +310,14 @@ export function DynamicLayout({
 
     setLayouts(updatedLayouts);
     layoutRef.current = layout;
-    
+
     // Schedule multiple resize events to ensure charts render properly
     const scheduleResize = (delay: number) => {
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, delay);
     };
-    
+
     // Stagger resize events to catch various rendering stages
     scheduleResize(50);
     scheduleResize(200);
@@ -331,7 +331,7 @@ export function DynamicLayout({
     return (
       <div className="relative w-full h-full">
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40" />
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
@@ -367,7 +367,7 @@ export function DynamicLayout({
   // Regular grid layout for non-fullscreen mode
   return (
     <AnimatePresence>
-      <motion.div 
+      <motion.div
         className="relative w-full h-full"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -405,7 +405,7 @@ export function DynamicLayout({
           compactType="vertical"
           preventCollision={false}
           measureBeforeMount={false}
-          useStaticSize={false}
+          // useStaticSize={false}
           key={`grid-${charts.length}`} // Force rerender when charts count changes
           style={{
             padding: '0 4px',
