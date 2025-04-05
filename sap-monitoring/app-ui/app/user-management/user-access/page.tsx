@@ -115,43 +115,56 @@ interface UpdateUserSheetProps {
   setRole: (role: string) => void;
 }
 
-const roleColorMap: Record<string, {
-  bg: string,
-  text: string,
-  darkBg: string,
-  darkText: string
-}> = {
-  'admin': {
-    bg: 'bg-purple-50',
-    text: 'text-yellow-600',
-    darkBg: 'dark:bg-yellow-900/30',
-    darkText: 'dark:text-yellow-400'
+const roleColorMap: Record<
+  string,
+  {
+    bg: string;
+    text: string;
+    darkBg: string;
+    darkText: string;
+  }
+> = {
+  admin: {
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    darkBg: "dark:bg-purple-900/40",
+    darkText: "dark:text-purple-400",
   },
-  'user': {
-    bg: 'bg-blue-50',
-    text: 'text-blue-600',
-    darkBg: 'dark:bg-blue-900/30',
-    darkText: 'dark:text-blue-400'
+  user: {
+    bg: "bg-blue-100",
+    text: "text-blue-700",
+    darkBg: "dark:bg-blue-900/40",
+    darkText: "dark:text-blue-400",
   },
-  'viewer': {
-    bg: 'bg-green-50',
-    text: 'text-green-600',
-    darkBg: 'dark:bg-green-900/30',
-    darkText: 'dark:text-green-400'
+  editor: {
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    darkBg: "dark:bg-amber-900/40",
+    darkText: "dark:text-amber-400",
   },
-  'manager': {
-    bg: 'bg-amber-50',
-    text: 'text-amber-600',
-    darkBg: 'dark:bg-amber-900/30',
-    darkText: 'dark:text-amber-400'
+  viewer: {
+    bg: "bg-green-100",
+    text: "text-green-700",
+    darkBg: "dark:bg-green-900/40",
+    darkText: "dark:text-green-400",
   },
   // Default color for any other role
-  'default': {
-    bg: 'bg-gray-50',
-    text: 'text-gray-600',
-    darkBg: 'dark:bg-gray-900/30',
-    darkText: 'dark:text-gray-400'
-  }
+  default: {
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    darkBg: "dark:bg-gray-900/40",
+    darkText: "dark:text-gray-400",
+  },
+};
+
+const getRoleColor = (roleName: string) => {
+  const role = roleName.toLowerCase();
+  return {
+    bg: roleColorMap[role]?.bg || roleColorMap.default.bg,
+    text: roleColorMap[role]?.text || roleColorMap.default.text,
+    darkBg: roleColorMap[role]?.darkBg || roleColorMap.default.darkBg,
+    darkText: roleColorMap[role]?.darkText || roleColorMap.default.darkText,
+  };
 };
 
 export default function ManageUsersPage() {
@@ -256,11 +269,45 @@ export default function ManageUsersPage() {
         throw new Error("Failed to add user");
       }
 
+      // Close the form first
       setIsAddUserSheetOpen(false);
+
+      // Add the new user to the current users list for immediate display
+      setUsers((prevUsers) => [...prevUsers, userData as User]);
+
+      // Update stats to reflect the new user
+      setStats((prev) => {
+        // Find if this role already exists in the breakdown
+        const roleExists = prev.roleBreakdown.some(
+          (item) => item.role === userData.role
+        );
+
+        const updatedBreakdown = roleExists
+          ? prev.roleBreakdown.map((item) => {
+              if (item.role === userData.role) {
+                return { ...item, count: item.count + 1 };
+              }
+              return item;
+            })
+          : [...prev.roleBreakdown, { role: userData.role, count: 1 }];
+
+        return {
+          totalUsers: prev.totalUsers + 1,
+          roleBreakdown: updatedBreakdown,
+          userStatus: {
+            active: prev.userStatus.active + 1,
+            inactive: prev.userStatus.inactive,
+          },
+        };
+      });
+
+      // Show success message
       toast.success("User added successfully", {
         description: `User ${userData.name} has been created`,
       });
-      await fetchUsers();
+
+      // Also fetch fresh data from the server to ensure consistency
+      fetchUsers();
     } catch (error) {
       console.error("Error adding user:", error);
       toast.error("Failed to add user", {
@@ -507,13 +554,19 @@ const UsersTable = ({
               <TableCell>{user.name}</TableCell>
               <TableCell>{user.mail_id}</TableCell>
               <TableCell>
-                <div className={cn(
-                  "inline-flex px-2 py-1 rounded-full text-xs font-medium",
-                  roleColorMap[user.role.toLowerCase()]?.bg || roleColorMap.default.bg,
-                  roleColorMap[user.role.toLowerCase()]?.text || roleColorMap.default.text,
-                  roleColorMap[user.role.toLowerCase()]?.darkBg || roleColorMap.default.darkBg,
-                  roleColorMap[user.role.toLowerCase()]?.darkText || roleColorMap.default.darkText
-                )}>
+                <div
+                  className={cn(
+                    "inline-flex px-2 py-1 rounded-full text-xs font-medium",
+                    roleColorMap[user.role.toLowerCase()]?.bg ||
+                      roleColorMap.default.bg,
+                    roleColorMap[user.role.toLowerCase()]?.text ||
+                      roleColorMap.default.text,
+                    roleColorMap[user.role.toLowerCase()]?.darkBg ||
+                      roleColorMap.default.darkBg,
+                    roleColorMap[user.role.toLowerCase()]?.darkText ||
+                      roleColorMap.default.darkText
+                  )}
+                >
                   {user.role}
                 </div>
               </TableCell>
@@ -535,14 +588,14 @@ const UsersTable = ({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                  <Button
+                  {/* <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => onSettings(user.user_id)}
                     title="User Settings"
                   >
                     <Settings className="h-4 w-4" />
-                  </Button>
+                  </Button> */}
                 </div>
               </TableCell>
             </TableRow>
@@ -608,31 +661,54 @@ const DeleteConfirmationDialog = ({
   </AlertDialog>
 );
 
-const RoleSelect = ({ value, onChange }: { value: string, onChange: (value: string) => void }) => (
-  <Select value={value} onValueChange={onChange}>
-    <SelectTrigger>
-      <SelectValue placeholder="Select role" />
-    </SelectTrigger>
-    <SelectContent>
-      {Object.keys(roleColorMap).filter(role => role !== 'default').map((role) => (
-        <SelectItem
-          key={role}
-          value={role}
-          className={cn(
-            "flex items-center gap-2",
-            roleColorMap[role].text
+const RoleSelect = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) => (
+  <div className="relative">
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Select role">
+          {value && (
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  "w-2 h-2 rounded-full",
+                  roleColorMap[value.toLowerCase()]?.bg ||
+                    roleColorMap.default.bg
+                )}
+              />
+              {value}
+            </div>
           )}
-        >
-          <div className={cn(
-            "w-2 h-2 rounded-full",
-            roleColorMap[role].bg,
-            roleColorMap[role].text
-          )} />
-          {role.charAt(0).toUpperCase() + role.slice(1)}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {["Admin", "User", "Editor", "Viewer"].map((roleOption) => (
+          <SelectItem
+            key={roleOption}
+            value={roleOption}
+            className="flex items-center gap-2"
+          >
+            <div className="flex items-center gap-2 w-full">
+              <div
+                className={cn(
+                  "w-3 h-3 rounded-full",
+                  getRoleColor(roleOption).bg
+                )}
+              />
+              <span className={getRoleColor(roleOption).text}>
+                {roleOption}
+              </span>
+            </div>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 );
 
 const AddUserSheet = ({
@@ -862,11 +938,10 @@ const UpdateUserSheet = ({
 
               <MultiSelect
                 options={[
-                  { label: "User", value: "User" },
                   { label: "Admin", value: "Admin" },
-                  { label: "Manager", value: "Manager" },
-                  { label: "Developer", value: "Developer" },
-                  { label: "Analyst", value: "Analyst" },
+                  { label: "User", value: "User" },
+                  { label: "Editor", value: "Editor" },
+                  { label: "Viewer", value: "Viewer" },
                 ]}
                 value={selectedRoles}
                 onChange={setSelectedRoles}
