@@ -37,6 +37,7 @@ interface DynamicLayoutProps {
   onLayoutChange?: (layout: Layout[]) => void;
   hideControls?: boolean;
   onDeleteGraph?: (id: string) => void;
+  resolution?: string; // Add resolution as a prop
 }
 
 export function DynamicLayout({
@@ -48,6 +49,7 @@ export function DynamicLayout({
   onLayoutChange,
   hideControls = false,
   onDeleteGraph,
+  resolution = 'auto', // Default to auto
 }: DynamicLayoutProps) {
   const [layouts, setLayouts] = useState({});
   const [currentBreakpoint, setCurrentBreakpoint] = useState("lg");
@@ -351,6 +353,7 @@ export function DynamicLayout({
                 kpiColors={fullscreenChart.kpiColors || kpiColors}
                 globalDateRange={globalDateRange}
                 theme={theme}
+                resolution={resolution} // Pass resolution to DraggableChart
                 className="h-full"
                 onFullscreenChange={handleFullscreenChange}
                 isFullscreenMode={true}
@@ -405,7 +408,6 @@ export function DynamicLayout({
           compactType="vertical"
           preventCollision={false}
           measureBeforeMount={false}
-          useStaticSize={false}
           key={`grid-${charts.length}`} // Force rerender when charts count changes
           style={{
             padding: '0 4px',
@@ -434,6 +436,7 @@ export function DynamicLayout({
                   kpiColors={chart.kpiColors || kpiColors}
                   globalDateRange={globalDateRange}
                   theme={theme}
+                  resolution={resolution} // Pass resolution to each DraggableChart
                   className="h-full"
                   onFullscreenChange={handleFullscreenChange}
                   isFullscreenMode={chart.id === fullscreenChartId}

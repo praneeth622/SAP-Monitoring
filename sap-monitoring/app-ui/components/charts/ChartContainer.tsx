@@ -36,6 +36,7 @@ interface ChartContainerProps {
   };
   width?: string;
   height?: string;
+  resolution?: string;
 }
 
 const ChartContainer = memo(
@@ -63,6 +64,7 @@ const ChartContainer = memo(
       theme,
       width,
       height,
+      resolution,
     } = props;
 
     const chartRef = useRef<echarts.ECharts | null>(null);
@@ -262,6 +264,45 @@ const ChartContainer = memo(
             };
       }) as echarts.SeriesOption[];
 
+      // Configure proper x-axis formatting based on resolution
+      const getAxisLabelFormatter = () => {
+        // Different formatting based on resolution
+        switch(resolution) {
+          case '1m':
+            // For 1-minute data, show HH:MM format
+            return (value: string) => {
+              const date = new Date(value);
+              return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            };
+          case '5m':
+          case '15m':
+            // For 5/15-minute data, show HH:MM format with less granularity
+            return (value: string) => {
+              const date = new Date(value);
+              return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            };
+          case '1h':
+            // For hourly data, show DAY HH format
+            return (value: string) => {
+              const date = new Date(value);
+              return `${date.getDate()}d ${date.getHours()}h`;
+            };
+          case '1d':
+            // For daily data, show MM/DD format
+            return (value: string) => {
+              const date = new Date(value);
+              return `${date.getMonth() + 1}/${date.getDate()}`;
+            };
+          case 'auto':
+          default:
+            // Default format - MM/DD
+            return (value: string) => {
+              const date = new Date(value);
+              return `${date.getMonth() + 1}/${date.getDate()}`;
+            };
+        }
+      };
+
       const option: echarts.EChartsOption = {
         animation: true,
         animationDuration: 300,
@@ -356,14 +397,11 @@ const ChartContainer = memo(
           type: "category",
           data: dates,
           axisLabel: {
-            formatter: (value: string) => {
-              // Format date to be more compact
-              const date = new Date(value);
-              return `${date.getMonth() + 1}/${date.getDate()}`;
-            },
+            formatter: getAxisLabelFormatter(),
             margin: 8,
             fontSize: 10,
             color: "#666",
+            rotate: filteredData.length > 100 ? 45 : 0,
           },
           axisLine: {
             lineStyle: {
@@ -400,14 +438,72 @@ const ChartContainer = memo(
         Object.assign(option, externalOptions);
       }
 
-      // Force immediate update with smooth transitions
+      // Force immediate update with smooth transitions for color changes
       chartRef.current.setOption(option, { 
-        notMerge: true,
         replaceMerge: ['series'],
         lazyUpdate: false
       });
-    }, [filteredData, type, activeKPIs, kpiColors, theme, externalOptions]);
+    }, [filteredData, type, activeKPIs, kpiColors, theme, externalOptions, resolution]);
 
+    // Add a specific effect to only update colors when theme changes
+    useEffect(() => {
+      if (!mounted || !chartRef.current) return;
+      
+      // If the chart needs a theme update but is already initialized,
+      // we can use a targeted update rather than full redraw
+      if (chartRef.current && theme?.colors) {
+        // Update just the series colors without recreating the entire chart
+        const existingOption = chartRef.current.getOption();
+        
+        if (existingOption && existingOption.series) {
+          const series = existingOption.series as any[];
+          
+          // Update colors in existing series
+          series.forEach((seriesItem, index) => {
+            if (seriesItem && seriesItem.data) {
+              const categoryName = seriesItem.name;
+              const colorIndex = index % theme.colors.length;
+              const newColor = kpiColors?.[categoryName]?.color || theme.colors[colorIndex];
+              
+              // Update color in a smooth way
+              if (seriesItem.itemStyle) {
+                seriesItem.itemStyle.color = newColor;
+              } else {
+                seriesItem.itemStyle = { color: newColor };
+              }
+              
+              // Update line and area style for line charts
+              if (seriesItem.type === 'line') {
+                if (seriesItem.lineStyle) {
+                  seriesItem.lineStyle.color = newColor;
+                } else {
+                  seriesItem.lineStyle = { color: newColor };
+                }
+                
+                if (seriesItem.areaStyle) {
+                  seriesItem.areaStyle.color = {
+                    type: 'linear',
+                    x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                      { offset: 0, color: `${newColor}40` }, // 25% opacity at top
+                      { offset: 1, color: `${newColor}00` }  // 0% opacity at bottom
+                    ]
+                  };
+                }
+              }
+            }
+          });
+          
+          // Apply the updated series
+          chartRef.current.setOption({ series }, { replaceMerge: ['series'] });
+        } else {
+          // Fall back to full update if series not available
+          updateChart();
+        }
+      }
+    }, [theme, kpiColors, mounted, updateChart]);
+
+    // Original effect for other data changes
     useEffect(() => {
       if (!mounted || !chartRef.current) return;
 

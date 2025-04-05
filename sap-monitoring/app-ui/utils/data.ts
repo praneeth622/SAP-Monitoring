@@ -38,112 +38,134 @@ export const generateMultipleDataSets = (count: number, resolution = 'auto'): Da
   const datasets: DataPoint[][] = [];
   const categories = ["Revenue", "Users"];
   
-  // More aggressive optimization for time range based on resolution
-  let days = 30; // default
-  let dataPoints = 500; // Default max data points
+  // Configure time range based on resolution
+  let days: number;
+  let intervalMinutes: number;
+  let dataPointsLimit: number;
   
-  // Optimize data points based on resolution
+  // Set appropriate time ranges and intervals for each resolution
   switch(resolution) {
     case '1m':
-      days = 1; // For 1-minute resolution, only generate 1 day of data
-      dataPoints = 180; // Limit to 3 hours of minute data (180 points)
+      days = 1; // Show 1 day of data for 1-minute resolution
+      intervalMinutes = 1;
+      dataPointsLimit = 1440; // Up to 24 hours of minute data (60 * 24)
       break;
     case '5m':
-      days = 2; 
-      dataPoints = 300; // Limit to 25 hours of 5-minute data
+      days = 3; // Show 3 days of data for 5-minute resolution
+      intervalMinutes = 5;
+      dataPointsLimit = 864; // Up to 3 days of 5-minute data (288 * 3)
       break;
     case '15m':
-      days = 3;
-      dataPoints = 288; // 3 days of 15-minute data
+      days = 7; // Show 1 week of data for 15-minute resolution
+      intervalMinutes = 15;
+      dataPointsLimit = 672; // Up to 7 days of 15-minute data (96 * 7)
       break;
     case '1h':
-      days = 7;
-      dataPoints = 168; // 7 days of hourly data
+      days = 14; // Show 2 weeks of data for hourly resolution
+      intervalMinutes = 60;
+      dataPointsLimit = 336; // Up to 14 days of hourly data (24 * 14)
       break;
     case '1d':
-      days = 30;
-      dataPoints = 30; // 30 days of daily data
+      days = 60; // Show 2 months of data for daily resolution
+      intervalMinutes = 24 * 60; // 1 day in minutes
+      dataPointsLimit = 60; // Up to 60 days of daily data
       break;
     case 'auto':
     default:
       days = 30;
-      dataPoints = 360; // 30 days with 12 points per day (2-hour intervals)
+      intervalMinutes = 120; // 2 hour intervals (default)
+      dataPointsLimit = 360; // 30 days with 12 points per day
       break;
   }
   
   const now = new Date();
-  const startDate = subDays(now, days);
+  const endDate = new Date(now);
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - days);
   
-  // Determine the step (in minutes) based on resolution
-  let minuteStep: number;
-  
-  switch(resolution) {
-    case '1m':
-      minuteStep = 1;
-      break;
-    case '5m':
-      minuteStep = 5;
-      break;
-    case '15m':
-      minuteStep = 15;
-      break;
-    case '1h':
-      minuteStep = 60;
-      break;
-    case '1d':
-      minuteStep = 24 * 60;
-      break;
-    case 'auto':
-    default:
-      minuteStep = 120; // 2 hour intervals (default)
-      break;
-  }
-
-  // Calculate total minutes in the date range
-  const totalMinutes = days * 24 * 60;
-  
-  // Calculate step size to get closest to desired number of data points
-  const adjustedStep = Math.max(minuteStep, Math.floor(totalMinutes / dataPoints));
-  
-  // Optimize data point generation for high-frequency data
-  const generateDataPoint = (date: Date, category: string): DataPoint => {
-    const hourOfDay = date.getHours() + (date.getMinutes() / 60);
-    
-    // Create more realistic patterns
-    const baseValue = category === "Revenue" ? 5000 : 1000;
-    const hourlyVariation = category === "Revenue" ? hourOfDay * 100 : hourOfDay * 20;
-    const weekendMultiplier = [0, 6].includes(date.getDay()) ? 0.7 : 1;
-    const randomVariation = Math.random() * 0.4 + 0.8; // Random variation between 0.8 and 1.2
-    
-    const value = Math.floor(
-      (baseValue + hourlyVariation) * weekendMultiplier * randomVariation
-    );
-    
-    return {
-      date: format(date, "yyyy-MM-dd HH:mm:ss"),
-      category,
-      value,
-    };
-  };
-
+  // Generate data for each dataset
   for (let i = 0; i < count; i++) {
     const data: DataPoint[] = [];
-    const currentDate = new Date(startDate);
+    const uniquePatterns = {
+      // Different baseline values for each dataset to make them unique
+      revenueBase: 2000 + (i * 500),
+      usersBase: 800 + (i * 200),
+      // Different amplitude of fluctuations
+      revenueAmplitude: 800 + (i * 100), 
+      usersAmplitude: 300 + (i * 50),
+      // Trends (positive or negative)
+      revenueTrend: (i % 3 === 0) ? -0.05 : 0.1,
+      usersTrend: (i % 2 === 0) ? 0.15 : -0.02,
+    };
     
-    // Single optimized loop for all resolutions
-    for (let minute = 0; minute < totalMinutes; minute += adjustedStep) {
-      const dateWithMinutes = new Date(currentDate.getTime() + minute * 60 * 1000);
+    // Generate the right number of data points based on resolution
+    let currentDate = new Date(startDate);
+    let pointCount = 0;
+    
+    while (currentDate <= endDate && pointCount < dataPointsLimit) {
+      // Skip data generation on weekends for some resolutions to simulate workweek patterns
+      const isWeekend = [0, 6].includes(currentDate.getDay());
+      const skipWeekendDetailed = (resolution === '1m' || resolution === '5m') && isWeekend;
       
-      // Skip if beyond now
-      if (dateWithMinutes > now) break;
+      if (!skipWeekendDetailed) {
+        // Calculate time-based patterns
+        const hourOfDay = currentDate.getHours() + (currentDate.getMinutes() / 60);
+        const dayOfWeek = currentDate.getDay();
+        const isBusinessHour = hourOfDay >= 9 && hourOfDay <= 17;
+        const dayFactor = isWeekend ? 0.6 : 1.0; // Weekend reduction
+        const hourFactor = isBusinessHour ? 1.2 : 0.8; // Business hours boost
+        
+        // Generate a timestamp in the required format
+        const formattedDate = currentDate.toISOString().replace('T', ' ').slice(0, 19);
+        
+        // Add specific patterns for each category
+        categories.forEach(category => {
+          // Base parameters
+          const isRevenue = category === "Revenue";
+          const base = isRevenue ? uniquePatterns.revenueBase : uniquePatterns.usersBase;
+          const amplitude = isRevenue ? uniquePatterns.revenueAmplitude : uniquePatterns.usersAmplitude;
+          const trend = isRevenue ? uniquePatterns.revenueTrend : uniquePatterns.usersTrend;
+          const noiseFactor = Math.random() * 0.4 + 0.8; // Random 0.8-1.2 multiplier
+          
+          // Time-based patterns
+          let timePattern = 0;
+          
+          // 1. Daily pattern - peak during business hours
+          const dailyPattern = Math.sin((hourOfDay - 9) * Math.PI / 8) * amplitude * 0.3;
+          timePattern += isBusinessHour ? dailyPattern : 0;
+          
+          // 2. Weekly pattern - gradual increase Mon-Thu, decrease Fri-Sun
+          const weeklyProgress = dayOfWeek <= 4 ? dayOfWeek / 4 : (7 - dayOfWeek) / 3;
+          const weeklyPattern = weeklyProgress * amplitude * 0.2;
+          timePattern += weeklyPattern;
+          
+          // 3. Add time trend (growth or decline over time)
+          const daysSinceStart = (currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+          const trendEffect = daysSinceStart * trend * base;
+          
+          // 4. Add occasional spikes or dips with low probability
+          const hasSpike = Math.random() < 0.03; // 3% chance of spike
+          const spikeEffect = hasSpike ? (Math.random() > 0.5 ? 1.5 : 0.6) : 1.0;
+          
+          // Calculate final value with all factors combined
+          const value = Math.max(0, (base + timePattern + trendEffect) * dayFactor * hourFactor * noiseFactor * spikeEffect);
+          
+          data.push({
+            date: formattedDate,
+            category,
+            value: Math.round(value)
+          });
+        });
+        
+        pointCount += categories.length;
+      }
       
-      categories.forEach(category => {
-        data.push(generateDataPoint(dateWithMinutes, category));
-      });
-      
-      // Safety check to prevent excessive data points
-      if (data.length >= dataPoints * categories.length) break;
+      // Advance to next interval based on resolution
+      currentDate = new Date(currentDate.getTime() + intervalMinutes * 60 * 1000);
     }
+    
+    // Sort data by date (important for charts)
+    data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
     datasets.push(data);
   }

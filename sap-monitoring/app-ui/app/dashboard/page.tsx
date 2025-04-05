@@ -54,6 +54,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
+import { Switch } from "@/components/ui/switch";
 
 // Add API template interface
 interface ApiTemplate {
@@ -310,7 +311,7 @@ const generateChartConfigs = (resolution = "auto") => {
   }));
 };
 
-// Generate chart configs based on a template definition
+// Optimize the generateChartsFromTemplate function for faster performance and template integrity
 const generateChartsFromTemplate = (
   template: NormalizedTemplate,
   resolution = "auto"
@@ -318,13 +319,17 @@ const generateChartsFromTemplate = (
   console.log(
     `Generating charts from template "${template.name}" with ${
       template.graphs?.length || 0
-    } graphs`
+    } graphs using ${resolution} resolution`
   );
 
   if (!template.graphs || template.graphs.length === 0) {
     console.warn("Template has no graphs, falling back to default charts");
     return generateChartConfigs(resolution);
   }
+
+  // Optimization: Generate just one dataset for all charts to share
+  // This significantly improves performance when changing resolution
+  const sharedDataset = generateMultipleDataSets(1, resolution)[0] || [];
 
   // Create a consistent color palette for KPIs across all charts
   const theme = chartThemes.default;
@@ -351,81 +356,49 @@ const generateChartsFromTemplate = (
     };
   });
 
-  console.log(
-    `Assigned colors to ${Object.keys(globalKpiColors).length} unique KPIs`
-  );
+  // Extract all dates from the shared dataset for consistent date ranges across charts
+  const allDates = Array.from(new Set(sharedDataset.map(d => d.date))).sort();
 
-  return template.graphs.map((graph, index) => {
+  const chartConfigs = template.graphs.map((graph, index) => {
     // Generate data for all KPIs in the graph
     const allKpis = [graph.primaryKpi, ...graph.secondaryKpis].map((kpi) =>
       kpi.toLowerCase()
     );
 
-    // Create dummy data for each KPI in the graph
+    // Create a focused data set for this graph's KPIs
     const dummyData: DataPoint[] = [];
-    const now = new Date();
-
-    // Data generation parameters
-    const valueRanges: Record<
-      string,
-      { base: number; amplitude: number; trend: number }
-    > = {};
-
-    // Set different patterns for each KPI
-    allKpis.forEach((kpi, i) => {
-      valueRanges[kpi] = {
-        base: 1000 + i * 500, // Different base for each KPI
-        amplitude: 200 + Math.random() * 400, // Random fluctuation amount
-        trend: (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 50), // Random trend direction and amount
-      };
-    });
-
-    // Generate 24 hours of data (or more data points for higher resolution)
-    const dataPoints = resolution === "auto" ? 24 : 48;
-
-    for (let i = 0; i < dataPoints; i++) {
-      const date = new Date(now);
-      const hourInterval = resolution === "auto" ? 1 : 0.5;
-      date.setHours(date.getHours() - i * hourInterval);
-
-      // Generate a value for each KPI at this time point
-      allKpis.forEach((kpi) => {
-        const { base, amplitude, trend } = valueRanges[kpi];
-
-        // Create patterns in the data - some sine wave patterns, some random
-        let pattern;
-        if (kpi.includes("cpu")) {
-          // CPU follows a sine wave pattern with random noise
-          pattern =
-            (Math.sin(i / 4) * amplitude) / 2 + (Math.random() * amplitude) / 2;
-        } else if (kpi.includes("memory")) {
-          // Memory has an upward trend with some noise
-          pattern = i * 5 + (Math.random() * amplitude) / 3;
-        } else if (kpi.includes("disk")) {
-          // Disk grows linearly
-          pattern = i * 10;
-        } else if (kpi.includes("network")) {
-          // Network has spikes
-          pattern = i % 6 === 0 ? amplitude : (amplitude / 4) * Math.random();
-        } else {
-          // Other metrics have random patterns with the defined trend
-          pattern = Math.random() * amplitude + (i * trend) / 10;
-        }
-
-        // Final value with base + pattern
-        const value = base + pattern;
+    
+    // For each date point, create entries for each KPI
+    allDates.forEach(date => {
+      allKpis.forEach((kpi, kpiIndex) => {
+        // Find existing data to reuse patterns
+        const existingDataPoints = sharedDataset.filter(d => d.date === date);
+        
+        if (existingDataPoints.length > 0) {
+          // Reuse pattern from existing data but with unique values for this KPI
+          const basePoint = existingDataPoints[kpiIndex % existingDataPoints.length];
+          const baseValue = basePoint ? basePoint.value : 1000;
+          
+          // Apply multiplier based on KPI name to create unique but consistent values
+          let multiplier = 1.0;
+          if (kpi.includes('cpu')) multiplier = 0.8;
+          else if (kpi.includes('memory')) multiplier = 1.5;
+          else if (kpi.includes('disk')) multiplier = 2.0;
+          else if (kpi.includes('network')) multiplier = 0.5;
+          else multiplier = 1.0 + (kpiIndex * 0.1);
+          
+          // Apply a stable random variation based on KPI name to ensure consistency
+          const stableHash = kpi.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const consistentRandom = (stableHash % 20) / 100 + 0.9; // 0.9-1.1 range
 
         dummyData.push({
           category: kpi,
-          date: date.toISOString(),
-          value: Math.max(0, value), // Ensure no negative values
-        });
+            date: date,
+            value: Math.round(baseValue * multiplier * consistentRandom)
+          });
+        }
       });
-    }
-
-    console.log(
-      `Generated ${dummyData.length} dummy data points for chart "${graph.name}"`
-    );
+    });
 
     // Create KPI colors using the global palette
     const chartKpiColors: Record<string, { color: string; name: string }> = {};
@@ -458,6 +431,8 @@ const generateChartsFromTemplate = (
       layout: position,
     };
   });
+
+  return chartConfigs;
 };
 
 export default function Dashboard() {
@@ -485,21 +460,49 @@ export default function Dashboard() {
   // Apply theme colors to KPI colors
   const [themedKpiColors, setThemedKpiColors] = useState(kpiColors);
 
-  // Add timer-related states
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
   // Add states for layout saving
   const [layoutChanged, setLayoutChanged] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Add a new state for auto-refresh interval
+  // Add timer-related states
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number | null>(null);
-  const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
-  const autoRefreshTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [autoRefreshDropdownOpen, setAutoRefreshDropdownOpen] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
   
+  // Use refs to prevent infinite loops
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshingRef = useRef(false);
+  const refreshDataRef = useRef<() => Promise<void>>();
+  const nextRefreshTimeRef = useRef<Date | null>(null);
+  const autoRefreshIntervalRef = useRef<number | null>(null);
+
+  // Add a new state to track whether auto-refresh is enabled
+  const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(false);
+
+  // Add states to track error conditions
+  const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Add a state for content-only loading (won't affect header)
+  const [isContentLoading, setIsContentLoading] = useState(false);
+
+  // Sync refreshingRef with isRefreshing state
+  useEffect(() => {
+    refreshingRef.current = isRefreshing;
+  }, [isRefreshing]);
+
+  // Sync autoRefreshIntervalRef with autoRefreshInterval state
+  useEffect(() => {
+    autoRefreshIntervalRef.current = autoRefreshInterval;
+  }, [autoRefreshInterval]);
+
+  // Sync nextRefreshTimeRef with nextRefreshTime state
+  useEffect(() => {
+    nextRefreshTimeRef.current = nextRefreshTime;
+  }, [nextRefreshTime]);
+
   // Auto-refresh options in seconds
   const autoRefreshOptions = [
     { label: "1 minute", value: 60 },
@@ -509,17 +512,269 @@ export default function Dashboard() {
     { label: "24 hours", value: 86400 },
   ];
 
-  // Get seconds for the selected resolution
-  const selectedResolutionSeconds = useMemo(() => {
-    const option = resolutionOptions.find((opt) => opt.value === resolution);
-    return option?.seconds || 0;
-  }, [resolution]);
+  // Modify the refresh data function to handle timer reset based on auto-refresh mode
+  const refreshData = useCallback(async () => {
+    if (refreshingRef.current) return;
+
+    try {
+      setIsRefreshing(true);
+      console.log("Refreshing data...");
+      
+      // Delay to show loading state briefly for better visual feedback
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // If a template is selected, reload that template's data
+      if (selectedApiTemplate) {
+        try {
+          console.log(`Refreshing template: ${selectedApiTemplate}`);
+          
+          // Re-fetch the template data from API to ensure we have the latest
+          const response = await fetch(
+            `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${selectedApiTemplate}`
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to refresh template: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          if (!data || !data.length) {
+            throw new Error("Empty response when refreshing template");
+          }
+
+          // Normalize the template
+          const refreshedTemplate = normalizeTemplate(data[0]);
+          
+          // Generate charts from the refreshed template
+          const refreshedCharts = generateChartsFromTemplate(refreshedTemplate, resolution);
+          
+          // Preserve existing layouts when updating charts
+          setCharts(prevCharts => {
+            return refreshedCharts.map(newChart => {
+              // Find matching chart in previous charts to preserve layout
+              const matchingChart = prevCharts.find(c => c.id === newChart.id);
+              if (matchingChart) {
+                return {
+                  ...newChart,
+                  layout: matchingChart.layout,
+                  // Preserve active KPIs and colors for visual consistency
+                  activeKPIs: matchingChart.activeKPIs || newChart.activeKPIs,
+                  kpiColors: matchingChart.kpiColors || newChart.kpiColors,
+                };
+              }
+              return newChart;
+            });
+          });
+          
+          toast.success("Dashboard refreshed successfully");
+        } catch (error) {
+          console.error("Error refreshing template:", error);
+          toast.error("Failed to refresh template data");
+        }
+      } else {
+        // No template selected, refresh with generated data
+        const newCharts = generateChartConfigs(resolution);
+        
+        // Preserve existing layouts
+        setCharts(prevCharts => {
+          return newCharts.map((newChart, i) => {
+            if (i < prevCharts.length) {
+              return {
+                ...newChart,
+                layout: prevCharts[i].layout,
+                activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
+                kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
+              };
+            }
+            return newChart;
+          });
+        });
+        
+        toast.success("Dashboard refreshed successfully");
+      }
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      toast.error("Failed to refresh data");
+    } finally {
+      // Reset the refresh state
+      setIsRefreshing(false);
+      
+      // Handle timer reset or stop based on auto-refresh setting
+      setTimeout(() => {
+        const currentInterval = autoRefreshIntervalRef.current;
+        
+        if (currentInterval) {
+          if (isAutoRefreshEnabled) {
+            // If auto-refresh is enabled, set up the next timer
+            console.log(`Auto-refresh enabled: Setting up next timer for ${currentInterval} seconds`);
+            const now = new Date();
+            const nextTime = new Date(now.getTime() + currentInterval * 1000);
+            setNextRefreshTime(nextTime);
+            setTimeRemaining(currentInterval);
+          } else {
+            // If auto-refresh is disabled, stop the timer after this refresh
+            console.log("Auto-refresh disabled: Stopping timer after this refresh");
+            setNextRefreshTime(null);
+            setTimeRemaining(null);
+          }
+        }
+      }, 100);
+    }
+  }, [
+    selectedApiTemplate,
+    resolution,
+    generateChartConfigs,
+    normalizeTemplate,
+    generateChartsFromTemplate,
+    isAutoRefreshEnabled
+  ]);
+
+  // Store the latest refreshData function in a ref
+  useEffect(() => {
+    refreshDataRef.current = refreshData;
+  }, [refreshData]);
+
+  // Update the timer effect to handle both auto-refresh modes
+  useEffect(() => {
+    // Function to handle timer tick
+    const handleTimerTick = () => {
+      // Only proceed if we have a next refresh time
+      if (!nextRefreshTimeRef.current) return;
+      
+      const currentTime = new Date();
+      const nextTime = nextRefreshTimeRef.current;
+      
+      if (nextTime && currentTime >= nextTime) {
+        // Time to refresh
+        if (!refreshingRef.current) {
+          console.log("Timer triggered refresh at", new Date().toISOString());
+          
+          // Call refreshData to handle the refresh
+          if (typeof refreshData === 'function') {
+            refreshData();
+          } else if (refreshDataRef.current) {
+            refreshDataRef.current();
+          }
+        }
+      } else if (nextTime) {
+        // Just update countdown display
+        const diff = Math.max(0, Math.round((nextTime.getTime() - currentTime.getTime()) / 1000));
+        setTimeRemaining(diff);
+      }
+    };
+    
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    // Only set up timer if we have a next refresh time
+    if (nextRefreshTime) {
+      // Create interval to check every second
+      timerRef.current = setInterval(handleTimerTick, 1000);
+      
+      // Run immediately once to update UI
+      handleTimerTick();
+    } else {
+      // Reset timer display when there's no next refresh time
+      setTimeRemaining(null);
+    }
+    
+    // Cleanup function
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [nextRefreshTime, refreshData]);
+
+  // Handle selecting a new auto-refresh interval
+  const handleSelectAutoRefresh = useCallback((seconds: number) => {
+    // Always set the interval value
+    setAutoRefreshInterval(seconds);
+    setAutoRefreshDropdownOpen(false);
+    
+    // Always set up the timer when selecting an interval
+    const now = new Date();
+    const nextTime = new Date(now.getTime() + seconds * 1000);
+    setNextRefreshTime(nextTime);
+    setTimeRemaining(seconds);
+    
+    // Different message based on auto-refresh state
+    const option = autoRefreshOptions.find(opt => opt.value === seconds);
+    if (option) {
+      if (isAutoRefreshEnabled) {
+        toast.success(`Auto-refresh set to ${option.label}`);
+      } else {
+        toast.success(`Will refresh once in ${option.label}`);
+      }
+    }
+  }, [autoRefreshOptions, isAutoRefreshEnabled]);
+
+  // Stop auto-refresh
+  const stopAutoRefresh = useCallback(() => {
+    setIsAutoRefreshEnabled(false);
+    setAutoRefreshInterval(null);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setTimeRemaining(null);
+    setNextRefreshTime(null);
+    toast.success("Auto-refresh stopped");
+  }, []);
+
+  // Separate function for manual refresh to be called from the UI
+  const handleManualRefresh = useCallback((closeDropdown: boolean = true) => {
+    if (closeDropdown) {
+      setAutoRefreshDropdownOpen(false);
+    }
+    refreshData();
+  }, [refreshData]);
+
+  // Calculate progress percentage for circular indicator
+  const getProgressPercentage = useCallback(() => {
+    if (!nextRefreshTime || !autoRefreshInterval) return 0;
+    
+    const now = new Date();
+    const diffMs = nextRefreshTime.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return 100;
+    
+    const elapsedMs = (autoRefreshInterval * 1000) - diffMs;
+    const percentage = (elapsedMs / (autoRefreshInterval * 1000)) * 100;
+    
+    return Math.min(Math.max(percentage, 0), 100);
+  }, [nextRefreshTime, autoRefreshInterval]);
+
+  // Format time remaining until next refresh
+  const formatTimeRemaining = useCallback(() => {
+    if (!timeRemaining) return "";
+    
+    if (timeRemaining <= 0) return "Refreshing...";
+    
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    
+    if (minutes > 0) {
+      return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+    }
+    return `${seconds}s`;
+  }, [timeRemaining]);
 
   // Move fetchTemplateById inside the component
   const fetchTemplateById = useCallback(
     async (templateId: string) => {
       try {
-        setIsLoading(true);
+        // Only set content loading to true, keep header interactive
+        setIsContentLoading(true);
+        // Reset error states when starting a new fetch
+        setHasError(false);
+        setErrorMessage(null);
+        
         console.log(`Fetching template with ID: ${templateId}`);
 
         const response = await fetch(
@@ -534,7 +789,14 @@ export default function Dashboard() {
         console.log("Template API response:", data);
 
         if (!data || !data.length) {
-          throw new Error("Template not found or empty response");
+          setHasError(true);
+          setErrorMessage("Template not found. The requested template could not be found.");
+          toast.error("Template not found", {
+            description: "The requested template could not be found.",
+            duration: 5000
+          });
+          setIsContentLoading(false);
+          return;
         }
 
         // Normalize the template
@@ -545,10 +807,13 @@ export default function Dashboard() {
           !normalizedTemplate.graphs ||
           normalizedTemplate.graphs.length === 0
         ) {
-          console.warn(
-            "Template has no graphs, falling back to default charts"
-          );
-          setCharts(generateChartConfigs(resolution));
+          setHasError(true);
+          setErrorMessage("Empty template. The template has no graphs to display. Please add some graphs or select a different template.");
+          toast.error("Empty template", {
+            description: "The template has no graphs to display. Please add some graphs or select a different template.",
+            duration: 5000
+          });
+          setIsContentLoading(false);
           return;
         }
 
@@ -594,17 +859,23 @@ export default function Dashboard() {
         );
       } catch (error) {
         console.error("Error fetching template:", error);
+        setHasError(true);
+        setErrorMessage("Failed to load template. Unable to connect to the server. Please check your connection and try again.");
         toast.error("Failed to load template", {
           description:
             error instanceof Error
               ? error.message
-              : "Please try again or contact support",
+              : "Unable to connect to the server. Please check your connection and try again.",
+          duration: 5000
         });
 
-        // Fallback to default charts
-        setCharts(generateChartConfigs(resolution));
+        // Clear charts instead of showing dummy ones
+        setCharts([]);
       } finally {
-        setIsLoading(false);
+        // Use a slight delay to ensure smooth transition
+        setTimeout(() => {
+          setIsContentLoading(false);
+        }, 300);
       }
     },
     [resolution, selectedTheme]
@@ -613,6 +884,12 @@ export default function Dashboard() {
   // Now your fetchTemplates function can use fetchTemplateById
   const fetchTemplates = useCallback(async () => {
     try {
+      // Only set content loading to true, keep header interactive
+      setIsContentLoading(true);
+      // Reset error states when starting a new fetch
+      setHasError(false);
+      setErrorMessage(null);
+      
       console.log("Fetching templates from API...");
       const response = await fetch(
         `https://shwsckbvbt.a.pinggy.link/api/utl?userId=USER_TEST_1`
@@ -628,7 +905,16 @@ export default function Dashboard() {
       // Process templates as before...
       let normalizedTemplates: NormalizedTemplate[] = [];
       if (!Array.isArray(data) || data.length === 0) {
-        // Add dummy templates as before...
+        setHasError(true);
+        setErrorMessage("No templates available. No templates were found for this user.");
+        toast.error("No templates available", {
+          description: "No templates were found for this user.",
+          duration: 5000
+        });
+        setApiTemplates([]);
+        setCharts([]);
+        setTimeout(() => setIsContentLoading(false), 300);
+        return;
       } else {
         normalizedTemplates = data.map(normalizeTemplate);
       }
@@ -655,46 +941,34 @@ export default function Dashboard() {
         // Now use the proper fetchTemplateById function
         await fetchTemplateById(firstTemplate.id);
       } else {
-        console.log("No templates found, using generated charts");
-        setCharts(generateChartConfigs(resolution));
+        console.log("No templates found");
+        setHasError(true);
+        setErrorMessage("No templates available. No templates were found for this user.");
+        toast.error("No templates available", {
+          description: "No templates were found for this user.",
+          duration: 5000
+        });
+        setCharts([]);
+        setTimeout(() => setIsContentLoading(false), 300);
       }
     } catch (error) {
       console.error("Error fetching templates:", error);
+      setHasError(true);
+      setErrorMessage("Failed to fetch templates. Unable to connect to the server. Please check your connection and try again.");
       toast.error("Failed to fetch templates", {
         description:
           error instanceof Error
             ? error.message
-            : "Please try again or contact support",
+            : "Unable to connect to the server. Please check your connection and try again.",
+        duration: 5000
       });
 
-      // Add dummy templates for testing in case of error
-      console.log("Adding dummy templates after error");
-      const dummyTemplates = [
-        {
-          id: "error-dummy1",
-          name: "Error Recovery Template",
-          description: "Created after API error",
-          isDefault: true,
-          isFavorite: false,
-          frequency: "auto",
-          systems: ["svw"],
-          graphs: [
-            {
-              id: "fallback-graph1",
-              name: "Fallback Chart",
-              position: { x: 0, y: 0, w: 12, h: 4 },
-              type: "line" as ChartType,
-              primaryKpi: "CPU",
-              secondaryKpis: ["Memory"],
-            },
-          ],
-        },
-      ];
-      setApiTemplates(dummyTemplates);
-      setSelectedApiTemplate(dummyTemplates[0].id);
-      setCharts(generateChartsFromTemplate(dummyTemplates[0], resolution));
+      // Clear charts instead of showing dummy ones
+      setCharts([]);
+      setApiTemplates([]);
+      setTimeout(() => setIsContentLoading(false), 300);
     }
-  }, [resolution, fetchTemplateById]);
+  }, [fetchTemplateById]);
 
   // Initialize dashboard with templates
   useEffect(() => {
@@ -704,12 +978,12 @@ export default function Dashboard() {
       try {
         if (!isMounted) return;
 
-        // setIsLoading(true);
+        // Only set initial loading to true on first mount
+        setIsLoading(true);
         console.log("Initializing dashboard and fetching templates...");
 
-        // First, generate default charts while templates are loading
-        const defaultCharts = generateChartConfigs(resolution);
-        setCharts(defaultCharts);
+        // Do not generate default charts, wait for templates
+        setCharts([]);
 
         // Fetch templates from API
         await fetchTemplates();
@@ -725,11 +999,14 @@ export default function Dashboard() {
         if (!isMounted) return;
 
         console.error("Error initializing dashboard:", error);
-        // Ensure we have some charts even if template loading fails
-        setCharts(generateChartConfigs(resolution));
+        // Show error instead of dummy charts
+        setHasError(true);
+        setErrorMessage("Failed to initialize dashboard. Please check your connection and try again.");
+        setCharts([]);
       } finally {
         if (isMounted) {
-          // setIsLoading(false);
+          // Only hide the full loading after first mount
+          setIsLoading(false);
         }
       }
     };
@@ -740,7 +1017,7 @@ export default function Dashboard() {
     return () => {
       isMounted = false;
     };
-  }, [fetchTemplates, resolution]);
+  }, [fetchTemplates]);
 
   // Update the handleApiTemplateChange function to ensure proper template loading
   const handleApiTemplateChange = useCallback(
@@ -753,7 +1030,8 @@ export default function Dashboard() {
       setSelectedApiTemplate(templateId);
 
       // Set loading state while fetching the new template
-      setIsLoading(true);
+      // Only affect content area, not header
+      setIsContentLoading(true);
 
       // Fetch the template data
       fetchTemplateById(templateId);
@@ -761,257 +1039,105 @@ export default function Dashboard() {
     [selectedApiTemplate, fetchTemplateById]
   );
 
-  const refreshData = useCallback(async () => {
-    if (isRefreshing) return;
-
-    try {
-      setIsRefreshing(true);
-      console.log("Refreshing data...");
-
-      // Reset timer to full value
-      const option = resolutionOptions.find((opt) => opt.value === resolution);
-      setTimeLeft(option?.seconds || null);
-
-      // Use requestAnimationFrame to ensure smooth UI during data update
-      requestAnimationFrame(() => {
-        // If a template is selected, reload that template's charts
-        if (selectedApiTemplate) {
-          // Use a lighter approach that doesn't cause layout shifts
-          const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
-          if (template) {
-            // Generate new charts with minimal computation
-            const freshCharts = generateChartsFromTemplate(template, resolution);
-
-            // Update charts without causing a layout shift
-            setCharts((prevCharts) => {
-              return freshCharts.map((newChart, i) => {
-                // Keep layout and other properties from previous chart to prevent layout shifts
-                const existingChart = prevCharts.find((c) => c.id === newChart.id);
-                if (existingChart) {
-                  return {
-                    ...newChart,
-                    layout: existingChart.layout,
-                    // Preserve other stable properties
-                    kpiColors: existingChart.kpiColors || newChart.kpiColors,
-                    activeKPIs: existingChart.activeKPIs || newChart.activeKPIs,
-                  };
-                }
-                return newChart;
-              });
-            });
-          }
-        } else {
-          // Generate new chart data while preserving layouts
-          const newCharts = generateChartConfigs(resolution);
-          setCharts((prevCharts) => {
-            return newCharts.map((newChart, i) => {
-              if (i < prevCharts.length) {
-                // Keep the same layout but update the data
-                return {
-                  ...newChart,
-                  layout: prevCharts[i].layout,
-                  // Preserve other stable properties
-                  kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
-                  activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
-                };
-              }
-              return newChart;
-            });
-          });
-        }
-
-        // Show success message after charts are updated
-        setTimeout(() => {
-          toast.success("Data refreshed successfully");
-          setIsRefreshing(false);
-        }, 100);
-      });
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      toast.error("Failed to refresh data");
-      setIsRefreshing(false);
-    }
-  }, [selectedApiTemplate, resolution, apiTemplates, generateChartConfigs]);
-
-  // Setup timer effect
-  useEffect(() => {
-    // Clear any existing timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    // If auto-refresh is disabled (auto mode), don't start timer
-    if (!selectedResolutionSeconds || resolution === 'auto') {
-      setTimeLeft(null);
-      return;
-    }
-
-    // Do not automatically start refresh timers for regular resolution changes
-    // Only manual refresh is allowed
-
-    // Cleanup on unmount
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [selectedResolutionSeconds, resolution]);
-
-  // Modified refresh handler to work better with resolution changes
-  const handleManualRefresh = useCallback((isAuto = false) => {
-    // Show loading state
-    setIsRefreshing(true);
-    
-    // Use requestAnimationFrame for smoother UI updates
-    requestAnimationFrame(() => {
-      try {
-        console.log(isAuto ? "Auto-refreshing data..." : "Manually refreshing data...");
-        
-        // If a template is selected, reload that template's charts
-        if (selectedApiTemplate) {
-          const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
-          if (template) {
-            const freshCharts = generateChartsFromTemplate(template, resolution);
-            
-            // Update charts while preserving layouts
-            setCharts((prevCharts) => {
-              return freshCharts.map((newChart) => {
-                const existingChart = prevCharts.find((c) => c.id === newChart.id);
-                if (existingChart) {
-                  return {
-                    ...newChart,
-                    layout: existingChart.layout,
-                    kpiColors: existingChart.kpiColors || newChart.kpiColors,
-                    activeKPIs: existingChart.activeKPIs || newChart.activeKPIs,
-                  };
-                }
-                return newChart;
-              });
-            });
-          }
-        } else {
-          // Generate new chart data while preserving layouts
-          const newCharts = generateChartConfigs(resolution);
-          setCharts((prevCharts) => {
-            return newCharts.map((newChart, i) => {
-              if (i < prevCharts.length) {
-                return {
-                  ...newChart,
-                  layout: prevCharts[i].layout,
-                  kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
-                  activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
-                };
-              }
-              return newChart;
-            });
-          });
-        }
-        
-        // Show different toast message depending on whether it was an auto-refresh or manual
-        if (isAuto) {
-          const option = autoRefreshOptions.find(opt => opt.value === autoRefreshInterval);
-          const intervalText = option ? option.label : `${autoRefreshInterval} seconds`;
-          toast.success(`Auto-refreshed data (every ${intervalText})`);
-        } else {
-          toast.success("Data refreshed successfully");
-        }
-      } catch (error) {
-        console.error("Error refreshing data:", error);
-        toast.error("Failed to refresh data");
-      } finally {
-        setIsRefreshing(false);
-      }
-    });
-  }, [selectedApiTemplate, apiTemplates, resolution, generateChartConfigs, autoRefreshInterval, autoRefreshOptions]);
-
-  // Improved time formatter for better display
-  const formatTimeLeft = useCallback((seconds: number | null) => {
-    if (seconds === null) return "";
-
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-
-    if (mins > 0) {
-      return `${mins}m ${secs.toString().padStart(2, "0")}s`;
-    }
-    return `${secs}s`;
-  }, []);
-
+  // Update handleResolutionChange to maintain current template and provide smoother transitions
   const handleResolutionChange = useCallback(
-    (value: string) => {
-      console.log(`Resolution changed to: ${value}`);
+    (newResolution: string) => {
+      // Skip if resolution hasn't changed
+      if (newResolution === resolution) {
+        return;
+      }
+
+      console.log(`Changing resolution from ${resolution} to ${newResolution}`);
       
-      // Set the resolution state immediately
-      setResolution(value);
+      // Show loading only in content area
+      setIsContentLoading(true);
       
-      // Show loading state
-      setIsRefreshing(true);
-      
-      // Use requestAnimationFrame for smoother UI updates
-      requestAnimationFrame(() => {
+      // Set resolution state immediately
+      setResolution(newResolution);
+
+      // Use a shorter timeout for faster response
+      setTimeout(async () => {
         try {
-          // Clear any existing timer to prevent unexpected refreshes
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
+          // Reset auto-refresh timer if active
+          if (autoRefreshInterval && nextRefreshTime) {
+            const now = new Date();
+            const nextTime = new Date(now.getTime() + autoRefreshInterval * 1000);
+            setNextRefreshTime(nextTime);
+            setTimeRemaining(autoRefreshInterval);
           }
           
-          // Reset timer display
-          setTimeLeft(null);
-          
-          // Immediately update the chart data with the new resolution
-          if (selectedApiTemplate) {
-            const template = apiTemplates.find((t) => t.id === selectedApiTemplate);
-            if (template) {
-              // Generate new charts with the updated resolution without creating new layout
-              const freshCharts = generateChartsFromTemplate(template, value);
+          // If a template is selected, regenerate that template's charts with new resolution
+      if (selectedApiTemplate) {
+            console.log(`Updating template ${selectedApiTemplate} with ${newResolution} resolution`);
+            
+            // Find the current template
+            const template = apiTemplates.find(t => t.id === selectedApiTemplate);
+            
+        if (template) {
+              // Generate new charts with new resolution
+              const newCharts = generateChartsFromTemplate(template, newResolution);
               
-              // Update charts while preserving layouts and other properties
-              setCharts((prevCharts) => {
-                return freshCharts.map((newChart, i) => {
-                  const existingChart = prevCharts.find((c) => c.id === newChart.id);
-                  if (existingChart) {
+              // Preserve existing layouts when updating charts (exact same approach as refreshData)
+              setCharts(prevCharts => {
+                return newCharts.map(newChart => {
+                  // Find matching chart in previous charts to preserve layout
+                  const matchingChart = prevCharts.find(c => c.id === newChart.id);
+                  if (matchingChart) {
                     return {
                       ...newChart,
-                      layout: existingChart.layout,
-                      kpiColors: existingChart.kpiColors || newChart.kpiColors,
-                      activeKPIs: existingChart.activeKPIs || newChart.activeKPIs,
+                      layout: matchingChart.layout,
+                      // Preserve active KPIs and colors for visual consistency
+                      activeKPIs: matchingChart.activeKPIs || newChart.activeKPIs,
+                      kpiColors: matchingChart.kpiColors || newChart.kpiColors,
                     };
-                  }
-                  return newChart;
-                });
-              });
-            }
-          } else {
-            // Generate new chart data while preserving layouts
-            const newCharts = generateChartConfigs(value);
-            setCharts((prevCharts) => {
-              return newCharts.map((newChart, i) => {
-                if (i < prevCharts.length) {
-                  return {
-                    ...newChart,
-                    layout: prevCharts[i].layout,
-                    kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
-                    activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
-                  };
-                }
-                return newChart;
-              });
+              }
+              return newChart;
             });
-          }
-          
-          // Success notification and complete loading
-          toast.success(`Resolution changed to ${resolutionOptions.find(opt => opt.value === value)?.label || value}`);
-        } catch (error) {
-          console.error("Error changing resolution:", error);
-          toast.error("Error changing resolution");
-        } finally {
-          setIsRefreshing(false);
+          });
+              
+              // Ensure selected template is maintained
+              setSelectedApiTemplate(selectedApiTemplate);
         }
-      });
+      } else {
+            // No template selected, refresh with generated data
+            const newCharts = generateChartConfigs(newResolution);
+            
+            // Preserve existing layouts
+            setCharts(prevCharts => {
+          return newCharts.map((newChart, i) => {
+            if (i < prevCharts.length) {
+              return {
+                ...newChart,
+                layout: prevCharts[i].layout,
+                    activeKPIs: prevCharts[i].activeKPIs || newChart.activeKPIs,
+                    kpiColors: prevCharts[i].kpiColors || newChart.kpiColors,
+              };
+            }
+            return newChart;
+          });
+        });
+      }
+
+          // Show success toast with short duration
+          toast.success(
+            `Resolution changed to ${
+              resolutionOptions.find(opt => opt.value === newResolution)?.label || 
+              newResolution
+            }`,
+            { duration: 1500 }
+          );
+    } catch (error) {
+          console.error("Error changing resolution:", error);
+          toast.error("Failed to change resolution", { duration: 2000 });
+    } finally {
+          // Use a very short delay to stop loading for smooth transition
+          setTimeout(() => {
+            setIsContentLoading(false);
+          }, 200);
+        }
+      }, 100); // Reduced timeout for faster response
     },
-    [selectedApiTemplate, apiTemplates, generateChartConfigs]
+    [resolution, selectedApiTemplate, apiTemplates, autoRefreshInterval, nextRefreshTime]
   );
 
   const toggleKPI = (kpiId: string) => {
@@ -1139,120 +1265,119 @@ export default function Dashboard() {
     }
   }, [selectedApiTemplate, charts, apiTemplates, layoutChanged, resolution]);
 
-  // Function to format time remaining until next refresh
-  const formatTimeRemaining = useCallback((targetTime: Date | null) => {
-    if (!targetTime) return "";
-    
-    const now = new Date();
-    const diffMs = targetTime.getTime() - now.getTime();
-    
-    if (diffMs <= 0) return "Refreshing...";
-    
-    const diffSec = Math.floor(diffMs / 1000);
-    const minutes = Math.floor(diffSec / 60);
-    const seconds = diffSec % 60;
-    
-    if (minutes > 0) {
-      return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
-    }
-    return `${seconds}s`;
-  }, []);
-
-  // Set up auto-refresh timer
+  // Add a new useEffect to apply theme changes to existing charts
   useEffect(() => {
-    // Clear any existing timer
-    if (autoRefreshTimerRef.current) {
-      clearInterval(autoRefreshTimerRef.current);
-      autoRefreshTimerRef.current = null;
-    }
+    // Skip if no charts or if loading
+    if (charts.length === 0 || isLoading) return;
     
-    // If no interval set, don't start timer
-    if (!autoRefreshInterval) {
-      setNextRefreshTime(null);
-      return;
-    }
+    console.log(`Applying theme: ${selectedTheme} to ${charts.length} existing charts`);
     
-    // Set next refresh time
-    const nextRefresh = new Date();
-    nextRefresh.setSeconds(nextRefresh.getSeconds() + autoRefreshInterval);
-    setNextRefreshTime(nextRefresh);
+    // Get the selected theme
+    const theme = chartThemes[selectedTheme as keyof typeof chartThemes];
+    if (!theme) return;
     
-    // Start refresh timer
-    let lastTick = Date.now();
-    
-    const refreshTimerTick = () => {
-      const now = Date.now();
-      lastTick = now;
+    // Create a copy of charts to avoid mutating state directly
+    const updatedCharts = charts.map(chart => {
+      // Create a deep copy of the chart to avoid mutation
+      const updatedChart = {...chart};
       
-      setNextRefreshTime(prev => {
-        if (!prev) return null;
+      // If chart has kpiColors, update them with the new theme colors
+      if ('kpiColors' in updatedChart && updatedChart.kpiColors) {
+        // Create a deep copy of kpiColors
+        updatedChart.kpiColors = {...updatedChart.kpiColors};
         
-        // Calculate remaining time
-        const remaining = prev.getTime() - now;
-        
-        // If timer expired, trigger refresh
-        if (remaining <= 0) {
-          // Use the existing handleManualRefresh function, passing true to indicate auto-refresh
-          handleManualRefresh(true);
-          
-          // Set new target time
-          const newTarget = new Date();
-          newTarget.setSeconds(newTarget.getSeconds() + autoRefreshInterval);
-          return newTarget;
-        }
-        
-        return prev;
-      });
-    };
-    
-    // Check every second
-    autoRefreshTimerRef.current = setInterval(refreshTimerTick, 1000);
-    
-    // Cleanup on unmount
-    return () => {
-      if (autoRefreshTimerRef.current) {
-        clearInterval(autoRefreshTimerRef.current);
+        // Update each KPI with the theme color
+        const kpiEntries = Object.entries(updatedChart.kpiColors as Record<string, { color: string; name: string }>);
+        kpiEntries.forEach(([kpiId, kpiInfo], colorIndex) => {
+          if (kpiInfo && typeof kpiInfo === "object") {
+            // Create a new copy of the kpiInfo object
+            updatedChart.kpiColors![kpiId] = {
+              ...kpiInfo,
+              color: theme.colors[colorIndex % theme.colors.length]
+            };
+          }
+        });
       }
-    };
-  }, [autoRefreshInterval, handleManualRefresh]);
-
-  // Handle selecting a new auto-refresh interval
-  const handleSelectAutoRefresh = useCallback((seconds: number) => {
-    setAutoRefreshInterval(seconds);
-    setAutoRefreshDropdownOpen(false);
+      
+      return updatedChart;
+    });
     
-    // Show toast notification
-    const option = autoRefreshOptions.find(opt => opt.value === seconds);
-    if (option) {
-      toast.success(`Auto-refresh set to ${option.label}`);
+    // Update charts with the new theme colors
+    setCharts(updatedCharts);
+    
+    // Show a subtle notification
+    toast.success(`Theme updated to ${theme.name}`, {
+      duration: 2000,
+      position: "bottom-right"
+    });
+  }, [selectedTheme]);
+
+  // Modify the render dashboard content function to use content-only loading
+  const renderDashboardContent = () => {
+    if (isContentLoading) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] w-full">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            <div className="animate-pulse absolute inset-0 flex items-center justify-center text-xs text-primary font-medium">
+              Loading...
+            </div>
+          </div>
+        </div>
+      );
     }
-  }, [autoRefreshOptions]);
-
-  // Stop auto-refresh
-  const stopAutoRefresh = useCallback(() => {
-    setAutoRefreshInterval(null);
-    if (autoRefreshTimerRef.current) {
-      clearInterval(autoRefreshTimerRef.current);
-      autoRefreshTimerRef.current = null;
+    
+    if (hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
+          <div className="text-destructive mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-4">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
+          <p className="text-center text-muted-foreground mb-4">{errorMessage || "Failed to load dashboard data."}</p>
+          <Button 
+            onClick={() => fetchTemplates()} 
+            variant="outline" 
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try Again
+          </Button>
+        </div>
+      );
     }
-    toast.success("Auto-refresh stopped");
-  }, []);
-
-  // Add this function to calculate the progress percentage for the timer visualization
-  // Function to calculate progress percentage for circular indicator
-  const getProgressPercentage = useCallback((targetTime: Date, intervalSeconds: number) => {
-    if (!targetTime) return 0;
     
-    const now = new Date();
-    const diffMs = targetTime.getTime() - now.getTime();
+    if (charts.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
+          <div className="text-center max-w-lg">
+            <h3 className="text-lg font-medium mb-2">No charts available</h3>
+            <p className="text-muted-foreground mb-4">
+              There are no charts to display for this template. Try selecting a different template or check your connection.
+            </p>
+          </div>
+        </div>
+      );
+    }
     
-    if (diffMs <= 0) return 100;
-    
-    const elapsedMs = (intervalSeconds * 1000) - diffMs;
-    const percentage = (elapsedMs / (intervalSeconds * 1000)) * 100;
-    
-    return Math.min(Math.max(percentage, 0), 100);
-  }, []);
+    return (
+      <div className="relative min-h-[70vh]">
+        <DynamicLayout
+          charts={charts}
+          activeKPIs={activeKPIs}
+          kpiColors={themedKpiColors}
+          globalDateRange={globalDateRange}
+          theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
+          resolution={resolution}
+          onLayoutChange={handleLayoutChange}
+        />
+      </div>
+    );
+  };
 
   if (!mounted || isLoading) {
     return (
@@ -1284,42 +1409,42 @@ export default function Dashboard() {
               <div className="flex items-center gap-4">
                 <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight whitespace-nowrap">
                   SAP Analytics
-                </h1>
+              </h1>
                 
                 <div className="flex items-center gap-2">
                   {/* Template selector - compact design */}
                   <div className="flex items-center">
-                    <Select
-                      value={selectedApiTemplate}
-                      onValueChange={handleApiTemplateChange}
-                      disabled={apiTemplates.length === 0}
-                    >
+                <Select
+                  value={selectedApiTemplate}
+                  onValueChange={handleApiTemplateChange}
+                  disabled={apiTemplates.length === 0}
+                >
                       <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[140px] border-muted">
-                        <SelectValue placeholder="Select template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {apiTemplates.map((template) => (
-                          <SelectItem
-                            key={template.id}
-                            value={template.id}
+                    <SelectValue placeholder="Select template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {apiTemplates.map((template) => (
+                      <SelectItem
+                        key={template.id}
+                        value={template.id}
                             className="text-xs"
-                          >
+                      >
                             <div className="flex items-center gap-2">
-                              <span>{template.name}</span>
-                              {template.isDefault && (
+                        <span>{template.name}</span>
+                        {template.isDefault && (
                                 <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
-                                  Default
-                                </span>
-                              )}
-                              {template.isFavorite && (
-                                <span className="text-yellow-500">★</span>
-                              )}
+                            Default
+                          </span>
+                        )}
+                        {template.isFavorite && (
+                          <span className="text-yellow-500">★</span>
+                        )}
                             </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
                   {/* Theme selector - icon with dropdown */}
                   <div className="flex items-center">
@@ -1340,13 +1465,13 @@ export default function Dashboard() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[180px]">
                         <DropdownMenuLabel className="text-xs">Chart Theme</DropdownMenuLabel>
-                        {Object.entries(chartThemes).map(([key, theme]) => (
+                    {Object.entries(chartThemes).map(([key, theme]) => (
                           <DropdownMenuItem 
                             key={key} 
                             className="flex items-center justify-between cursor-pointer text-xs"
                             onClick={() => setSelectedTheme(key)}
                           >
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                               <div className="relative w-5 h-5 rounded-full overflow-hidden">
                                 <div className="absolute inset-0" style={{ 
                                   background: `conic-gradient(${theme.colors[0]} 0%, 
@@ -1356,38 +1481,38 @@ export default function Dashboard() {
                                                ${theme.colors[0]} 100%)` 
                                 }}></div>
                                 <div className="absolute inset-[30%] rounded-full bg-background shadow-sm"></div>
-                              </div>
+                          </div>
                               <span>{theme.name}</span>
-                            </div>
+                        </div>
                             {selectedTheme === key && (
                               <Check className="h-3 w-3 text-primary" />
                             )}
                           </DropdownMenuItem>
-                        ))}
+                    ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+              </div>
 
                   {/* Resolution selector - compact dropdown */}
                   <div className="flex items-center">
-                    <Select
-                      value={resolution}
-                      onValueChange={handleResolutionChange}
-                    >
+                  <Select
+                    value={resolution}
+                    onValueChange={handleResolutionChange}
+                  >
                       <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3 w-3 text-muted-foreground" />
-                          <SelectValue placeholder="Resolution" />
+                      <SelectValue placeholder="Resolution" />
                         </div>
-                      </SelectTrigger>
+                    </SelectTrigger>
                       <SelectContent>
-                        {resolutionOptions.map((option) => (
+                      {resolutionOptions.map((option) => (
                           <SelectItem key={option.value} value={option.value} className="text-xs">
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   </div>
 
                   {/* Date Range - compact inline design */}
@@ -1401,23 +1526,30 @@ export default function Dashboard() {
                     />
                   </div>
 
-                  {/* Auto-refresh dropdown button */}
+                  {/* Auto-refresh dropdown button with enhanced timer display */}
                   <div className="relative">
+                    {/* Timer display above the refresh button */}
+                    {autoRefreshInterval && timeRemaining !== null && (
+                      <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground text-[9px] px-1.5 py-0.5 rounded-sm font-medium whitespace-nowrap shadow-sm">
+                        {formatTimeRemaining()}
+                      </div>
+                    )}
+                    
                     <DropdownMenu open={autoRefreshDropdownOpen} onOpenChange={setAutoRefreshDropdownOpen}>
                       <DropdownMenuTrigger asChild>
                         <Button
-                          disabled={isRefreshing}
+                    disabled={isRefreshing}
                           variant="outline"
                           size="icon"
-                          className={cn(
+                    className={cn(
                             "h-8 w-8 rounded-md border relative bg-background/50 border-muted",
                             autoRefreshInterval && "ring-1 ring-primary/40",
-                            isRefreshing && "opacity-70 cursor-not-allowed"
-                          )}
-                          title={autoRefreshInterval ? `Auto-refresh: ${formatTimeRemaining(nextRefreshTime)}` : "Refresh data"}
-                          aria-label={autoRefreshInterval ? `Auto-refresh: ${formatTimeRemaining(nextRefreshTime)}` : "Refresh data"}
-                        >
-                          {isRefreshing ? (
+                      isRefreshing && "opacity-70 cursor-not-allowed"
+                    )}
+                          title={autoRefreshInterval ? `Auto-refresh: ${formatTimeRemaining()}` : "Refresh data"}
+                          aria-label={autoRefreshInterval ? `Auto-refresh: ${formatTimeRemaining()}` : "Refresh data"}
+                  >
+                    {isRefreshing ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                           ) : (
                             <>
@@ -1425,7 +1557,7 @@ export default function Dashboard() {
                                 "h-3.5 w-3.5",
                                 autoRefreshInterval ? "text-primary" : "text-muted-foreground"
                               )} />
-                              {autoRefreshInterval && nextRefreshTime && (
+                              {autoRefreshInterval && (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <svg className="w-7 h-7" viewBox="0 0 100 100">
                                     <circle 
@@ -1443,7 +1575,7 @@ export default function Dashboard() {
                                       r="40" 
                                       strokeWidth="8"
                                       stroke="currentColor"
-                                      strokeDasharray={`${2.51 * getProgressPercentage(nextRefreshTime, autoRefreshInterval)} 251`}
+                                      strokeDasharray={`${2.51 * getProgressPercentage()} 251`}
                                       transform="rotate(-90 50 50)"
                                     />
                                   </svg>
@@ -1453,7 +1585,7 @@ export default function Dashboard() {
                           )}
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" sideOffset={4} className="w-[180px]">
+                      <DropdownMenuContent align="end" sideOffset={4} className="w-[220px]">
                         <DropdownMenuItem 
                           className="flex items-center justify-between cursor-pointer text-xs" 
                           onClick={() => handleManualRefresh(false)}
@@ -1462,7 +1594,44 @@ export default function Dashboard() {
                           <RefreshCw className="h-3 w-3" />
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuLabel className="text-xs">Auto-refresh every:</DropdownMenuLabel>
+                        
+                        {/* Auto-refresh toggle switch */}
+                        <div className="px-2 py-1.5 flex items-center justify-between">
+                          <span className="text-xs font-medium">Auto-refresh</span>
+                          <Switch 
+                            checked={isAutoRefreshEnabled}
+                            onCheckedChange={(checked) => {
+                              setIsAutoRefreshEnabled(checked);
+                              
+                              if (checked) {
+                                // If turning ON auto-refresh
+                                if (autoRefreshInterval) {
+                                  // Use existing interval if set
+                                  const option = autoRefreshOptions.find(opt => opt.value === autoRefreshInterval);
+                                  toast.success(`Auto-refresh enabled - will refresh every ${option?.label || `${autoRefreshInterval}s`}`);
+                                  // Start the timer if not already running
+                                  if (!nextRefreshTime) {
+                                    handleSelectAutoRefresh(autoRefreshInterval);
+                                  }
+                                } else {
+                                  // Default to 5 minutes
+                                  handleSelectAutoRefresh(300);
+                                }
+                              } else {
+                                // If turning OFF auto-refresh but keeping current timer
+                                if (autoRefreshInterval && nextRefreshTime) {
+                                  toast.success(`Auto-refresh disabled - will refresh once more, then stop`);
+                                } else {
+                                  // Stop everything if no timer
+                                  stopAutoRefresh();
+                                }
+                              }
+                            }}
+                            className="ml-auto"
+                          />
+                </div>
+
+                        <DropdownMenuLabel className="text-xs mt-1">Refresh interval:</DropdownMenuLabel>
                         {autoRefreshOptions.map((option) => (
                           <DropdownMenuItem 
                             key={option.value}
@@ -1475,20 +1644,9 @@ export default function Dashboard() {
                             )}
                           </DropdownMenuItem>
                         ))}
-                        {autoRefreshInterval !== null && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="flex items-center justify-center cursor-pointer text-xs text-destructive"
-                              onClick={stopAutoRefresh}
-                            >
-                              Stop auto-refresh
-                            </DropdownMenuItem>
-                          </>
-                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+              </div>
 
                   {/* Only show save button when layout has changed */}
                   {layoutChanged && (
@@ -1512,7 +1670,7 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex items-center">
                 {/* This empty div maintains the space on the right side for toast messages */}
               </div>
@@ -1526,26 +1684,7 @@ export default function Dashboard() {
             transition={{ delay: 0.4 }}
             className="grid gap-6 mt-4"
           >
-            {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-              </div>
-            ) : charts.length === 0 ? (
-              <div className="flex items-center justify-center h-64">
-                <p className="text-muted-foreground">
-                  No charts available for this template
-                </p>
-              </div>
-            ) : (
-              <DynamicLayout
-                charts={charts}
-                activeKPIs={activeKPIs}
-                kpiColors={themedKpiColors}
-                globalDateRange={globalDateRange}
-                theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
-                onLayoutChange={handleLayoutChange}
-              />
-            )}
+            {renderDashboardContent()}
           </motion.div>
         </div>
       </main>

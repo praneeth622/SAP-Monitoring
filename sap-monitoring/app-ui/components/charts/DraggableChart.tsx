@@ -60,6 +60,7 @@ interface DraggableChartProps {
   isFullscreenMode?: boolean;
   hideControls?: boolean; // Add this to hide calendar, tools, download, and fullscreen buttons
   onDeleteGraph?: (id: string) => void; // Add this to handle graph deletion
+  resolution?: string; // Add resolution as a prop
 }
 
 // Then update the component parameters with default values
@@ -77,6 +78,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   isFullscreenMode,
   hideControls = false, // Default to showing controls
   onDeleteGraph,
+  resolution = 'auto', // Default to auto resolution
 }) => {
   const [chartType, setChartType] = useState<ChartType>(type);
   const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(() => {
@@ -570,6 +572,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                 kpiColors={kpiColors}
                 dateRange={effectiveDateRange}
                 theme={theme}
+                resolution={resolution}
                 className={cn(
                   "p-0",
                   isFullscreen ? "h-[calc(100vh-10rem)]" : "h-full"
