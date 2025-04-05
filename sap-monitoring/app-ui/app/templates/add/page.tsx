@@ -50,6 +50,16 @@ interface Graph {
   kpiColors: Record<string, { color: string; name: string }>;
 }
 
+interface System {
+  system_id: string;
+  instance: string;
+  activeStatus: boolean;
+  client: number;
+  description: string;
+  type: string;
+  pollingStatus: boolean;
+}
+
 const timeRangeOptions = [
   "auto",
   "last 1 hour",
@@ -102,8 +112,18 @@ const SUCCESS_MESSAGES = {
 
 // Add a default theme for all template charts
 const defaultChartTheme = {
-  name: 'Default',
-  colors: ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F97316', '#EF4444', '#06B6D4', '#84CC16', '#F59E0B']
+  name: "Default",
+  colors: [
+    "#3B82F6",
+    "#8B5CF6",
+    "#EC4899",
+    "#10B981",
+    "#F97316",
+    "#EF4444",
+    "#06B6D4",
+    "#84CC16",
+    "#F59E0B",
+  ],
 };
 
 export default function TemplatesPage() {
@@ -116,6 +136,7 @@ export default function TemplatesPage() {
     null
   );
   const [isAddGraphSheetOpen, setIsAddGraphSheetOpen] = useState(false);
+  const [systems, setSystems] = useState<System[]>([]);
   const [templateData, setTemplateData] = useState({
     name: "",
     system: "",
@@ -123,10 +144,9 @@ export default function TemplatesPage() {
     resolution: "auto",
     isDefault: false,
     isFavorite: false,
-    graphs: [] as Graph[], // Initialize graphs as an empty array
+    graphs: [] as Graph[],
   });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [graphs, setGraphs] = useState<Graph[]>([]);
   const [showGraphs, setShowGraphs] = useState(false);
   const [activeKPIs, setActiveKPIs] = useState<Set<string>>(new Set());
@@ -135,32 +155,42 @@ export default function TemplatesPage() {
   >({});
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    const fetchSystems = async () => {
+      try {
+        const response = await fetch(
+          "https://shwsckbvbt.a.pinggy.link/api/sys"
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch systems");
+        }
+        const data = await response.json();
+        setSystems(data);
+
+        // Auto-select if there's only one system
+        if (data.length === 1) {
+          setTemplateData((prev) => ({
+            ...prev,
+            system: data[0].system_id,
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching systems:", error);
+      }
+    };
+
+    fetchSystems();
+  }, []);
+
   // Fetch templates on mount
   useEffect(() => {
     if (templateId) {
       fetchTemplateForEditing(templateId);
       setIsEditMode(true);
-    } else {
-      fetchTemplates();
     }
   }, [templateId]);
 
-  const fetchTemplates = async () => {
-    try {
-      const response = await fetch("http://localhost:3000/api/templates");
-      if (!response.ok) {
-        throw new Error(ERROR_MESSAGES.FETCH_ERROR);
-      }
-      const data = await response.json();
-      setTemplates(data);
-    } catch (error) {
-      toast.error(ERROR_MESSAGES.FETCH_ERROR, {
-        description:
-          error instanceof Error ? error.message : "Please try again",
-      });
-    }
-  };
-
+  // Update the fetchTemplateForEditing function to correctly set the system ID
   const fetchTemplateForEditing = async (templateId: string) => {
     try {
       setIsLoading(true);
@@ -182,16 +212,30 @@ export default function TemplatesPage() {
       // Extract the template data
       const template = data[0];
 
+      // Extract system ID correctly from the API response
+      // In case it's nested or formatted differently than expected
+      let systemId = "";
+
+      if (template.systems && template.systems.length > 0) {
+        // Get the system ID from the first system in the array
+        systemId = template.systems[0].system_id || "";
+        console.log("Found system ID in template:", systemId);
+      } else {
+        console.warn("No systems found in template data");
+      }
+
       // Map the API response to our local state format
       setTemplateData({
-        name: template.template_name,
-        system: template.systems?.[0]?.system_id || "",
+        name: template.template_name || "",
+        system: systemId, // Set the system ID here
         timeRange: template.frequency || "auto",
-        resolution: "auto", // Set a default if not available
+        resolution: template.resolution || "auto", // Added fallback
         isDefault: template.default || false,
         isFavorite: template.favorite || false,
         graphs: [], // We'll populate this separately
       });
+
+      console.log("Template data set with system:", systemId);
 
       // Map the graphs from API format to our internal format
       const mappedGraphs = template.graphs.map(
@@ -234,10 +278,10 @@ export default function TemplatesPage() {
 
       setGraphs(mappedGraphs);
       setShowGraphs(mappedGraphs.length > 0);
-      
+
       // Force a layout refresh with a slight delay to ensure proper sizing
       setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
+        window.dispatchEvent(new Event("resize"));
       }, 200);
     } catch (error) {
       console.error("Error fetching template for editing:", error);
@@ -459,7 +503,7 @@ export default function TemplatesPage() {
 
       // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
       setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
+        window.dispatchEvent(new Event("resize"));
       }, 200);
 
       toast.success(SUCCESS_MESSAGES.GRAPH_ADDED);
@@ -475,15 +519,15 @@ export default function TemplatesPage() {
     if (confirm("Are you sure you want to delete this graph?")) {
       setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
       toast.success("Graph deleted successfully");
-      
+
       // If we deleted the last graph, hide the graphs section
       if (graphs.length === 1) {
         setShowGraphs(false);
       }
-      
+
       // Force a layout refresh
       setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
+        window.dispatchEvent(new Event("resize"));
       }, 200);
     }
   };
@@ -492,7 +536,6 @@ export default function TemplatesPage() {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
-      {/* <Sidebar /> */}
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto px-8 py-6">
           <motion.div
@@ -558,12 +601,31 @@ export default function TemplatesPage() {
                           : ""
                       }
                     >
-                      <SelectValue placeholder="Select" />
+                      <SelectValue placeholder="Select">
+                        {/* Show the system ID even if it's not in the options list yet */}
+                        {templateData.system || "Select"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {systemOptions.map((system) => (
-                        <SelectItem key={system} value={system.toLowerCase()}>
-                          {system}
+                      {/* Add the template's system if it's not in the systems list */}
+                      {isEditMode &&
+                        templateData.system &&
+                        !systems.some(
+                          (sys) => sys.system_id === templateData.system
+                        ) && (
+                          <SelectItem
+                            key={templateData.system}
+                            value={templateData.system}
+                          >
+                            {templateData.system}
+                          </SelectItem>
+                        )}
+                      {systems.map((system) => (
+                        <SelectItem
+                          key={system.system_id}
+                          value={system.system_id}
+                        >
+                          {system.system_id}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -707,7 +769,10 @@ export default function TemplatesPage() {
                       const chartKpiColors = allKpis.reduce(
                         (colors, kpi, index) => {
                           colors[kpi] = {
-                            color: defaultChartTheme.colors[index % defaultChartTheme.colors.length],
+                            color:
+                              defaultChartTheme.colors[
+                                index % defaultChartTheme.colors.length
+                              ],
                             name: kpi,
                           };
                           return colors;

@@ -50,8 +50,7 @@ import { cn } from "@/lib/utils";
 
 // Update the System interface
 interface System {
-  id: string;
-  systemId: string;
+  system_id: string;
   instance: string;
   client: number;
   description: string;
@@ -59,6 +58,7 @@ interface System {
   pollingStatus: boolean;
   activeStatus: boolean;
   no?: number;
+  id?: string; // Add this for backward compatibility
 }
 
 // Update the SystemStats interface
@@ -111,6 +111,13 @@ interface UpdateActiveStatusRequest {
 interface StatsCardsProps {
   stats: SystemStats;
   isLoading: boolean;
+}
+
+interface EditSystemSheetProps {
+  open: boolean;
+  onClose: () => void;
+  system: System | null;
+  onSubmit: (systemId: string, description: string) => Promise<void>;
 }
 
 export default function ManageSystemsPage() {
@@ -189,8 +196,7 @@ export default function ManageSystemsPage() {
       if (result) {
         // Transform the API response to match our table structure
         const transformedSystems = result.map((system: any, index: number) => ({
-          id: system.system_id,
-          systemId: system.system_id,
+          system_id: system.system_id,
           instance: system.instance,
           client: system.client,
           description: system.description,
@@ -198,6 +204,7 @@ export default function ManageSystemsPage() {
           pollingStatus: system.pollingStatus,
           activeStatus: system.activeStatus,
           no: index + 1,
+          id: system.system_id // Add this for backward compatibility
         }));
 
         setSystems(transformedSystems);
@@ -292,13 +299,13 @@ export default function ManageSystemsPage() {
     // If turning off an active system, show confirmation dialog
     if (system.activeStatus && !newStatus) {
       setSystemStatusChange({
-        id: parseInt(system.id),
-        systemName: system.systemId,
+        id: parseInt(system.system_id),
+        systemName: system.system_id,
         newStatus,
       });
     } else {
       // Otherwise, just update the status directly
-      updateSystemStatus(parseInt(system.id), newStatus);
+      updateSystemStatus(parseInt(system.system_id), newStatus);
     }
   };
 
@@ -497,7 +504,7 @@ const useConnectionStatusPolling = (systems: System[], interval = 30000) => {
     const updateConnectionStatuses = async () => {
       // Only check connection statuses, don't update any other data
       const statusChecks = systems.map((system) =>
-        checkConnectionStatus(system.systemId)
+        checkConnectionStatus(system.system_id)
       );
 
       const results = await Promise.all(statusChecks);
@@ -628,7 +635,7 @@ const SystemsTable = ({
 
       // Update local state after successful API call
       const updatedSystems = localSystems.map((sys) =>
-        sys.systemId === systemId
+        sys.system_id === systemId
           ? { ...sys, pollingStatus: !currentStatus }
           : sys
       );
@@ -674,7 +681,7 @@ const SystemsTable = ({
 
       // Get the current system to include its description
       const currentSystem = localSystems.find(
-        (sys) => sys.systemId === systemId
+        (sys) => sys.system_id === systemId
       );
       if (!currentSystem) throw new Error("System not found");
 
@@ -704,7 +711,7 @@ const SystemsTable = ({
 
       // Update local state after successful API call - update BOTH active and polling status
       const updatedSystems = localSystems.map((sys) =>
-        sys.systemId === systemId
+        sys.system_id === systemId
           ? {
               ...sys,
               activeStatus: !currentStatus,
@@ -787,7 +794,7 @@ const SystemsTable = ({
       // Update local state
       setLocalSystems((prev) =>
         prev.map((sys) =>
-          sys.systemId === systemId ? { ...sys, description } : sys
+          sys.system_id === systemId ? { ...sys, description } : sys
         )
       );
     } catch (error) {
@@ -1139,7 +1146,7 @@ const SystemsTable = ({
     try {
       // Get the current system to include its description
       const currentSystem = localSystems.find(
-        (sys) => sys.systemId === systemId
+        (sys) => sys.system_id === systemId
       );
       if (!currentSystem) throw new Error("System not found");
 
@@ -1168,7 +1175,7 @@ const SystemsTable = ({
 
       // Update local state after successful API call
       const updatedSystems = localSystems.map((sys) =>
-        sys.systemId === systemId
+        sys.system_id === systemId
           ? {
               ...sys,
               activeStatus: true, // Set active to true
@@ -1216,9 +1223,9 @@ const SystemsTable = ({
           </TableHeader>
           <TableBody>
             {localSystems.map((system) => (
-              <TableRow key={system.id}>
+              <TableRow key={system.system_id}>
                 <TableCell>{system.no}</TableCell>
-                <TableCell className="font-medium">{system.systemId}</TableCell>
+                <TableCell className="font-medium">{system.system_id}</TableCell>
                 <TableCell>{system.type}</TableCell>
                 <TableCell>{system.instance}</TableCell>
                 <TableCell>{system.client}</TableCell>
@@ -1226,7 +1233,7 @@ const SystemsTable = ({
                 <TableCell>
                   <div
                     className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                      connectionStatuses[system.systemId]
+                      connectionStatuses[system.system_id]
                         ? "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
                         : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"
                     }`}
@@ -1234,12 +1241,12 @@ const SystemsTable = ({
                     <div className="flex items-center gap-1.5">
                       <div
                         className={`w-1.5 h-1.5 rounded-full ${
-                          connectionStatuses[system.systemId]
+                          connectionStatuses[system.system_id]
                             ? "bg-blue-600 dark:bg-blue-400 animate-pulse"
                             : "bg-red-600 dark:bg-red-400"
                         }`}
                       ></div>
-                      {connectionStatuses[system.systemId]
+                      {connectionStatuses[system.system_id]
                         ? "Connected"
                         : "Disconnected"}
                     </div>
@@ -1263,10 +1270,10 @@ const SystemsTable = ({
                     <div className="group relative">
                       <Switch
                         checked={system.pollingStatus}
-                        disabled={isUpdating === `polling-${system.systemId}`}
+                        disabled={isUpdating === `polling-${system.system_id}`}
                         onCheckedChange={() =>
                           handlePollingToggleClick(
-                            system.systemId,
+                            system.system_id,
                             system.pollingStatus,
                             system.activeStatus,
                             system.description
@@ -1297,10 +1304,10 @@ const SystemsTable = ({
                 <TableCell>
                   <Switch
                     checked={system.activeStatus}
-                    // disabled={isUpdating === `active-${system.systemId}`}
+                    // disabled={isUpdating === `active-${system.system_id}`}
                     onCheckedChange={() =>
                       handleActiveToggleClick(
-                        system.systemId,
+                        system.system_id,
                         system.activeStatus,
                         system.pollingStatus // Pass the current polling status
                       )
@@ -1320,7 +1327,7 @@ const SystemsTable = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => onSettings(parseInt(system.id))}
+                      onClick={() => onSettings(parseInt(system.system_id))}
                     >
                       <Settings className="h-4 w-4" />
                     </Button>
@@ -1341,7 +1348,11 @@ const SystemsTable = ({
           setIsEditSheetOpen(false);
           setSelectedSystem(null);
         }}
-        system={selectedSystem}
+        system={selectedSystem ? {
+          ...selectedSystem,
+          systemId: selectedSystem.system_id,
+          id: selectedSystem.system_id
+        } : null}
         onSubmit={handleUpdateDescription}
       />
     </>
