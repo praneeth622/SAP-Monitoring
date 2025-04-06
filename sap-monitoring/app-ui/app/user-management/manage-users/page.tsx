@@ -1073,7 +1073,6 @@ export default function ManageUserPage() {
                   <TableRow>
                     <TableHead>User ID</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
                     <TableHead>System</TableHead>
                     <TableHead>Access Level</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -1329,7 +1328,7 @@ export default function ManageUserPage() {
                               {item.user_id}
                             </TableCell>
                             <TableCell>{item.name}</TableCell>
-                            <TableCell>{item.email}</TableCell>
+                            {/* <TableCell>{item.email}</TableCell> */}
                             <TableCell>
                               <Badge variant="outline" className="font-medium">
                                 {item.system}
@@ -1437,13 +1436,13 @@ export default function ManageUserPage() {
                           className="h-9 disabled:cursor-not-allowed"
                         />
                       </TableCell>
-                      <TableCell>
+                      {/* <TableCell>
                         <Input
                           value={email}
                           disabled
                           className="h-9 disabled:cursor-not-allowed text-sm"
                         />
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell>
                         <Popover>
                           <PopoverTrigger asChild>

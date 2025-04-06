@@ -732,6 +732,14 @@ export default function ConfigDashboard() {
     const childKpis = [...osKpis, ...jobsKpis].filter((kpi) => !kpi.parent);
     const [showChildren, setShowChildren] = useState(false);
 
+    // Add this function to check if a KPI group is active
+    const isKpiGroupActive = (groupName: string) => {
+      return activeKpiGroups.has(groupName);
+    };
+
+    // Filter child KPIs to only show those from active groups
+    const activeChildKpis = childKpis.filter(kpi => isKpiGroupActive(kpi.kpi_group));
+
     const handleKpiStatusChange = async (kpi: KPI) => {
       try {
         // Set the updating state to show loading indication on this specific KPI
@@ -816,9 +824,9 @@ export default function ConfigDashboard() {
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
                 <div className="col-span-4">KPI Name</div>
-                {/* <div className="col-span-3">KPI Name</div> */}
                 <div className="col-span-2">Area</div>
-                <div className="col-span-4 text-center">Status</div>
+                <div className="col-span-2">Monitoring Area</div>
+                <div className="col-span-3 text-center">Status</div>
                 <div className="col-span-1 text-right">Actions</div>
               </div>
             </div>
@@ -828,18 +836,7 @@ export default function ConfigDashboard() {
               {parentKpis.map((kpi) => (
                 <div key={kpi.kpi_name} className="group">
                   {/* Parent KPI Row */}
-                  <div
-                    className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center"
-                    // onClick={() => handleKpiExpand(kpi.kpi_name)}
-                  >
-                    {/* <div className="col-span-3 flex items-center gap-2"> */}
-                    {/* <ChevronDown
-                        className={`h-4 w-4 text-muted-foreground transition-transform ${
-                          expandedKpis.has(kpi.kpi_name) ? "rotate-180" : ""
-                        }`}
-                      /> */}
-                    {/* <span className="font-medium">{kpi.kpi_name}</span>
-                    </div> */}
+                  <div className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center">
                     <div className="col-span-4 text-sm text-muted-foreground truncate">
                       {kpi.kpi_desc}
                     </div>
@@ -848,11 +845,16 @@ export default function ConfigDashboard() {
                         {kpi.kpi_group}
                       </span>
                     </div>
-                    <div className="col-span-4 flex justify-center">
+                    <div className="col-span-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
+                        {kpi.kpi_group.startsWith("OS") ? "OS" : "JOBS"}
+                      </span>
+                    </div>
+                    <div className="col-span-3 flex justify-center">
                       <Switch
                         checked={kpi.is_active}
                         onCheckedChange={() => handleKpiStatusChange(kpi)}
-                        disabled={isUpdating === kpi.kpi_name}
+                        disabled={true}
                       />
                     </div>
                     <div className="col-span-1 flex justify-end">
@@ -866,33 +868,33 @@ export default function ConfigDashboard() {
                     </div>
                   </div>
 
-                  {/* Child KPIs
+                  {/* Child KPIs */}
                   {expandedKpis.has(kpi.kpi_name) && (
                     <div className="pl-6 space-y-1 ml-4 border-l border-accent">
-                      {childKpis
+                      {activeChildKpis
                         .filter((child) => child.kpi_group === kpi.kpi_group)
                         .map((child) => (
                           <div
                             key={child.kpi_name}
                             className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg items-center"
                           >
-                            <div className="col-span-3 pl-6">
-                              {child.kpi_name}
+                            <div className="col-span-4 pl-6">
+                              {child.kpi_desc}
                             </div>
                             <div className="col-span-2">
                               <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
-                                Child
+                                {child.kpi_group}
                               </span>
                             </div>
-                            <div className="col-span-4 text-sm text-muted-foreground truncate">
-                              {child.kpi_desc}
+                            <div className="col-span-2">
+                              <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
+                                {child.kpi_group.startsWith("OS") ? "OS" : "JOBS"}
+                              </span>
                             </div>
-                            <div className="col-span-2 flex justify-center">
+                            <div className="col-span-3 flex justify-center">
                               <Switch
                                 checked={child.is_active}
-                                onCheckedChange={() =>
-                                  handleKpiStatusChange(child)
-                                }
+                                onCheckedChange={() => handleKpiStatusChange(child)}
                                 disabled={isUpdating === child.kpi_name}
                               />
                             </div>
@@ -900,7 +902,7 @@ export default function ConfigDashboard() {
                           </div>
                         ))}
                     </div>
-                  )} */}
+                  )}
                 </div>
               ))}
             </div>
@@ -914,7 +916,7 @@ export default function ConfigDashboard() {
         )}
 
         {/* Children Section */}
-        {childKpis.length > 0 && (
+        {activeChildKpis.length > 0 && (
           <div className="mt-6 border-t pt-4">
             <Button
               variant="ghost"
@@ -926,12 +928,12 @@ export default function ConfigDashboard() {
                   showChildren ? "rotate-180" : ""
                 }`}
               />
-              {showChildren ? "Hide" : "Show"} Child KPIs ({childKpis.length})
+              {showChildren ? "Hide" : "Show"} Child KPIs ({activeChildKpis.length})
             </Button>
 
             {showChildren && (
               <div className="mt-4 space-y-1">
-                {childKpis.map((kpi) => (
+                {activeChildKpis.map((kpi) => (
                   <div
                     key={kpi.kpi_name}
                     className="grid grid-cols-12 gap-4 py-3 px-4 hover:bg-accent/5 rounded-lg items-center"
@@ -942,9 +944,6 @@ export default function ConfigDashboard() {
                         {kpi.kpi_group}
                       </span>
                     </div>
-                    {/* <div className="col-span-4 text-sm text-muted-foreground truncate">
-                      {kpi.kpi_desc}
-                    </div> */}
                   </div>
                 ))}
               </div>

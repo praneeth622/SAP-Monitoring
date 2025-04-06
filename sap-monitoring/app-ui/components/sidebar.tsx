@@ -209,7 +209,7 @@ export function Sidebar() {
         router.push("/user-management/user-access");
         break;
       case "Manage User":
-        router.push("/user-management/manage-user");
+        router.push("/user-management/manage-users");
         break;
       default:
         break;
@@ -275,10 +275,10 @@ export function Sidebar() {
               ) : (
                 <div className="h-8 w-32">
                   <Image
-                    src="/assets/1.png"
+                    src="/assets/13.png"
                     alt="SwiftAI"
                     fill
-                    className="object-contain"
+                    className="object-contain w-full h-full"
                     priority
                   />
                 </div>
@@ -403,7 +403,7 @@ export function Sidebar() {
                 onClick={() => handleItemClick("Incidents")}
               />
             </div>
-            <div className="space-y- py-2">
+            {/* <div className="space-y- py-2">
               {!isCollapsed && (
                 <div className="text-sm text-muted-foreground font-medium">
                   Account
@@ -425,7 +425,7 @@ export function Sidebar() {
                   }
                 }}
               />
-            </div>
+            </div> */}
             <DropdownMenu>
               <DropdownMenuTrigger id="profile-dropdown-trigger" className="hidden">
                 <span />
