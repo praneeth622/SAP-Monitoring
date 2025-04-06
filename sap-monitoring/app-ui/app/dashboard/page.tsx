@@ -1522,7 +1522,7 @@ export default function Dashboard() {
                       onDateChange={setGlobalDateRange}
                       align="end"
                       className="w-auto"
-                      showTime={false}
+                      showTime={true}
                     />
                   </div>
 

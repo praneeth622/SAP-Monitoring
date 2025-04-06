@@ -1,232 +1,133 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { CalendarIcon } from "lucide-react";
-import { addDays, format } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import * as React from "react"
+import { CalendarIcon } from "lucide-react"
+import { addDays, format } from "date-fns"
+import { DateRange } from "react-day-picker"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
-import dayjs from "dayjs";
+} from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
+import dayjs from "dayjs"
 
 interface DateRangePickerProps {
-  date: DateRange | undefined;
-  onDateChange: (date: DateRange | undefined) => void;
-  className?: string;
-  showTime?: boolean;
-  align?: "start" | "center" | "end";
+  date: DateRange | undefined
+  onDateChange: (date: DateRange | undefined) => void
+  className?: string
+  showTime?: boolean
+  align?: "start" | "center" | "end"
 }
 
 const presets = [
   {
-    label: "Today",
-    value: "today",
+    label: 'Today',
+    value: 'today',
     getDate: () => ({
-      from: new Date(new Date().setHours(0, 0, 0, 0)),
-      to: new Date(new Date().setHours(23, 59, 59, 999)),
-    }),
+      from: new Date(),
+      to: new Date()
+    })
   },
   {
-    label: "Yesterday",
-    value: "yesterday",
-    getDate: () => {
-      const yesterday = addDays(new Date(), -1);
-      return {
-        from: new Date(yesterday.setHours(0, 0, 0, 0)),
-        to: new Date(yesterday.setHours(23, 59, 59, 999)),
-      };
-    },
+    label: 'Yesterday',
+    value: 'yesterday',
+    getDate: () => ({
+      from: addDays(new Date(), -1),
+      to: addDays(new Date(), -1)
+    })
   },
   {
-    label: "Last 7 days",
-    value: "last7days",
+    label: 'Last 7 days',
+    value: 'last7days',
     getDate: () => ({
-      from: new Date(addDays(new Date(), -7).setHours(0, 0, 0, 0)),
-      to: new Date(new Date().setHours(23, 59, 59, 999)),
-    }),
+      from: addDays(new Date(), -7),
+      to: new Date()
+    })
   },
   {
-    label: "Last 30 days",
-    value: "last30days",
+    label: 'Last 30 days',
+    value: 'last30days',
     getDate: () => ({
-      from: new Date(addDays(new Date(), -30).setHours(0, 0, 0, 0)),
-      to: new Date(new Date().setHours(23, 59, 59, 999)),
-    }),
-  },
-];
+      from: addDays(new Date(), -30),
+      to: new Date()
+    })
+  }
+]
 
 export function DateRangePicker({
   date,
   onDateChange,
   className,
   showTime = false,
-  align = "end",
+  align = "end"
 }: DateRangePickerProps) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [tempDate, setTempDate] = React.useState<DateRange | undefined>(date);
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [tempDate, setTempDate] = React.useState<DateRange | undefined>(date)
   const [tempTime, setTempTime] = React.useState({
-    from: date?.from ? dayjs(date.from).format("HH:mm") : "00:00",
-    to: date?.to ? dayjs(date.to).format("HH:mm") : "23:59",
-  });
+    from: date?.from ? dayjs(date.from).format('HH:mm') : '00:00',
+    to: date?.to ? dayjs(date.to).format('HH:mm') : '23:59'
+  })
 
-  // Update internal state when external date prop changes
   React.useEffect(() => {
     if (date) {
-      setTempDate({
-        from: date.from ? new Date(date.from) : undefined,
-        to: date.to ? new Date(date.to) : undefined,
-      });
+      setTempDate(date)
       setTempTime({
-        from: date.from ? dayjs(date.from).format("HH:mm") : "00:00",
-        to: date.to ? dayjs(date.to).format("HH:mm") : "23:59",
-      });
-    } else {
-      setTempDate(undefined);
-      setTempTime({ from: "00:00", to: "23:59" });
+        from: date.from ? dayjs(date.from).format('HH:mm') : '00:00',
+        to: date.to ? dayjs(date.to).format('HH:mm') : '23:59'
+      })
     }
-  }, [date]);
+  }, [date])
 
-  // Handle applying the selected date range
   const handleApply = React.useCallback(() => {
     if (tempDate?.from && tempDate?.to) {
-      try {
-        const [fromHours, fromMinutes] = tempTime.from.split(":").map(Number);
-        const [toHours, toMinutes] = tempTime.to.split(":").map(Number);
+      const [fromHours, fromMinutes] = tempTime.from.split(':')
+      const [toHours, toMinutes] = tempTime.to.split(':')
 
-        // Create new Date objects to avoid modifying original references
-        const newFrom = new Date(tempDate.from);
-        newFrom.setHours(fromHours, fromMinutes, 0, 0);
+      const newFrom = new Date(tempDate.from)
+      newFrom.setHours(parseInt(fromHours), parseInt(fromMinutes))
 
-        const newTo = new Date(tempDate.to);
-        newTo.setHours(toHours, toMinutes, 59, 999);
+      const newTo = new Date(tempDate.to)
+      newTo.setHours(parseInt(toHours), parseInt(toMinutes))
 
-        // Pass properly formatted dates to the parent component
-        onDateChange({
-          from: newFrom,
-          to: newTo,
-        });
-      } catch (error) {
-        console.error("Error applying date range:", error);
-        // Fall back to using the date without time if there's an error
-        onDateChange(tempDate);
-      }
+      onDateChange({ from: newFrom, to: newTo })
     } else {
-      onDateChange(tempDate);
+      onDateChange(undefined)
     }
-    setIsOpen(false);
-  }, [tempDate, tempTime, onDateChange]);
+    setIsOpen(false)
+  }, [tempDate, tempTime, onDateChange])
 
-  // Handle preset date selection
-  const handlePresetChange = React.useCallback(
-    (value: string) => {
-      const preset = presets.find((p) => p.value === value);
-      if (preset) {
-        const newDate = preset.getDate();
-        setTempDate(newDate);
-        setTempTime({
-          from: "00:00",
-          to: "23:59",
-        });
+  const handlePresetChange = React.useCallback((value: string) => {
+    const preset = presets.find(p => p.value === value)
+    if (preset) {
+      const newDate = preset.getDate()
+      setTempDate(newDate)
+      setTempTime({
+        from: '00:00',
+        to: '23:59'
+      })
+      onDateChange(newDate)
+      setIsOpen(false)
+    }
+  }, [onDateChange])
 
-        // Important: directly apply the preset dates with proper times
-        onDateChange({
-          from: newDate.from,
-          to: newDate.to,
-        });
-        setIsOpen(false);
-      }
-    },
-    [onDateChange]
-  );
-
-  // Handle calendar date selection
-  const handleCalendarSelect = React.useCallback(
-    (newDate: DateRange | undefined) => {
-      if (newDate?.from) {
-        // Ensure from date has time set to beginning of day
-        const from = new Date(newDate.from);
-        from.setHours(0, 0, 0, 0);
-
-        // If to date exists, set its time to end of day
-        const to = newDate.to ? new Date(newDate.to) : undefined;
-        if (to) {
-          to.setHours(23, 59, 59, 999);
-        }
-
-        setTempDate({ from, to });
-      } else {
-        setTempDate(newDate);
-      }
-    },
-    []
-  );
-
-  // Format the display text based on selected date range
   const displayText = React.useMemo(() => {
-    if (!date?.from) return "Select dates";
-
-    const fromText = dayjs(date.from).format("MMM D");
-    const toText = date.to ? dayjs(date.to).format("MMM D, YYYY") : "";
-
-    // Use more compact format for display
-    if (date.to) {
-      const sameYear = dayjs(date.from).isSame(date.to, 'year');
-      const sameMonth = dayjs(date.from).isSame(date.to, 'month');
-      
-      if (showTime) {
-        const fromTime = dayjs(date.from).format("HH:mm");
-        const toTime = date.to ? dayjs(date.to).format("HH:mm") : "";
-        
-        if (dayjs(date.from).isSame(date.to, "day")) {
-          // Same day, show date once with time
-          return `${dayjs(date.from).format("MMM D")} (${fromTime}-${toTime})`;
-        }
-        
-        // Different days with time
-        if (sameYear && sameMonth) {
-          return `${dayjs(date.from).format("MMM D")} ${fromTime}-${dayjs(date.to).format("D")} ${toTime}`;
-        }
-        
-        return `${fromText} ${fromTime}-${toText} ${toTime}`;
-      }
-      
-      // Without time
-      if (sameYear && sameMonth) {
-        // Same month and year, just show once: "Jan 1-15, 2023"
-        return `${dayjs(date.from).format("MMM D")}-${dayjs(date.to).format("D, YYYY")}`;
-      } else if (sameYear) {
-        // Same year, different month: "Jan 1-Feb 15, 2023"
-        return `${fromText}-${dayjs(date.to).format("MMM D, YYYY")}`;
-      }
-      // Different years: "Dec 25, 2022-Jan 10, 2023"
-      return `${dayjs(date.from).format("MMM D, YYYY")}-${toText}`;
+    if (!date?.from) return "Select dates"
+    
+    const fromText = dayjs(date.from).format("MMM DD")
+    const toText = date.to ? dayjs(date.to).format("MMM DD") : ""
+    
+    if (showTime) {
+      const fromTime = dayjs(date.from).format("HH:mm")
+      const toTime = date.to ? dayjs(date.to).format("HH:mm") : ""
+      return `${fromText} ${fromTime} - ${toText} ${toTime}`
     }
-
-    // Single date
-    return showTime 
-      ? `${dayjs(date.from).format("MMM D, YYYY")} ${dayjs(date.from).format("HH:mm")}`
-      : dayjs(date.from).format("MMM D, YYYY");
-  }, [date, showTime]);
-
-  // Reset functionality
-  const handleReset = React.useCallback(() => {
-    setTempDate(undefined);
-    setTempTime({ from: "00:00", to: "23:59" });
-    onDateChange(undefined);
-    setIsOpen(false);
-  }, [onDateChange]);
+    
+    return date.to ? `${fromText} - ${toText}` : fromText
+  }, [date, showTime])
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -235,29 +136,29 @@ export function DateRangePicker({
           <Button
             id="date"
             variant={"outline"}
-            size="sm"
             className={cn(
-              "justify-start text-left font-normal h-8 px-2 text-xs bg-background/50 border-muted flex items-center gap-1.5",
+              "w-full justify-start text-left font-normal h-9",
               !date && "text-muted-foreground"
             )}
           >
-            <CalendarIcon className="h-3 w-3 text-muted-foreground" />
-            <span className="truncate max-w-[140px]">{displayText}</span>
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {displayText}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-2" align={align}>
+        <PopoverContent
+          className="w-auto p-2"
+          align={align}
+        >
           <div className="space-y-3">
             <div className="flex gap-2">
               <Calendar
                 initialFocus
                 mode="range"
-                defaultMonth={tempDate?.from || new Date()}
+                defaultMonth={tempDate?.from}
                 selected={tempDate}
-                onSelect={handleCalendarSelect}
+                onSelect={setTempDate}
                 numberOfMonths={1}
-                disabled={(date) =>
-                  date > new Date() || date < new Date("2000-01-01")
-                }
+                disabled={(date) => date > new Date() || date < new Date('2000-01-01')}
               />
               <div className="space-y-2 min-w-[120px]">
                 <Select onValueChange={handlePresetChange}>
@@ -266,11 +167,7 @@ export function DateRangePicker({
                   </SelectTrigger>
                   <SelectContent>
                     {presets.map((preset) => (
-                      <SelectItem
-                        key={preset.value}
-                        value={preset.value}
-                        className="text-xs"
-                      >
+                      <SelectItem key={preset.value} value={preset.value} className="text-xs">
                         {preset.label}
                       </SelectItem>
                     ))}
@@ -285,12 +182,7 @@ export function DateRangePicker({
                         type="time"
                         className="w-full h-8 rounded-md border px-2 text-xs"
                         value={tempTime.from}
-                        onChange={(e) =>
-                          setTempTime((prev) => ({
-                            ...prev,
-                            from: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setTempTime(prev => ({ ...prev, from: e.target.value }))}
                       />
                     </div>
                     <div className="space-y-1">
@@ -299,12 +191,7 @@ export function DateRangePicker({
                         type="time"
                         className="w-full h-8 rounded-md border px-2 text-xs"
                         value={tempTime.to}
-                        onChange={(e) =>
-                          setTempTime((prev) => ({
-                            ...prev,
-                            to: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setTempTime(prev => ({ ...prev, to: e.target.value }))}
                       />
                     </div>
                   </>
@@ -315,7 +202,6 @@ export function DateRangePicker({
                     size="sm"
                     className="text-xs"
                     onClick={handleApply}
-                    disabled={!tempDate?.from || !tempDate?.to}
                   >
                     Apply
                   </Button>
@@ -323,7 +209,12 @@ export function DateRangePicker({
                     variant="outline"
                     size="sm"
                     className="text-xs"
-                    onClick={handleReset}
+                    onClick={() => {
+                      setTempDate(undefined)
+                      setTempTime({ from: '00:00', to: '23:59' })
+                      onDateChange(undefined)
+                      setIsOpen(false)
+                    }}
                   >
                     Reset
                   </Button>
@@ -334,5 +225,5 @@ export function DateRangePicker({
         </PopoverContent>
       </Popover>
     </div>
-  );
+  )
 }

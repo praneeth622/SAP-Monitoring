@@ -111,6 +111,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     clearSelection: () => void;
     download: (format: "png" | "svg" | "pdf" | "csv" | "json") => void;
     dispatchAction?: (action: any) => void;
+    isValid?: () => boolean;
   }>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -159,13 +160,17 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
       } else {
         next.add(kpiId);
       }
-      // Force chart update by triggering a resize
-      if (chartRef.current) {
-        chartRef.current.dispatchAction?.({
-          type: 'update',
-          notMerge: true,
-          replaceMerge: ['series']
-        });
+      // Force chart update by triggering a resize only if chart is available and valid
+      if (chartRef.current && chartRef.current.isValid?.()) {
+        try {
+          chartRef.current.dispatchAction?.({
+            type: 'update',
+            notMerge: true,
+            replaceMerge: ['series']
+          });
+        } catch (error) {
+          console.error("Error updating chart after KPI toggle:", error);
+        }
       }
       return next;
     });
@@ -187,11 +192,15 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
 
     transitionTimeoutRef.current = setTimeout(() => {
       setIsTransitioning(false);
-      if (chartRef.current) {
+      if (chartRef.current && chartRef.current.isValid?.()) {
         // Force chart to redraw and resize to fit the new container
-        chartRef.current.dispatchAction?.({
-          type: 'resize'
-        });
+        try {
+          chartRef.current.dispatchAction?.({
+            type: 'resize'
+          });
+        } catch (error) {
+          console.error("Error resizing chart after fullscreen toggle:", error);
+        }
       }
     }, 300);
   };
@@ -202,12 +211,18 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     if (!chartContainer) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      if (chartRef.current?.dispatchAction) {
+      if (chartRef.current?.dispatchAction && chartRef.current.isValid?.()) {
         // Allow a small delay for the container to fully resize
         setTimeout(() => {
-          chartRef.current?.dispatchAction?.({
-            type: 'resize'
-          });
+          try {
+            if (chartRef.current?.dispatchAction && chartRef.current.isValid?.()) {
+              chartRef.current.dispatchAction({
+                type: 'resize'
+              });
+            }
+          } catch (error) {
+            console.error("Error resizing chart in observer:", error);
+          }
         }, 10);
       }
     });
@@ -223,18 +238,27 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   useEffect(() => {
     // Ensure chart resizes properly on initial render
     const initialResizeTimeout = setTimeout(() => {
-      if (chartRef.current?.dispatchAction) {
-        chartRef.current.dispatchAction({
-          type: 'resize'
-        });
-        // Try once more after a longer delay to catch any delayed layout changes
-        setTimeout(() => {
-          if (chartRef.current?.dispatchAction) {
-            chartRef.current.dispatchAction({
-              type: 'resize'
-            });
-          }
-        }, 500);
+      if (chartRef.current?.dispatchAction && chartRef.current.isValid?.()) {
+        try {
+          chartRef.current.dispatchAction({
+            type: 'resize'
+          });
+          
+          // Try once more after a longer delay to catch any delayed layout changes
+          setTimeout(() => {
+            if (chartRef.current?.dispatchAction && chartRef.current.isValid?.()) {
+              try {
+                chartRef.current.dispatchAction({
+                  type: 'resize'
+                });
+              } catch (error) {
+                console.error("Error in delayed chart resize:", error);
+              }
+            }
+          }, 500);
+        } catch (error) {
+          console.error("Error in initial chart resize:", error);
+        }
       }
     }, 100);
 
@@ -264,44 +288,70 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
 
   // Update handlers to set the selected tool state
   const handleZoomIn = useCallback(() => {
-    if (!chartRef.current) return;
-    chartRef.current.zoomIn();
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
+    try {
+      chartRef.current.zoomIn();
+    } catch (error) {
+      console.error("Error zooming in:", error);
+    }
     // Zooming doesn't change the selected tool
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    if (!chartRef.current) return;
-    chartRef.current.zoomOut();
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
+    try {
+      chartRef.current.zoomOut();
+    } catch (error) {
+      console.error("Error zooming out:", error);
+    }
     // Zooming doesn't change the selected tool
   }, []);
 
   const handleBoxSelect = useCallback(() => {
-    if (!chartRef.current) return;
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
     setSelectedTool("box"); // Set tool state first
-    chartRef.current.boxSelect(); // Then activate the selection
+    try {
+      chartRef.current.boxSelect(); // Then activate the selection
+    } catch (error) {
+      console.error("Error activating box select:", error);
+      setSelectedTool(null);
+    }
   }, []);
 
   const handleLassoSelect = useCallback(() => {
-    if (!chartRef.current) return;
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
     setSelectedTool("lasso"); // Set tool state first
-    chartRef.current.lassoSelect(); // Then activate the selection
+    try {
+      chartRef.current.lassoSelect(); // Then activate the selection
+    } catch (error) {
+      console.error("Error activating lasso select:", error);
+      setSelectedTool(null);
+    }
   }, []);
 
   const handleClearSelection = useCallback(() => {
-    if (!chartRef.current) return;
-    chartRef.current.clearSelection();
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
+    try {
+      chartRef.current.clearSelection();
+    } catch (error) {
+      console.error("Error clearing selection:", error);
+    }
     setSelectedTool(null);
   }, []);
 
   const handleDownload = useCallback(
     (format: "png" | "svg" | "pdf" | "csv" | "json") => {
-      if (!chartRef.current) {
-        console.error("Chart reference not available");
+      if (!chartRef.current || !chartRef.current.isValid?.()) {
+        console.error("Chart reference not available or invalid");
         return;
       }
 
       // Directly call the download method from the chart ref
-      chartRef.current.download(format);
+      try {
+        chartRef.current.download(format);
+      } catch (error) {
+        console.error(`Error downloading chart as ${format}:`, error);
+      }
     },
     [data, title]
   );
@@ -390,6 +440,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                           date={localDateRange}
                           onDateChange={setLocalDateRange}
                           align="end"
+                          showTime={true}
                         />
                       </DropdownMenuContent>
                     </DropdownMenu>
