@@ -165,9 +165,11 @@ export function ChartToolbar({
     try {
       onBoxSelect();
       setSelectedTool("box");
+      setShowTools(true);
     } catch (error) {
       console.error("Error in box selection:", error);
       setSelectedTool(null);
+      setShowTools(true);
     }
   };
 
@@ -175,9 +177,11 @@ export function ChartToolbar({
     try {
       onLassoSelect();
       setSelectedTool("lasso");
+      setShowTools(true);
     } catch (error) {
       console.error("Error in lasso selection:", error);
       setSelectedTool(null);
+      setShowTools(true);
     }
   };
 
@@ -185,9 +189,11 @@ export function ChartToolbar({
     try {
       onClearSelection();
       setSelectedTool(null);
+      setShowTools(true);
     } catch (error) {
       console.error("Error clearing selection:", error);
       setSelectedTool(null);
+      setShowTools(true);
     }
   };
 

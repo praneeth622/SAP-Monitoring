@@ -639,14 +639,7 @@ const ChartContainer = memo(
       if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
 
       try {
-        // First, clear any existing brushes
-        chartRef.current.dispatchAction({
-          type: "brush",
-          command: "clear",
-          areas: [],
-        });
-
-        // Configure brush options
+        // Configure brush options for box selection
         chartRef.current.setOption({
           brush: {
             toolbox: ["rect", "keep", "clear"],
@@ -689,14 +682,7 @@ const ChartContainer = memo(
       if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
 
       try {
-        // First, clear any existing brushes
-        chartRef.current.dispatchAction({
-          type: "brush",
-          command: "clear",
-          areas: [],
-        });
-
-        // Configure brush options
+        // Configure brush options for lasso selection
         chartRef.current.setOption({
           brush: {
             toolbox: ["polygon", "keep", "clear"],
@@ -739,7 +725,7 @@ const ChartContainer = memo(
       if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
 
       try {
-        // Clear all brushes and reset selection state
+        // Clear the current selection
         chartRef.current.dispatchAction({
           type: "brush",
           command: "clear",
@@ -757,27 +743,15 @@ const ChartContainer = memo(
         setSelectedTool(null);
         setIsSelecting(false);
 
-        // Update all series to show them normally
-        const option = chartRef.current.getOption();
-        const series = option.series;
+        // Force a resize to ensure proper rendering
+        setTimeout(() => {
+          if (chartRef.current && !chartRef.current.isDisposed?.()) {
+            chartRef.current.resize();
+          }
+        }, 50);
 
-        if (Array.isArray(series)) {
-          chartRef.current.setOption(
-            {
-              series: series.map((s: any) => ({
-                ...s,
-                itemStyle: {
-                  ...s.itemStyle,
-                  opacity: 1,
-                },
-              })),
-            },
-            { replaceMerge: ["series"] }
-          );
-        }
       } catch (error) {
         console.error("Error clearing selection:", error);
-        // Reset states even if there's an error
         setSelectedTool(null);
         setIsSelecting(false);
       }

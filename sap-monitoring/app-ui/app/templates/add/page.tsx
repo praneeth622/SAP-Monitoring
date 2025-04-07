@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Sheet from "@/components/sheet";
@@ -17,9 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DynamicLayout } from "@/components/charts/DynamicLayout";
-import { generateDummyData } from "@/utils/data";
+import { generateDummyData, fetchTemplateChartData } from "@/utils/data";
 import { toast } from "sonner";
 import { useSearchParams, useRouter } from "next/navigation";
+import debounce from "lodash/debounce";
 
 interface Template {
   id: string;
@@ -48,6 +49,12 @@ interface Graph {
   };
   activeKPIs: Set<string> | string[]; // Changed to support both Set and Array
   kpiColors: Record<string, { color: string; name: string }>;
+}
+
+interface DataPoint {
+  category: string;
+  date: string;
+  value: number;
 }
 
 interface System {
@@ -126,6 +133,59 @@ const defaultChartTheme = {
   ],
 };
 
+// Add this function near the top of the file, outside the component
+/**
+ * Generic function to retry failed API calls
+ * @param fetchFn The async function that performs the API call
+ * @param maxRetries Maximum number of retries (default: 2)
+ * @param delayMs Delay between retries in milliseconds (default: 1000)
+ * @returns The result of the successful API call
+ */
+const retryFetch = async <T,>(
+  fetchFn: () => Promise<T>,
+  maxRetries: number = 2,
+  delayMs: number = 1000
+): Promise<T> => {
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Make the API call
+      const result = await fetchFn();
+
+      // If successful, return the result immediately
+      return result;
+    } catch (error) {
+      // Store the error to throw if all retries fail
+      lastError = error;
+
+      // Log the retry attempt (except on the last attempt)
+      if (attempt < maxRetries) {
+        console.log(`API call failed, retrying (${attempt + 1}/${maxRetries})...`, error);
+
+        // Wait before the next retry
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  // If we've exhausted all retries, throw the last error
+  throw lastError;
+};
+
+// First, add a Loading component we can use throughout the page
+const LoadingSpinner = ({ message = "Loading..." }: { message?: string }) => (
+  <div className="flex flex-col items-center justify-center py-8 space-y-3">
+    <div className="relative">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+        <div className="h-6 w-6 bg-card rounded-full"></div>
+      </div>
+    </div>
+    <p className="text-sm text-muted-foreground animate-pulse">{message}</p>
+  </div>
+);
+
 export default function TemplatesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -155,16 +215,256 @@ export default function TemplatesPage() {
   >({});
   const [isLoading, setIsLoading] = useState(false);
 
+  const [chartDataCache, setChartDataCache] = useState<
+    Record<string, DataPoint[]>
+  >({});
+  const [isChartDataLoading, setIsChartDataLoading] = useState<
+    Record<string, boolean>
+  >({});
+
+  // Add a ref to track mounted status for API call management
+  const isMounted = useRef(true);
+
+  // Add a ref to store debounced fetch functions
+  const debouncedFetchRef = useRef<{ [key: string]: (...args: any[]) => void }>(
+    {}
+  );
+
+  // Improved cache state - add a loading state map
+  const [chartDataLoadState, setChartDataLoadState] = useState<{
+    [key: string]: "idle" | "loading" | "success" | "error";
+  }>({});
+
+  // Add this state to track specific loading states
+  const [loadingState, setLoadingState] = useState({
+    fetchingTemplate: false,
+    fetchingSystems: false,
+    savingTemplate: false,
+    loadingCharts: false,
+  });
+
+  // Effect to clean up on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      // Clear any debounced functions
+      Object.values(debouncedFetchRef.current).forEach((debouncedFn: any) => {
+        if (debouncedFn.cancel) debouncedFn.cancel();
+      });
+    };
+  }, []);
+
+  // New helper function to fetch data for multiple graphs in a more efficient way
+  const fetchChartData = useCallback(
+    (
+      cacheKey: string,
+      params: {
+        primaryKpi: string;
+        correlationKpis: string[];
+        monitoringArea: string;
+        dateRange: { from: Date; to: Date };
+        resolution: string;
+      }
+    ) => {
+      // Skip if already loading or loaded
+      if (
+        chartDataLoadState[cacheKey] === "loading" ||
+        chartDataLoadState[cacheKey] === "success"
+      ) {
+        return;
+      }
+
+      // Create debounced function if it doesn't exist
+      if (!debouncedFetchRef.current[cacheKey]) {
+        debouncedFetchRef.current[cacheKey] = debounce(async () => {
+          if (!isMounted.current) return;
+
+          setChartDataLoadState((prev) => ({
+            ...prev,
+            [cacheKey]: "loading",
+          }));
+
+          try {
+            // Use retry logic for chart data fetching
+            const data = await retryFetch(async () => {
+              return await fetchTemplateChartData(
+                params.primaryKpi,
+                params.correlationKpis,
+                params.monitoringArea,
+                params.dateRange,
+                params.resolution
+              );
+            });
+
+            if (!isMounted.current) return;
+
+            if (data && data.length > 0) {
+              setChartDataCache((prev) => ({
+                ...prev,
+                [cacheKey]: data,
+              }));
+              setChartDataLoadState((prev) => ({
+                ...prev,
+                [cacheKey]: "success",
+              }));
+              console.log(`Loaded ${data.length} data points for ${cacheKey}`);
+            } else {
+              setChartDataLoadState((prev) => ({
+                ...prev,
+                [cacheKey]: "error",
+              }));
+              console.log(`No data received for ${cacheKey}`);
+            }
+          } catch (error) {
+            if (!isMounted.current) return;
+
+            console.error(`Error fetching data for ${cacheKey}:`, error);
+            setChartDataLoadState((prev) => ({
+              ...prev,
+              [cacheKey]: "error",
+            }));
+          }
+        }, 300); // 300ms debounce
+      }
+
+      // Execute the debounced function
+      debouncedFetchRef.current[cacheKey]();
+    },
+    [chartDataLoadState]
+  );
+
+  // Convert to useCallback to avoid stale closure issues
+  const handleDeleteGraph = useCallback(
+    (graphId: string) => {
+      // Ask for confirmation
+      if (confirm("Are you sure you want to delete this graph?")) {
+        setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
+        toast.success("Graph deleted successfully");
+
+        // If we deleted the last graph, hide the graphs section
+        if (graphs.length === 1) {
+          setShowGraphs(false);
+        }
+
+        // Force a layout refresh
+        setTimeout(() => {
+          window.dispatchEvent(new Event("resize"));
+        }, 200);
+      }
+    },
+    [graphs.length]
+  );
+
+  // Function to render charts with optimized data loading
+  const renderChartConfigs = useCallback(
+    (graph: Graph) => {
+      // Ensure we have valid primary and correlation KPIs
+      const primaryKpi = graph.primaryKpi || "DefaultKPI";
+      const correlationKpis = Array.isArray(graph.correlationKpis)
+        ? graph.correlationKpis
+        : [];
+
+      // Create a deduplicated list of all KPIs
+      const allKpis = [primaryKpi, ...correlationKpis].filter(Boolean);
+
+      // Determine monitoring area
+      const monitoringArea = primaryKpi.toLowerCase().includes("job")
+        ? "JOBS"
+        : "OS";
+
+      // Create a date range for the preview
+      const previewDateRange = {
+        from: new Date(new Date().setDate(new Date().getDate() - 7)),
+        to: new Date(),
+      };
+
+      // Create a unique key for this graph to use in the cache
+      const cacheKey = `${graph.id}-${primaryKpi}-${correlationKpis.join(
+        "-"
+      )}-${templateData.resolution}`;
+
+      // Trigger data fetch if needed
+      if (
+        chartDataLoadState[cacheKey] !== "success" &&
+        chartDataLoadState[cacheKey] !== "loading"
+      ) {
+        fetchChartData(cacheKey, {
+          primaryKpi,
+          correlationKpis,
+          monitoringArea,
+          dateRange: previewDateRange,
+          resolution: templateData.resolution,
+        });
+      }
+
+      // Use cached data if available, otherwise use dummy data
+      const chartData = chartDataCache[cacheKey] || generateDummyData(allKpis);
+      const isLoading = chartDataLoadState[cacheKey] === "loading";
+
+      // Ensure we have activeKPIs and kpiColors
+      const chartActiveKPIs = new Set(allKpis);
+      const chartKpiColors = allKpis.reduce((colors, kpi, index) => {
+        colors[kpi] = {
+          color:
+            defaultChartTheme.colors[index % defaultChartTheme.colors.length],
+          name: kpi,
+        };
+        return colors;
+      }, {} as Record<string, { color: string; name: string }>);
+
+      return {
+        id: graph.id!,
+        type: graph.type || "line",
+        title: graph.name || "Untitled Chart",
+        data:
+          chartData.length > 0
+            ? chartData
+            : [
+                // Fallback data if no data is available
+                {
+                  category: primaryKpi,
+                  date: new Date().toISOString(),
+                  value: 1000,
+                },
+                {
+                  category: primaryKpi,
+                  date: new Date(Date.now() - 3600000).toISOString(),
+                  value: 1500,
+                },
+              ],
+        width: graph.layout.w * 100,
+        height: graph.layout.h * 60,
+        activeKPIs: chartActiveKPIs,
+        kpiColors: chartKpiColors,
+        hideControls: true,
+        onDeleteGraph: handleDeleteGraph,
+        isLoading,
+      };
+    },
+    [
+      chartDataCache,
+      chartDataLoadState,
+      templateData.resolution,
+      handleDeleteGraph, // This is now a stable reference
+      fetchChartData,
+    ]
+  );
+
   useEffect(() => {
     const fetchSystems = async () => {
       try {
-        const response = await fetch(
-          "https://shwsckbvbt.a.pinggy.link/api/sys"
-        );
-        if (!response.ok) {
-          throw new Error("Failed to fetch systems");
-        }
-        const data = await response.json();
+        setLoadingState((prev) => ({ ...prev, fetchingSystems: true }));
+
+        const data = await retryFetch(async () => {
+          const response = await fetch(
+            "https://shwsckbvbt.a.pinggy.link/api/sys"
+          );
+          if (!response.ok) {
+            throw new Error("Failed to fetch systems");
+          }
+          return response.json();
+        });
+
         setSystems(data);
 
         // Auto-select if there's only one system
@@ -176,6 +476,9 @@ export default function TemplatesPage() {
         }
       } catch (error) {
         console.error("Error fetching systems:", error);
+        toast.error("Failed to fetch systems");
+      } finally {
+        setLoadingState((prev) => ({ ...prev, fetchingSystems: false }));
       }
     };
 
@@ -193,21 +496,29 @@ export default function TemplatesPage() {
   // Update the fetchTemplateForEditing function to correctly set the system ID
   const fetchTemplateForEditing = async (templateId: string) => {
     try {
+      setLoadingState((prev) => ({ ...prev, fetchingTemplate: true }));
       setIsLoading(true);
+
       const baseUrl = "https://shwsckbvbt.a.pinggy.link";
-      const response = await fetch(
-        `${baseUrl}/api/ut?templateId=${templateId}`
-      );
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch template for editing");
-      }
+      // Use retry logic for template fetching
+      const data = await retryFetch(async () => {
+        const response = await fetch(
+          `${baseUrl}/api/ut?templateId=${templateId}`
+        );
 
-      const data = await response.json();
+        if (!response.ok) {
+          throw new Error("Failed to fetch template for editing");
+        }
 
-      if (!data || !data.length) {
-        throw new Error("Template not found");
-      }
+        const responseData = await response.json();
+
+        if (!responseData || !responseData.length) {
+          throw new Error("Template not found");
+        }
+
+        return responseData;
+      });
 
       // Extract the template data
       const template = data[0];
@@ -236,6 +547,9 @@ export default function TemplatesPage() {
       });
 
       console.log("Template data set with system:", systemId);
+
+      // Show chart loading state while mapping
+      setLoadingState((prev) => ({ ...prev, loadingCharts: true }));
 
       // Map the graphs from API format to our internal format
       const mappedGraphs = template.graphs.map(
@@ -283,6 +597,8 @@ export default function TemplatesPage() {
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 200);
+
+      toast.success("Template loaded successfully");
     } catch (error) {
       console.error("Error fetching template for editing:", error);
       toast.error("Failed to load template for editing", {
@@ -291,6 +607,11 @@ export default function TemplatesPage() {
       });
     } finally {
       setIsLoading(false);
+      setLoadingState((prev) => ({
+        ...prev,
+        fetchingTemplate: false,
+        loadingCharts: false,
+      }));
     }
   };
 
@@ -354,6 +675,8 @@ export default function TemplatesPage() {
     }
 
     try {
+      setLoadingState((prev) => ({ ...prev, savingTemplate: true }));
+
       // Use existing templateId if in edit mode, otherwise create a new one
       const newTemplateId = isEditMode
         ? searchParams.get("templateId") || ""
@@ -464,6 +787,8 @@ export default function TemplatesPage() {
         description:
           error instanceof Error ? error.message : "Please try again",
       });
+    } finally {
+      setLoadingState((prev) => ({ ...prev, savingTemplate: false }));
     }
   };
 
@@ -513,26 +838,20 @@ export default function TemplatesPage() {
     }
   };
 
-  // Add function to handle graph deletion
-  const handleDeleteGraph = (graphId: string) => {
-    // Ask for confirmation
-    if (confirm("Are you sure you want to delete this graph?")) {
-      setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
-      toast.success("Graph deleted successfully");
-
-      // If we deleted the last graph, hide the graphs section
-      if (graphs.length === 1) {
-        setShowGraphs(false);
-      }
-
-      // Force a layout refresh
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-      }, 200);
-    }
-  };
-
   const pageTitle = isEditMode ? "Edit Template" : "Create Template";
+
+  // Show main loading state when initially loading template
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background via-background/98 to-background/95">
+        <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl rounded-lg p-8 max-w-md">
+          <LoadingSpinner
+            message={`${isEditMode ? "Loading" : "Creating"} template...`}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
@@ -701,7 +1020,7 @@ export default function TemplatesPage() {
                 </div>
 
                 {/* Switches */}
-                <div className="flex flex-col gap-2 justify-center ml-4">
+                <div className="flex items-center gap-4 ml-4">
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={templateData.isDefault}
@@ -743,74 +1062,9 @@ export default function TemplatesPage() {
               {showGraphs && graphs.length > 0 ? (
                 <div className="space-y-6">
                   <DynamicLayout
-                    charts={graphs.map((graph) => {
-                      // Ensure we have valid primary and correlation KPIs
-                      const primaryKpi = graph.primaryKpi || "DefaultKPI";
-                      const correlationKpis = Array.isArray(
-                        graph.correlationKpis
-                      )
-                        ? graph.correlationKpis
-                        : [];
-
-                      // Create a deduplicated list of all KPIs
-                      const allKpis = [primaryKpi, ...correlationKpis].filter(
-                        Boolean
-                      );
-                      console.log("Generating data for KPIs:", allKpis);
-
-                      // Generate data using our improved function
-                      const dummyData = generateDummyData(allKpis);
-                      console.log(
-                        `Generated ${dummyData.length} dummy data points for chart "${graph.name}"`
-                      );
-
-                      // Ensure we have activeKPIs and kpiColors
-                      const chartActiveKPIs = new Set(allKpis);
-                      const chartKpiColors = allKpis.reduce(
-                        (colors, kpi, index) => {
-                          colors[kpi] = {
-                            color:
-                              defaultChartTheme.colors[
-                                index % defaultChartTheme.colors.length
-                              ],
-                            name: kpi,
-                          };
-                          return colors;
-                        },
-                        {} as Record<string, { color: string; name: string }>
-                      );
-
-                      return {
-                        id: graph.id!,
-                        type: graph.type || "line",
-                        title: graph.name || "Untitled Chart",
-                        data:
-                          dummyData.length > 0
-                            ? dummyData
-                            : [
-                                // Fallback data if generateDummyData returns empty
-                                {
-                                  category: primaryKpi,
-                                  date: new Date().toISOString(),
-                                  value: 1000,
-                                },
-                                {
-                                  category: primaryKpi,
-                                  date: new Date(
-                                    Date.now() - 3600000
-                                  ).toISOString(),
-                                  value: 1500,
-                                },
-                              ],
-                        width: graph.layout.w * 100,
-                        height: graph.layout.h * 60,
-                        activeKPIs: chartActiveKPIs,
-                        kpiColors: chartKpiColors,
-                        hideControls: true, // Hide controls in template editor
-                        onDeleteGraph: handleDeleteGraph, // Add delete functionality
-                      };
-                    })}
-                    theme={defaultChartTheme} // Apply default theme to all charts
+                    charts={graphs.map(renderChartConfigs)}
+                    theme={defaultChartTheme}
+                    resolution={templateData.resolution}
                   />
                   <Card
                     className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"

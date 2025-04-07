@@ -23,6 +23,7 @@ interface ChartConfig {
   layout?: { x: number; y: number; w: number; h: number };
   hideControls?: boolean;
   onDeleteGraph?: (id: string) => void;
+  isLoading?: boolean; // Add this line
 }
 
 interface DynamicLayoutProps {
@@ -49,7 +50,7 @@ export function DynamicLayout({
   onLayoutChange,
   hideControls = false,
   onDeleteGraph,
-  resolution = 'auto', // Default to auto
+  resolution = "auto", // Default to auto
 }: DynamicLayoutProps) {
   const [layouts, setLayouts] = useState({});
   const [currentBreakpoint, setCurrentBreakpoint] = useState("lg");
@@ -57,12 +58,32 @@ export function DynamicLayout({
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const layoutRef = useRef<Layout[]>([]);
-  const [fullscreenChartId, setFullscreenChartId] = useState<string | null>(null);
+  const [fullscreenChartId, setFullscreenChartId] = useState<string | null>(
+    null
+  );
+  const prevThemeRef = useRef(theme);
 
   // Handle fullscreen toggle from child charts
-  const handleFullscreenChange = useCallback((chartId: string, isFullscreen: boolean) => {
-    setFullscreenChartId(isFullscreen ? chartId : null);
-  }, []);
+  const handleFullscreenChange = useCallback(
+    (chartId: string, isFullscreen: boolean) => {
+      setFullscreenChartId(isFullscreen ? chartId : null);
+    },
+    []
+  );
+
+  // Add theme change detection
+  useEffect(() => {
+    if (prevThemeRef.current !== theme) {
+      prevThemeRef.current = theme;
+      // Force a resize to ensure charts update properly
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      resizeTimeoutRef.current = setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 50);
+    }
+  }, [theme]);
 
   const getChartSize = (total: number) => {
     // Enhanced size calculation for different number of graphs
@@ -109,46 +130,46 @@ export function DynamicLayout({
     // Use the specific layout configurations based on number of charts
     switch (numCharts) {
       case 1:
-        layoutConfig = [{ x: 0, y: 0, w: 12, h: 10 }]; // Full width, taller for single chart
+        layoutConfig = [{ x: 0, y: 0, w: 12, h: 14 }]; // Full width, taller for single chart
         break;
       case 2:
         layoutConfig = [
-          { x: 0, y: 0, w: 6, h: 9 }, // Two charts side by side
-          { x: 6, y: 0, w: 6, h: 9 },
+          { x: 0, y: 0, w: 12, h: 7 }, // Two charts side by side
+          { x: 0, y: 7, w: 12, h: 7 },
         ];
         break;
       case 3:
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 8 }, // Three charts in a row
-          { x: 4, y: 0, w: 4, h: 8 },
-          { x: 8, y: 0, w: 4, h: 8 },
+          { x: 0, y: 0, w: 12, h: 5 }, // Three charts in a row
+          { x: 4, y: 0, w: 12, h: 5 },
+          { x: 8, y: 0, w: 12, h: 5 },
         ];
         break;
       case 4:
         layoutConfig = [
-          { x: 0, y: 0, w: 6, h: 6 }, // 2x2 grid
-          { x: 6, y: 0, w: 6, h: 6 },
-          { x: 0, y: 6, w: 6, h: 6 },
-          { x: 6, y: 6, w: 6, h: 6 },
+          { x: 0, y: 0, w: 6, h: 7 }, // 2x2 grid
+          { x: 6, y: 0, w: 6, h: 7 },
+          { x: 0, y: 7, w: 6, h: 7 },
+          { x: 6, y: 7, w: 6, h: 7 },
         ];
         break;
       case 5:
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 6 }, // 2x3 grid (first row of 3)
-          { x: 4, y: 0, w: 4, h: 6 },
-          { x: 8, y: 0, w: 4, h: 6 },
-          { x: 0, y: 6, w: 6, h: 6 }, // Second row of 2
-          { x: 6, y: 6, w: 6, h: 6 },
+          { x: 0, y: 0, w: 4, h: 7 }, // 2x3 grid (first row of 3)
+          { x: 4, y: 0, w: 4, h: 7 },
+          { x: 8, y: 0, w: 4, h: 7 },
+          { x: 0, y: 7, w: 6, h: 7 }, // Second row of 2
+          { x: 6, y: 8, w: 6, h: 7 },
         ];
         break;
       case 6:
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 6 }, // 2x3 grid
-          { x: 4, y: 0, w: 4, h: 6 },
-          { x: 8, y: 0, w: 4, h: 6 },
-          { x: 0, y: 6, w: 4, h: 6 },
-          { x: 4, y: 6, w: 4, h: 6 },
-          { x: 8, y: 6, w: 4, h: 6 },
+          { x: 0, y: 0, w: 4, h: 7 }, // 2x3 grid
+          { x: 4, y: 0, w: 4, h: 7 },
+          { x: 8, y: 0, w: 4, h: 7 },
+          { x: 0, y: 7, w: 4, h: 7 },
+          { x: 4, y: 7, w: 4, h: 7 },
+          { x: 8, y: 7, w: 4, h: 7 },
         ];
         break;
       case 7:
@@ -259,7 +280,7 @@ export function DynamicLayout({
     }
 
     resizeTimeoutRef.current = setTimeout(() => {
-      window.dispatchEvent(new Event('resize'));
+      window.dispatchEvent(new Event("resize"));
     }, 100);
   }, [calculateOptimalLayout, mounted, charts.length]);
 
@@ -292,7 +313,7 @@ export function DynamicLayout({
 
   // Get the fullscreen chart if one is set
   const fullscreenChart = fullscreenChartId
-    ? charts.find(chart => chart.id === fullscreenChartId)
+    ? charts.find((chart) => chart.id === fullscreenChartId)
     : null;
 
   // Added optimization to ensure all charts resize properly after chart count changes
@@ -316,7 +337,7 @@ export function DynamicLayout({
     // Schedule multiple resize events to ensure charts render properly
     const scheduleResize = (delay: number) => {
       setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
+        window.dispatchEvent(new Event("resize"));
       }, delay);
     };
 
@@ -359,6 +380,7 @@ export function DynamicLayout({
                 isFullscreenMode={true}
                 hideControls={fullscreenChart.hideControls || hideControls}
                 onDeleteGraph={fullscreenChart.onDeleteGraph || onDeleteGraph}
+                isLoading={fullscreenChart.isLoading} // Add this line
               />
             </div>
           </div>
@@ -398,7 +420,7 @@ export function DynamicLayout({
               clearTimeout(resizeTimeoutRef.current);
             }
             resizeTimeoutRef.current = setTimeout(() => {
-              window.dispatchEvent(new Event('resize'));
+              window.dispatchEvent(new Event("resize"));
             }, 50);
           }}
           useCSSTransforms={true}
@@ -411,10 +433,10 @@ export function DynamicLayout({
           // useStaticSize={false}
           key={`grid-${charts.length}`} // Force rerender when charts count changes
           style={{
-            padding: '0 4px',
-            margin: '0 auto',
-            maxWidth: '100%',
-            width: '100%',
+            padding: "0 4px",
+            margin: "0 auto",
+            maxWidth: "100%",
+            width: "100%",
           }}
         >
           {charts.map((chart) => {
@@ -423,7 +445,9 @@ export function DynamicLayout({
                 key={chart.id}
                 className={cn(
                   "bg-card rounded-lg shadow-sm border border-border overflow-hidden",
-                  fullscreenChartId && chart.id !== fullscreenChartId && "opacity-0"
+                  fullscreenChartId &&
+                    chart.id !== fullscreenChartId &&
+                    "opacity-0"
                 )}
               >
                 <DraggableChart
@@ -443,6 +467,7 @@ export function DynamicLayout({
                   isFullscreenMode={chart.id === fullscreenChartId}
                   hideControls={chart.hideControls || hideControls}
                   onDeleteGraph={chart.onDeleteGraph || onDeleteGraph}
+                  isLoading={chart.isLoading} // Add this line
                 />
               </div>
             );
