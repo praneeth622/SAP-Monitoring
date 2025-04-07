@@ -1043,7 +1043,6 @@ export default function Dashboard() {
 
   const fetchTemplateForEditing = async (templateId: string) => {
     try {
-      setLoadingState((prev) => ({ ...prev, fetchingTemplate: true }));
       setIsLoading(true);
 
       const baseUrl = "https://shwsckbvbt.a.pinggy.link";
@@ -1071,43 +1070,14 @@ export default function Dashboard() {
       const template = data[0];
 
       // Extract system ID correctly from the API response
-      // In case it's nested or formatted differently than expected
       let systemId = "";
 
       if (template.systems && template.systems.length > 0) {
-        // Get the system ID from the first system in the array
         systemId = template.systems[0].system_id || "";
         console.log("Found system ID in template:", systemId);
       } else {
         console.warn("No systems found in template data");
       }
-
-      // Map the API response to our local state format
-      setTemplateData({
-        name: template.template_name || "",
-        system: systemId, // Set the system ID here
-        timeRange: template.frequency || "auto",
-        resolution: template.resolution || "auto", // Added fallback
-        isDefault: template.default || false,
-        isFavorite: template.favorite || false,
-        graphs: [], // We'll populate this separately
-      });
-
-      console.log("Template data set with system:", systemId);
-
-      // Show chart loading state while mapping
-      setLoadingState((prev) => ({ ...prev, loadingCharts: true }));
-
-      // Map the graphs from API format to our internal format
-      const mappedGraphs = template.graphs.map(
-        (apiGraph: any, graphIndex: number) => {
-          // Rest of the mapping code remains unchanged...
-          // ...
-        }
-      );
-
-      setGraphs(mappedGraphs);
-      setShowGraphs(mappedGraphs.length > 0);
 
       // Force a layout refresh with a slight delay to ensure proper sizing
       setTimeout(() => {
@@ -1123,11 +1093,6 @@ export default function Dashboard() {
       });
     } finally {
       setIsLoading(false);
-      setLoadingState((prev) => ({
-        ...prev,
-        fetchingTemplate: false,
-        loadingCharts: false,
-      }));
     }
   };
 

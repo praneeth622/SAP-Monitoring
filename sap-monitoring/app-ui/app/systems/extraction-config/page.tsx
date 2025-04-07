@@ -826,7 +826,6 @@ export default function ConfigDashboard() {
                 <div className="col-span-4">KPI Name</div>
                 <div className="col-span-2">Area</div>
                 <div className="col-span-2">Monitoring Area</div>
-                <div className="col-span-3 text-center">Status</div>
                 <div className="col-span-1 text-right">Actions</div>
               </div>
             </div>
@@ -850,13 +849,13 @@ export default function ConfigDashboard() {
                         {kpi.kpi_group.startsWith("OS") ? "OS" : "JOBS"}
                       </span>
                     </div>
-                    <div className="col-span-3 flex justify-center">
+                    {/* <div className="col-span-3 flex justify-center">
                       <Switch
                         checked={kpi.is_active}
                         onCheckedChange={() => handleKpiStatusChange(kpi)}
                         disabled={true}
                       />
-                    </div>
+                    </div> */}
                     <div className="col-span-1 flex justify-end">
                       <Button
                         variant="ghost"
