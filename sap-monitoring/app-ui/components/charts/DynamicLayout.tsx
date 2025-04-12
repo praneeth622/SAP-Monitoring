@@ -38,6 +38,7 @@ interface DynamicLayoutProps {
   onLayoutChange?: (layout: Layout[]) => void;
   hideControls?: boolean;
   onDeleteGraph?: (id: string) => void;
+  onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
 }
 
@@ -50,6 +51,7 @@ export function DynamicLayout({
   onLayoutChange,
   hideControls = false,
   onDeleteGraph,
+  onEditGraph, // Add this new prop
   resolution = "auto", // Default to auto
 }: DynamicLayoutProps) {
   const [layouts, setLayouts] = useState({});
@@ -62,6 +64,10 @@ export function DynamicLayout({
     null
   );
   const prevThemeRef = useRef(theme);
+  // Add viewport height state
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [rowHeight, setRowHeight] = useState(40);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Handle fullscreen toggle from child charts
   const handleFullscreenChange = useCallback(
@@ -118,94 +124,116 @@ export function DynamicLayout({
     const minWidth = 3;
     const minHeight = 4;
 
-    // Get size based on total number of charts using your specified requirements
-    const defaultSize = getChartSize(numCharts);
-    console.log(
-      `Using rule-based layout for ${numCharts} charts: w=${defaultSize.w}, h=${defaultSize.h}`
-    );
+    // Calculate scaling factor based on viewport height
+    // This helps charts fill more vertical space on larger screens
+    const heightScaleFactor = viewportHeight > 0 
+      ? Math.min(1.5, Math.max(0.9, viewportHeight / 800)) 
+      : 1;
+    
+    console.log(`Using height scale factor: ${heightScaleFactor.toFixed(2)} for viewport height: ${viewportHeight}px`);
 
-    // For strict layout, we need to calculate the positions based on the layout rule
+    // Use the specific layout configurations based on number of charts
     let layoutConfig = [];
+
+    // Get baseline size for charts
+    const defaultSize = getChartSize(numCharts);
+    const baseHeight = calculateIdealChartHeight(numCharts);
+    
+    console.log(
+      `Using optimized layout for ${numCharts} charts: w=${defaultSize.w}, h=${baseHeight}`
+    );
 
     // Use the specific layout configurations based on number of charts
     switch (numCharts) {
       case 1:
-        layoutConfig = [{ x: 0, y: 0, w: 12, h: 14 }]; // Full width, taller for single chart
+        layoutConfig = [{ x: 0, y: 0, w: 12, h: Math.max(12, Math.round(18 * heightScaleFactor)) }]; // Full width, taller for single chart
         break;
       case 2:
+        const twoChartHeight = Math.max(6, Math.round(9 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 12, h: 7 }, // Two charts side by side
-          { x: 0, y: 7, w: 12, h: 7 },
+          { x: 0, y: 0, w: 12, h: twoChartHeight }, // Two charts stacked
+          { x: 0, y: twoChartHeight, w: 12, h: twoChartHeight },
         ];
         break;
       case 3:
+        // For 3 charts, we'll use a more flexible layout that fills vertical space
+        const threeChartHeight = Math.max(8, Math.round(12 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 12, h: 5 }, // Three charts in a row
-          { x: 4, y: 0, w: 12, h: 5 },
-          { x: 8, y: 0, w: 12, h: 5 },
+          { x: 0, y: 0, w: 12, h: Math.floor(threeChartHeight / 2) }, // Wider chart on top
+          { x: 0, y: Math.floor(threeChartHeight / 2), w: 6, h: Math.ceil(threeChartHeight / 2) }, // Two charts side by side below
+          { x: 6, y: Math.floor(threeChartHeight / 2), w: 6, h: Math.ceil(threeChartHeight / 2) },
         ];
         break;
       case 4:
+        const fourChartHeight = Math.max(5, Math.round(8 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 6, h: 7 }, // 2x2 grid
-          { x: 6, y: 0, w: 6, h: 7 },
-          { x: 0, y: 7, w: 6, h: 7 },
-          { x: 6, y: 7, w: 6, h: 7 },
+          { x: 0, y: 0, w: 6, h: fourChartHeight }, // 2x2 grid
+          { x: 6, y: 0, w: 6, h: fourChartHeight },
+          { x: 0, y: fourChartHeight, w: 6, h: fourChartHeight },
+          { x: 6, y: fourChartHeight, w: 6, h: fourChartHeight },
         ];
         break;
       case 5:
+        const fiveChartHeight = Math.max(6, Math.round(9 * heightScaleFactor));
+        const row2Height = Math.max(5, Math.round(7 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 7 }, // 2x3 grid (first row of 3)
-          { x: 4, y: 0, w: 4, h: 7 },
-          { x: 8, y: 0, w: 4, h: 7 },
-          { x: 0, y: 7, w: 6, h: 7 }, // Second row of 2
-          { x: 6, y: 8, w: 6, h: 7 },
+          { x: 0, y: 0, w: 4, h: fiveChartHeight }, // Top row of 3
+          { x: 4, y: 0, w: 4, h: fiveChartHeight },
+          { x: 8, y: 0, w: 4, h: fiveChartHeight },
+          { x: 0, y: fiveChartHeight, w: 6, h: row2Height }, // Bottom row of 2
+          { x: 6, y: fiveChartHeight, w: 6, h: row2Height },
         ];
         break;
       case 6:
+        const sixChartHeight = Math.max(6, Math.round(7.5 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 7 }, // 2x3 grid
-          { x: 4, y: 0, w: 4, h: 7 },
-          { x: 8, y: 0, w: 4, h: 7 },
-          { x: 0, y: 7, w: 4, h: 7 },
-          { x: 4, y: 7, w: 4, h: 7 },
-          { x: 8, y: 7, w: 4, h: 7 },
+          { x: 0, y: 0, w: 4, h: sixChartHeight }, // Two rows of three, equal size charts
+          { x: 4, y: 0, w: 4, h: sixChartHeight },
+          { x: 8, y: 0, w: 4, h: sixChartHeight },
+          { x: 0, y: sixChartHeight, w: 4, h: sixChartHeight },
+          { x: 4, y: sixChartHeight, w: 4, h: sixChartHeight },
+          { x: 8, y: sixChartHeight, w: 4, h: sixChartHeight },
         ];
         break;
       case 7:
+        const sevenChartHeight = Math.max(5, Math.round(6 * heightScaleFactor));
+        const sevenBottomHeight = Math.max(5, Math.round(7 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 5 }, // 2x4 grid (first row of 3)
-          { x: 4, y: 0, w: 4, h: 5 },
-          { x: 8, y: 0, w: 4, h: 5 },
-          { x: 0, y: 5, w: 4, h: 5 }, // Second row of 3
-          { x: 4, y: 5, w: 4, h: 5 },
-          { x: 8, y: 5, w: 4, h: 5 },
-          { x: 0, y: 10, w: 12, h: 5 }, // Third row of 1 full width
+          { x: 0, y: 0, w: 4, h: sevenChartHeight }, // Top row of 3
+          { x: 4, y: 0, w: 4, h: sevenChartHeight },
+          { x: 8, y: 0, w: 4, h: sevenChartHeight },
+          { x: 0, y: sevenChartHeight, w: 4, h: sevenChartHeight }, // Middle row of 3
+          { x: 4, y: sevenChartHeight, w: 4, h: sevenChartHeight },
+          { x: 8, y: sevenChartHeight, w: 4, h: sevenChartHeight },
+          { x: 0, y: sevenChartHeight * 2, w: 12, h: sevenBottomHeight }, // Bottom row of 1 (wider)
         ];
         break;
       case 8:
+        const eightChartHeight = Math.max(4, Math.round(5.5 * heightScaleFactor));
+        const bottomRowHeight = Math.max(5, Math.round(6 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 5 }, // 2x4 grid
-          { x: 4, y: 0, w: 4, h: 5 },
-          { x: 8, y: 0, w: 4, h: 5 },
-          { x: 0, y: 5, w: 4, h: 5 },
-          { x: 4, y: 5, w: 4, h: 5 },
-          { x: 8, y: 5, w: 4, h: 5 },
-          { x: 0, y: 10, w: 6, h: 5 }, // Third row of 2
-          { x: 6, y: 10, w: 6, h: 5 },
+          { x: 0, y: 0, w: 3, h: eightChartHeight }, // Top row of 4
+          { x: 3, y: 0, w: 3, h: eightChartHeight },
+          { x: 6, y: 0, w: 3, h: eightChartHeight },
+          { x: 9, y: 0, w: 3, h: eightChartHeight },
+          { x: 0, y: eightChartHeight, w: 3, h: eightChartHeight }, // Middle row of 3
+          { x: 3, y: eightChartHeight, w: 3, h: eightChartHeight },
+          { x: 6, y: eightChartHeight, w: 6, h: bottomRowHeight }, // Bottom right (larger)
+          { x: 0, y: eightChartHeight * 2, w: 6, h: bottomRowHeight }, // Bottom left (larger)
         ];
         break;
       case 9:
+        const nineChartHeight = Math.max(5, Math.round(6 * heightScaleFactor));
         layoutConfig = [
-          { x: 0, y: 0, w: 4, h: 5 }, // 3x3 grid
-          { x: 4, y: 0, w: 4, h: 5 },
-          { x: 8, y: 0, w: 4, h: 5 },
-          { x: 0, y: 5, w: 4, h: 5 },
-          { x: 4, y: 5, w: 4, h: 5 },
-          { x: 8, y: 5, w: 4, h: 5 },
-          { x: 0, y: 10, w: 4, h: 5 },
-          { x: 4, y: 10, w: 4, h: 5 },
-          { x: 8, y: 10, w: 4, h: 5 },
+          { x: 0, y: 0, w: 4, h: nineChartHeight }, // 3x3 grid
+          { x: 4, y: 0, w: 4, h: nineChartHeight },
+          { x: 8, y: 0, w: 4, h: nineChartHeight },
+          { x: 0, y: nineChartHeight, w: 4, h: nineChartHeight },
+          { x: 4, y: nineChartHeight, w: 4, h: nineChartHeight },
+          { x: 8, y: nineChartHeight, w: 4, h: nineChartHeight },
+          { x: 0, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
+          { x: 4, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
+          { x: 8, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
         ];
         break;
       default:
@@ -213,7 +241,7 @@ export function DynamicLayout({
         // For more than 9 charts, calculate a grid layout
         const cols = Math.floor(12 / 3); // Use columns of width 3
         const width = 3; // Fixed width of 3
-        const height = 4; // Fixed height of 4
+        const height = Math.max(3, Math.round(4 * heightScaleFactor)); // Dynamically scaled height
 
         for (let i = 0; i < numCharts; i++) {
           const row = Math.floor(i / cols);
@@ -254,7 +282,7 @@ export function DynamicLayout({
         isResizable: true,
       };
     });
-  }, [charts]);
+  }, [charts, viewportHeight]);
 
   // Initialize layouts only once on mount
   useEffect(() => {
@@ -265,10 +293,26 @@ export function DynamicLayout({
     const layout = calculateOptimalLayout();
     const initialLayouts = {
       lg: layout,
-      md: layout.map((item) => ({ ...item, w: Math.min(12, item.w * 2) })),
-      sm: layout.map((item) => ({ ...item, w: 12, x: 0 })),
-      xs: layout.map((item) => ({ ...item, w: 12, x: 0 })),
-      xxs: layout.map((item) => ({ ...item, w: 12, x: 0 })),
+      md: layout.map((item) => ({ 
+        ...item, 
+        w: Math.min(9, item.w * 0.75),
+        x: Math.floor(item.x * 0.75)
+      })),
+      sm: layout.map((item) => ({ 
+        ...item, 
+        w: Math.min(6, item.w * 0.5),
+        x: Math.floor(item.x * 0.5)
+      })),
+      xs: layout.map((item) => ({ 
+        ...item, 
+        w: 3,
+        x: (item.x % 3) // Ensure x position cycles within 3-column grid
+      })),
+      xxs: layout.map((item) => ({ 
+        ...item, 
+        w: 2,
+        x: (item.x % 2) // Ensure x position cycles within 2-column grid
+      })),
     };
 
     setLayouts(initialLayouts);
@@ -325,10 +369,26 @@ export function DynamicLayout({
     const layout = calculateOptimalLayout();
     const updatedLayouts = {
       lg: layout,
-      md: layout.map((item) => ({ ...item, w: Math.min(12, item.w * 2) })),
-      sm: layout.map((item) => ({ ...item, w: 12, x: 0 })),
-      xs: layout.map((item) => ({ ...item, w: 12, x: 0 })),
-      xxs: layout.map((item) => ({ ...item, w: 12, x: 0 })),
+      md: layout.map((item) => ({ 
+        ...item, 
+        w: Math.min(9, item.w * 0.75),
+        x: Math.floor(item.x * 0.75)
+      })),
+      sm: layout.map((item) => ({ 
+        ...item, 
+        w: Math.min(6, item.w * 0.5),
+        x: Math.floor(item.x * 0.5)
+      })),
+      xs: layout.map((item) => ({ 
+        ...item, 
+        w: 3,
+        x: (item.x % 3) // Ensure x position cycles within 3-column grid
+      })),
+      xxs: layout.map((item) => ({ 
+        ...item, 
+        w: 2,
+        x: (item.x % 2) // Ensure x position cycles within 2-column grid
+      })),
     };
 
     setLayouts(updatedLayouts);
@@ -346,6 +406,47 @@ export function DynamicLayout({
     scheduleResize(200);
     scheduleResize(500);
   }, [charts.length, calculateOptimalLayout, mounted]);
+
+  // Add viewport height detection
+  useEffect(() => {
+    const updateViewportDimensions = () => {
+      // Get viewport height
+      const height = window.innerHeight;
+      const containerHeight = containerRef.current?.clientHeight || height;
+      
+      // Calculate available height (accounting for any other UI elements)
+      const availableHeight = Math.max(containerHeight * 0.95, height * 0.8);
+      setViewportHeight(availableHeight);
+      
+      // Adjust row height based on viewport height - larger screens get larger row heights
+      const calculatedRowHeight = Math.max(30, Math.min(60, height / 20));
+      setRowHeight(calculatedRowHeight);
+      
+      console.log(`Viewport updated: height=${availableHeight}px, rowHeight=${calculatedRowHeight}px`);
+    };
+
+    // Initial update
+    updateViewportDimensions();
+    
+    // Add resize listener
+    window.addEventListener("resize", updateViewportDimensions);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportDimensions);
+    };
+  }, []);
+
+  // Enhanced function to calculate ideal chart height based on viewport and number of charts
+  const calculateIdealChartHeight = useCallback((numCharts: number) => {
+    if (!viewportHeight) return 4; // Default if viewport height isn't available yet
+    
+    // Calculate optimal chart height based on viewport and number of charts
+    // The goal is to fill the available vertical space completely
+    const optimalHeight = Math.max(4, Math.min(18, Math.floor((viewportHeight / (rowHeight * 1.2)) / Math.ceil(numCharts / 3))));
+    
+    console.log(`Calculated optimal height for ${numCharts} charts: ${optimalHeight} rows`);
+    return optimalHeight;
+  }, [viewportHeight, rowHeight]);
 
   if (!mounted) return null;
 
@@ -380,6 +481,7 @@ export function DynamicLayout({
                 isFullscreenMode={true}
                 hideControls={fullscreenChart.hideControls || hideControls}
                 onDeleteGraph={fullscreenChart.onDeleteGraph || onDeleteGraph}
+                onEditGraph={onEditGraph} // Add this prop
                 isLoading={fullscreenChart.isLoading} // Add this line
               />
             </div>
@@ -393,6 +495,7 @@ export function DynamicLayout({
   return (
     <AnimatePresence>
       <motion.div
+        ref={containerRef}
         className="relative w-full h-full"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -408,12 +511,17 @@ export function DynamicLayout({
         <ResponsiveGridLayout
           className="layout"
           layouts={layouts}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-          cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }}
-          rowHeight={40} // Reduced from 50 to 40
+          breakpoints={{ lg: 1200, md: 992, sm: 768, xs: 576, xxs: 320 }}
+          cols={{ lg: 12, md: 9, sm: 6, xs: 3, xxs: 2 }}
+          rowHeight={rowHeight} // Use dynamic row height
           margin={[6, 6]} // Reduced from [8, 8] to [6, 6]
           containerPadding={[4, 4]}
           onLayoutChange={handleLayoutChange}
+          onBreakpointChange={(breakpoint) => {
+            setCurrentBreakpoint(breakpoint);
+            // Force a resize to recalculate optimal layout
+            window.dispatchEvent(new Event("resize"));
+          }}
           onResize={() => {
             // Force charts to rerender after resize events
             if (resizeTimeoutRef.current) {
@@ -423,20 +531,25 @@ export function DynamicLayout({
               window.dispatchEvent(new Event("resize"));
             }, 50);
           }}
+          // Ensure we use the full height with vertical compaction
+          verticalCompact={true}
+          compactType="vertical"
           useCSSTransforms={true}
           isResizable={true}
           isDraggable={true}
           draggableHandle=".cursor-grab"
-          compactType="vertical"
           preventCollision={false}
           measureBeforeMount={false}
+          // Use autoSize to fill container
+          autoSize={true}
           // useStaticSize={false}
-          key={`grid-${charts.length}`} // Force rerender when charts count changes
+          key={`grid-${charts.length}-${viewportHeight}-${rowHeight}`} // Force rerender when key metrics change
           style={{
             padding: "0 4px",
             margin: "0 auto",
             maxWidth: "100%",
             width: "100%",
+            height: "100%",
           }}
         >
           {charts.map((chart) => {
@@ -467,6 +580,7 @@ export function DynamicLayout({
                   isFullscreenMode={chart.id === fullscreenChartId}
                   hideControls={chart.hideControls || hideControls}
                   onDeleteGraph={chart.onDeleteGraph || onDeleteGraph}
+                  onEditGraph={onEditGraph} // Add this prop
                   isLoading={chart.isLoading} // Add this line
                 />
               </div>

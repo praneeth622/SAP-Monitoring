@@ -80,6 +80,16 @@ const timeRangeOptions = [
 
 const systemOptions = ["SVW", "System 1", "System 2"];
 
+// Add this near the top of the file with other constants
+const resolutionOptions = [
+  { value: "auto", label: "Auto" },
+  { value: "1m", label: "1 Minute" },
+  { value: "5m", label: "5 Minutes" },
+  { value: "15m", label: "15 Minutes" },
+  { value: "1h", label: "1 Hour" },
+  { value: "1d", label: "1 Day" }
+];
+
 // Utility function to create vibrant, consistent colors for KPIs
 const generateConsistentColors = (kpis: string[]) => {
   // Use our default theme colors for consistency
@@ -243,6 +253,44 @@ export default function TemplatesPage() {
     loadingCharts: false,
   });
 
+  // Add state for the currently editing graph
+  const [editingGraph, setEditingGraph] = useState<Graph | null>(null);
+
+  // Add this state variable if it doesn't exist
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Add a function to handle editing a graph
+  // Update the handleEditGraph function to check for unsaved changes
+const handleEditGraph = (graphId: string) => {
+  // Check if the graph was just added (has a temporary ID)
+  const isNewlyAddedGraph = graphId.startsWith('graph-') && !isEditMode && hasChanges;
+  
+  if (isNewlyAddedGraph) {
+    // Show a friendly toast message instead of letting the error occur
+    toast({
+      title: "Save Required",
+      description: "Please save the template first before editing this newly added graph.",
+      variant: "warning",
+    });
+    return;
+  }
+  
+  // Otherwise, proceed with normal edit flow
+  const graphToEdit = graphs.find(graph => graph.id === graphId);
+  if (graphToEdit) {
+    // First set the selectedTemplate - this is the key fix
+    setSelectedTemplate({
+      id: Date.now().toString(),
+      ...templateData,
+      graphs,
+    });
+    
+    // Then set the editing graph and open the sheet
+    setEditingGraph(graphToEdit);
+    setIsAddGraphSheetOpen(true);
+  }
+};
+
   // Effect to clean up on unmount
   useEffect(() => {
     return () => {
@@ -339,6 +387,7 @@ export default function TemplatesPage() {
       // Ask for confirmation
       if (confirm("Are you sure you want to delete this graph?")) {
         setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
+        setHasChanges(true); // <-- Add this line
         toast.success("Graph deleted successfully");
 
         // If we deleted the last graph, hide the graphs section
@@ -781,6 +830,8 @@ export default function TemplatesPage() {
         // Redirect to templates list after editing
         router.push("/templates");
       }
+
+      setHasChanges(false); // <-- Add this line
     } catch (error) {
       console.error("Save template error:", error);
       toast.error(ERROR_MESSAGES.SAVE_ERROR, {
@@ -825,6 +876,7 @@ export default function TemplatesPage() {
       setGraphs((prev) => [...prev, newGraph]);
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
+      setHasChanges(true); // <-- Add this line
 
       // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
       setTimeout(() => {
@@ -835,6 +887,50 @@ export default function TemplatesPage() {
     } catch (error) {
       console.error("Error adding graph:", error);
       toast.error(ERROR_MESSAGES.ADD_GRAPH_ERROR);
+    }
+  };
+
+  // Add a function to handle updating an existing graph
+  const handleUpdateGraph = (graphId: string, graphData: any) => {
+    try {
+      // Create or update KPI colors and active KPIs as before
+      const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
+      const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
+        generateConsistentColors(allKpis);
+
+      // Update the graph with the new data
+      setGraphs((prev) => 
+        prev.map((graph) => 
+          graph.id === graphId 
+            ? {
+                ...graph,
+                ...graphData,
+                activeKPIs: newActiveKPIs,
+                kpiColors: newKpiColors,
+                // Preserve existing layout
+                layout: graph.layout || {
+                  x: 0,
+                  y: 0,
+                  w: 4,
+                  h: 4,
+                },
+              }
+            : graph
+        )
+      );
+
+      setIsAddGraphSheetOpen(false);
+      setEditingGraph(null);
+      setHasChanges(true); // <-- Add this line
+      toast.success("Graph updated successfully");
+
+      // Force a layout refresh
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 200);
+    } catch (error) {
+      console.error("Error updating graph:", error);
+      toast.error("Failed to update graph");
     }
   };
 
@@ -971,7 +1067,7 @@ export default function TemplatesPage() {
                         errors.timeRange
                           ? "border-red-500 focus-visible:ring-red-500"
                           : ""
-                      }
+                    }
                     >
                       <SelectValue placeholder="Select" />
                     </SelectTrigger>
@@ -1010,9 +1106,9 @@ export default function TemplatesPage() {
                       <SelectValue placeholder="Select" />
                     </SelectTrigger>
                     <SelectContent>
-                      {timeRangeOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
+                      {resolutionOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1065,6 +1161,8 @@ export default function TemplatesPage() {
                     charts={graphs.map(renderChartConfigs)}
                     theme={defaultChartTheme}
                     resolution={templateData.resolution}
+                    onDeleteGraph={handleDeleteGraph} // Add delete functionality
+                    onEditGraph={handleEditGraph} // Add edit functionality
                   />
                   <Card
                     className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
@@ -1104,21 +1202,28 @@ export default function TemplatesPage() {
 
           <Sheet
             isOpen={isAddGraphSheetOpen}
-            onClose={() => setIsAddGraphSheetOpen(false)}
-            title="Add Graph to Template"
+            onClose={() => {
+              setIsAddGraphSheetOpen(false);
+              setEditingGraph(null); // Reset editing graph when closing
+            }}
+            title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
           >
             {selectedTemplate && (
               <AddGraphSheet
                 template={selectedTemplate}
-                onClose={() => setIsAddGraphSheetOpen(false)}
+                onClose={() => {
+                  setIsAddGraphSheetOpen(false);
+                  setEditingGraph(null); // Reset editing graph when closing
+                }}
+                editingGraph={editingGraph} // Pass the editing graph
                 onAddGraph={(graphData) => {
-                  // Create a proper Graph object here to match the expected type
-                  handleAddGraphToTemplate({
-                    ...graphData,
-                    id: "", // This will be overwritten in handleAddGraphToTemplate
-                    activeKPIs: new Set<string>(), // Will be populated in the handler
-                    kpiColors: {}, // Will be populated in the handler
-                  });
+                  if (editingGraph) {
+                    // Handle editing an existing graph
+                    handleUpdateGraph(editingGraph.id, graphData);
+                  } else {
+                    // Handle adding a new graph
+                    handleAddGraphToTemplate(graphData);
+                  }
                 }}
               />
             )}

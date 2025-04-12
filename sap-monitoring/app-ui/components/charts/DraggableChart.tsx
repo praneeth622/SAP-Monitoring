@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
+  Edit, // Add this import
 } from "lucide-react";
 import ChartContainer from "./ChartContainer";
 import { DataPoint, ChartType } from "@/types";
@@ -40,7 +41,7 @@ import {
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 
-// Update the interface to add hideControls and onDeleteGraph props
+// Add onEditGraph to the props interface
 interface DraggableChartProps {
   id: string;
   data: DataPoint[];
@@ -60,6 +61,7 @@ interface DraggableChartProps {
   isFullscreenMode?: boolean;
   hideControls?: boolean; // Add this to hide calendar, tools, download, and fullscreen buttons
   onDeleteGraph?: (id: string) => void; // Add this to handle graph deletion
+  onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
   isLoading?: boolean; // Add this line
 }
@@ -79,6 +81,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   isFullscreenMode,
   hideControls = false,
   onDeleteGraph,
+  onEditGraph, // Add this new prop
   resolution = "auto",
   isLoading = false, // Add this with default
 }) => {
@@ -695,6 +698,19 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                         />
                       )}
                     </Button>
+
+                    {/* Add Edit Button */}
+                    {onEditGraph && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                        onClick={() => onEditGraph && onEditGraph(id)}
+                        title="Edit Graph"
+                      >
+                        <Edit className={isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} />
+                      </Button>
+                    )}
 
                     {onDeleteGraph && (
                       <Button
