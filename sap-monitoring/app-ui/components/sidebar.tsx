@@ -199,6 +199,18 @@ export function Sidebar() {
       case "Manage Systems":
         router.push("/systems/manage-systems");
         break;
+case "System Topology":
+router.push("/system-topology");
+break;
+case "System Topology":
+        router.push("/system-topology");
+        break;
+      case "System Topology":
+        router.push("/system-topology");
+        break;
+      case "System Topology":
+        router.push("/system-topology");
+        break;
       case "System Topology":
         router.push("/system-topology");
         break;
@@ -210,6 +222,12 @@ export function Sidebar() {
         break;
       case "Manage User":
         router.push("/user-management/manage-users");
+        break;
+case "Alert Monitering": // Fix the typo and add routing
+        router.push("/alerts");
+        break;
+      case "Incidents":
+        router.push("/incidents");
         break;
       default:
         break;

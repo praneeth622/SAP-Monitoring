@@ -368,6 +368,16 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   };
 
   const addCorrelationKpi = () => {
+    // Check if already has maximum allowed correlation KPIs (4)
+    if (formData.correlationKpis.length >= 4) {
+      toast({
+        title: "Error",
+        description: "Maximum 4 correlation KPIs allowed",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setFormData((prev) => ({
       ...prev,
       correlationKpis: [
@@ -443,9 +453,15 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
-  // Update the handleSubmit function to make it more flexible
+  // Update the handleSubmit function to prevent duplicate submissions
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent multiple submissions
+    if (isLoading) {
+      return;
+    }
+    setIsLoading(true);
 
     // Check if any required field is empty
     if (
@@ -460,6 +476,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         description: "Please fill in all required fields",
         variant: "destructive",
       });
+      setIsLoading(false);
       return;
     }
 
@@ -475,6 +492,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         description: "Please fill in all correlation KPI fields",
         variant: "destructive",
       });
+      setIsLoading(false);
       return;
     }
 
@@ -806,9 +824,13 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 type="text"
                 name="timeInterval"
                 value={formData.timeInterval}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background/50 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+                readOnly
+                disabled
+                className="w-full px-4 py-2 rounded-lg border border-border bg-background/80 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200 cursor-not-allowed opacity-70"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Set at template level
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground/90 mb-2">
@@ -818,16 +840,20 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 type="text"
                 name="resolution"
                 value={formData.resolution}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background/50 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+                readOnly
+                disabled
+                className="w-full px-4 py-2 rounded-lg border border-border bg-background/80 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200 cursor-not-allowed opacity-70"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Set at template level
+              </p>
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-foreground/90">
-                Correlation KPIs
+                Correlation KPIs <span className="text-xs text-muted-foreground">(max 4)</span>
               </label>
             </div>
             <div className="space-y-3">
@@ -949,7 +975,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 size="sm"
                 onClick={addCorrelationKpi}
                 disabled={
-                  formData.correlationKpis.length >= 5 || 
+                  formData.correlationKpis.length >= 4 || 
                   !formData.kpiGroup ||
                   !canAddMoreCorrelationKpis()
                 }

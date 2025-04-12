@@ -1889,7 +1889,7 @@ export default function Dashboard() {
 
                   {/* Auto-refresh dropdown */}
                   <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Auto-refresh</label>
+                    <label className="text-xs text-muted-foreground mb-1"></label>
                     <div className="relative">
                       {autoRefreshInterval && timeRemaining !== null && (
                         <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground text-[9px] px-1.5 py-0.5 rounded-sm font-medium whitespace-nowrap shadow-sm">
