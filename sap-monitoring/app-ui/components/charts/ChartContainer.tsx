@@ -50,6 +50,7 @@ const ChartContainer = memo(
       download: (format: "png" | "svg" | "pdf" | "csv" | "json") => void;
       dispatchAction?: (action: any) => void;
       isValid: () => boolean;
+      toggleFullscreen: () => void;
     },
     ChartContainerProps
   >((props, ref) => {
@@ -70,12 +71,12 @@ const ChartContainer = memo(
 
     const chartRef = useRef<echarts.ECharts | null>(null);
     const chartContainerRef = useRef<HTMLDivElement>(null);
+    const [selectedTool, setSelectedTool] = useState<'box' | 'lasso' | null>(null);
     const [isSelecting, setIsSelecting] = useState(false);
-    const [selectedTool, setSelectedTool] = useState<"box" | "lasso" | null>(
-      null
-    );
     const [mounted, setMounted] = useState(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const fullscreenContainerRef = useRef<HTMLDivElement>(null);
 
     const filteredData = React.useMemo(() => {
       if (!dateRange?.from || !dateRange?.to) return data;
@@ -118,6 +119,15 @@ const ChartContainer = memo(
             outOfBrush: {
               colorAlpha: 0.1,
             },
+            brushStyle: {
+              borderWidth: 1,
+              color: "rgba(120, 140, 180, 0.2)",
+              borderColor: "rgba(120, 140, 180, 0.8)",
+            },
+            throttleType: "debounce",
+            throttleDelay: 300,
+            transformable: true,
+            removeOnClick: true
           },
           toolbox: {
             feature: {
@@ -299,41 +309,38 @@ const ChartContainer = memo(
 
         // Configure proper x-axis formatting based on resolution
         const getAxisLabelFormatter = () => {
-          // Different formatting based on resolution
-          switch(resolution) {
-            case '1m':
-              // For 1-minute data, show HH:MM format
-              return (value: string) => {
-                const date = new Date(value);
-                return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-              };
-            case '5m':
-            case '15m':
-              // For 5/15-minute data, show HH:MM format with less granularity
-              return (value: string) => {
-                const date = new Date(value);
-                return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-              };
-            case '1h':
-              // For hourly data, show DAY HH format
-              return (value: string) => {
-                const date = new Date(value);
-                return `${date.getDate()}d ${date.getHours()}h`;
-              };
-            case '1d':
-              // For daily data, show MM/DD format
-              return (value: string) => {
-                const date = new Date(value);
-                return `${date.getMonth() + 1}/${date.getDate()}`;
-              };
-            case 'auto':
-            default:
-              // Default format - MM/DD
-              return (value: string) => {
-                const date = new Date(value);
-                return `${date.getMonth() + 1}/${date.getDate()}`;
-              };
-          }
+          // Different formatting based on resolution and zoom level
+          return (value: string) => {
+            const date = new Date(value);
+            const now = new Date();
+            const timeDiff = now.getTime() - date.getTime();
+            const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+            
+            // Get the current zoom level from the chart
+            const chart = chartRef.current;
+            if (!chart) return value;
+            
+            const option = chart.getOption();
+            const dataZoom = option.dataZoom?.[0];
+            if (!dataZoom) return value;
+            
+            const zoomLevel = (dataZoom.end - dataZoom.start) / 100;
+            
+            // Determine the appropriate format based on zoom level
+            if (zoomLevel <= 0.1) {
+              // Very zoomed in - show time
+              return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            } else if (zoomLevel <= 0.3) {
+              // Moderately zoomed in - show day and time
+              return `${date.getDate()}d ${date.getHours().toString().padStart(2, '0')}h`;
+            } else if (zoomLevel <= 0.6) {
+              // Partially zoomed - show day
+              return `${date.getMonth() + 1}/${date.getDate()}`;
+            } else {
+              // Zoomed out - show month and short year
+              return `${date.getMonth() + 1}/${date.getFullYear().toString().slice(-2)}`;
+            }
+          };
         };
 
         const option: echarts.EChartsOption = {
@@ -492,67 +499,61 @@ const ChartContainer = memo(
         // If the chart needs a theme update but is already initialized,
         // we can use a targeted update rather than full redraw
         if (chartRef.current && theme?.colors) {
-          // Update just the series colors without recreating the entire chart
+          // Get current option without triggering a redraw
           const existingOption = chartRef.current.getOption();
           
           if (existingOption && existingOption.series) {
             const series = existingOption.series as any[];
             
-            // Update colors in existing series
-            series.forEach((seriesItem, index) => {
-              if (seriesItem && seriesItem.data) {
-                const categoryName = seriesItem.name;
-                const colorIndex = index % theme.colors.length;
-                const newColor = kpiColors?.[categoryName]?.color || theme.colors[colorIndex];
-                
-                // Update color in a smooth way
-                if (seriesItem.itemStyle) {
-                  seriesItem.itemStyle.color = newColor;
-                } else {
-                  seriesItem.itemStyle = { color: newColor };
-                }
-                
-                // Update line and area style for line charts
-                if (seriesItem.type === 'line') {
-                  if (seriesItem.lineStyle) {
-                    seriesItem.lineStyle.color = newColor;
-                  } else {
-                    seriesItem.lineStyle = { color: newColor };
+            // Create a new series array with updated colors
+            const updatedSeries = series.map((seriesItem, index) => {
+              if (!seriesItem || !seriesItem.data) return seriesItem;
+              
+              const categoryName = seriesItem.name;
+              const colorIndex = index % theme.colors.length;
+              const newColor = kpiColors?.[categoryName]?.color || theme.colors[colorIndex];
+              
+              // Create a new series item with updated colors
+              return {
+                ...seriesItem,
+                itemStyle: {
+                  ...seriesItem.itemStyle,
+                  color: newColor
+                },
+                lineStyle: seriesItem.type === 'line' ? {
+                  ...seriesItem.lineStyle,
+                  color: newColor
+                } : undefined,
+                areaStyle: seriesItem.type === 'line' ? {
+                  ...seriesItem.areaStyle,
+                  color: {
+                    type: 'linear',
+                    x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                      { offset: 0, color: `${newColor}40` },
+                      { offset: 1, color: `${newColor}00` }
+                    ]
                   }
-                  
-                  if (seriesItem.areaStyle) {
-                    seriesItem.areaStyle.color = {
-                      type: 'linear',
-                      x: 0, y: 0, x2: 0, y2: 1,
-                      colorStops: [
-                        { offset: 0, color: `${newColor}40` }, // 25% opacity at top
-                        { offset: 1, color: `${newColor}00` }  // 0% opacity at bottom
-                      ]
-                    };
-                  }
-                }
-              }
+                } : undefined
+              };
             });
             
-            // Apply the updated series safely
-            if (chartRef.current && chartRef.current.isDisposed?.() !== true) {
-              chartRef.current.setOption({ series }, { replaceMerge: ['series'] });
+            // Apply the updated series with a smooth transition
+            if (chartRef.current && !chartRef.current.isDisposed?.()) {
+              chartRef.current.setOption({
+                series: updatedSeries
+              }, {
+                replaceMerge: ['series'],
+                lazyUpdate: true,
+                notMerge: false
+              });
             }
-          } else {
-            // Fall back to full update if series not available
-            updateChart();
           }
         }
       } catch (error) {
         console.error("Error updating chart theme:", error);
-        // Attempt a full chart refresh if the targeted update fails
-        setTimeout(() => {
-          if (chartRef.current && chartRef.current.isDisposed?.() !== true) {
-            updateChart();
-          }
-        }, 100);
       }
-    }, [theme, kpiColors, mounted, updateChart]);
+    }, [theme, kpiColors, mounted]);
 
     // Original effect for other data changes
     useEffect(() => {
@@ -722,39 +723,22 @@ const ChartContainer = memo(
     }, []);
 
     const clearSelection = useCallback(() => {
-      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+      if (!chartRef.current) return;
+      setSelectedTool(null);
+      setIsSelecting(false);
+      
+      requestAnimationFrame(() => {
+        if (!chartRef.current) return;
+        
+        chartRef.current.setOption({
+          brush: undefined
+        }, { replaceMerge: ['brush'] });
 
-      try {
-        // Clear the current selection
         chartRef.current.dispatchAction({
-          type: "brush",
-          command: "clear",
-          areas: [],
+          type: 'brush',
+          command: 'clear'
         });
-
-        // Reset cursor by disabling brush mode
-        chartRef.current.dispatchAction({
-          type: "takeGlobalCursor",
-          key: "brush",
-          brushOption: null,
-        });
-
-        // Reset selection state
-        setSelectedTool(null);
-        setIsSelecting(false);
-
-        // Force a resize to ensure proper rendering
-        setTimeout(() => {
-          if (chartRef.current && !chartRef.current.isDisposed?.()) {
-            chartRef.current.resize();
-          }
-        }, 50);
-
-      } catch (error) {
-        console.error("Error clearing selection:", error);
-        setSelectedTool(null);
-        setIsSelecting(false);
-      }
+      });
     }, []);
 
     const download = useCallback(
@@ -875,6 +859,73 @@ const ChartContainer = memo(
       }
     }, []);
 
+    const toggleFullscreen = useCallback(() => {
+      if (!fullscreenContainerRef.current) return;
+
+      try {
+        if (!document.fullscreenElement) {
+          // Enter fullscreen
+          if (fullscreenContainerRef.current.requestFullscreen) {
+            fullscreenContainerRef.current.requestFullscreen();
+          } else if ((fullscreenContainerRef.current as any).webkitRequestFullscreen) {
+            (fullscreenContainerRef.current as any).webkitRequestFullscreen();
+          } else if ((fullscreenContainerRef.current as any).msRequestFullscreen) {
+            (fullscreenContainerRef.current as any).msRequestFullscreen();
+          }
+          setIsFullscreen(true);
+        } else {
+          // Exit fullscreen
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+          } else if ((document as any).msExitFullscreen) {
+            (document as any).msExitFullscreen();
+          }
+          setIsFullscreen(false);
+        }
+      } catch (error) {
+        console.error("Error toggling fullscreen:", error);
+      }
+    }, []);
+
+    // Handle fullscreen change events
+    useEffect(() => {
+      const handleFullscreenChange = () => {
+        setIsFullscreen(!!document.fullscreenElement);
+      };
+
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+      return () => {
+        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+      };
+    }, []);
+
+    // Handle fullscreen resize
+    useEffect(() => {
+      if (isFullscreen && chartRef.current) {
+        const handleResize = () => {
+          if (chartRef.current && !chartRef.current.isDisposed?.()) {
+            requestAnimationFrame(() => {
+              try {
+                chartRef.current?.resize();
+              } catch (error) {
+                console.warn('Chart resize error in fullscreen:', error);
+              }
+            });
+          }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+      }
+    }, [isFullscreen]);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -885,6 +936,7 @@ const ChartContainer = memo(
         clearSelection,
         download,
         dispatchAction,
+        toggleFullscreen,
         isValid: () => {
           return chartRef.current !== null && chartRef.current.isDisposed?.() !== true;
         }
@@ -897,6 +949,7 @@ const ChartContainer = memo(
         clearSelection,
         download,
         dispatchAction,
+        toggleFullscreen,
       ]
     );
 
@@ -1015,10 +1068,22 @@ const ChartContainer = memo(
 
     return (
       <div
-        ref={chartContainerRef}
-        className={cn("w-full h-full", className)}
+        ref={fullscreenContainerRef}
+        className={cn(
+          "w-full h-full transition-all duration-300",
+          isFullscreen ? "fixed inset-0 z-50 bg-white" : "relative",
+          className
+        )}
         style={{ width, height }}
-      />
+      >
+        <div
+          ref={chartContainerRef}
+          className={cn(
+            "w-full h-full",
+            isFullscreen ? "p-4" : ""
+          )}
+        />
+      </div>
     );
   })
 );
