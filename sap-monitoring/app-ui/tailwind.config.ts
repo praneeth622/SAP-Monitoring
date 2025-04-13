@@ -66,7 +66,7 @@ export default {
   plugins: [
     require("tailwindcss-animate"),
     require('@tailwindcss/typography'),
-    function({ addUtilities }) {
+    function({ addUtilities }: { addUtilities: (utilities: Record<string, any>) => void }) {
       addUtilities({
         '.scrollbar-hide': {
           /* Firefox */

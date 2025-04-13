@@ -71,7 +71,9 @@ const ChartContainer = memo(
 
     const chartRef = useRef<echarts.ECharts | null>(null);
     const chartContainerRef = useRef<HTMLDivElement>(null);
-    const [selectedTool, setSelectedTool] = useState<'box' | 'lasso' | null>(null);
+    const [selectedTool, setSelectedTool] = useState<"box" | "lasso" | null>(
+      null
+    );
     const [isSelecting, setIsSelecting] = useState(false);
     const [mounted, setMounted] = useState(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -84,7 +86,7 @@ const ChartContainer = memo(
         const itemDate = dayjs(item.date);
         const fromDate = dayjs(dateRange.from);
         const toDate = dayjs(dateRange.to);
-        
+
         // Include data points that fall within the exact date-time range (inclusive)
         return (
           (itemDate.isAfter(fromDate) || itemDate.isSame(fromDate)) &&
@@ -127,7 +129,7 @@ const ChartContainer = memo(
             throttleType: "debounce",
             throttleDelay: 300,
             transformable: true,
-            removeOnClick: true
+            removeOnClick: true,
           },
           toolbox: {
             feature: {
@@ -156,7 +158,7 @@ const ChartContainer = memo(
                 try {
                   chartRef.current?.resize();
                 } catch (error) {
-                  console.warn('Chart resize error:', error);
+                  console.warn("Chart resize error:", error);
                 }
               });
             }
@@ -187,13 +189,13 @@ const ChartContainer = memo(
 
       return () => {
         clearTimeout(initialResizeTimeout);
-        
+
         // Cleanup: disconnect observer and dispose chart
         if (resizeObserverRef.current) {
           resizeObserverRef.current.disconnect();
           resizeObserverRef.current = null;
         }
-        
+
         if (chartRef.current) {
           try {
             chartRef.current.dispose();
@@ -233,7 +235,9 @@ const ChartContainer = memo(
         });
 
         if (categories.length === 0) {
-          console.warn("No categories match activeKPIs, showing all categories");
+          console.warn(
+            "No categories match activeKPIs, showing all categories"
+          );
           categories.push(...uniqueCategories);
         }
 
@@ -269,9 +273,9 @@ const ChartContainer = memo(
           const baseSeriesConfig = {
             name: kpiColors?.[category]?.name || category,
             data: categoryData,
-            itemStyle: { 
+            itemStyle: {
               color,
-              opacity: isActive ? 1 : 0.3 
+              opacity: isActive ? 1 : 0.3,
             },
             emphasis: {
               focus: "series" as const,
@@ -283,9 +287,9 @@ const ChartContainer = memo(
             smooth: true,
             showSymbol: true,
             symbolSize: 6,
-            lineStyle: { 
+            lineStyle: {
               width: 2,
-              opacity: isActive ? 1 : 0.3 
+              opacity: isActive ? 1 : 0.3,
             },
           };
 
@@ -293,8 +297,8 @@ const ChartContainer = memo(
             ? {
                 ...baseSeriesConfig,
                 type: "line" as const,
-                areaStyle: { 
-                  opacity: isActive ? 0.2 : 0.1 
+                areaStyle: {
+                  opacity: isActive ? 0.2 : 0.1,
                 },
               }
             : {
@@ -315,30 +319,41 @@ const ChartContainer = memo(
             const now = new Date();
             const timeDiff = now.getTime() - date.getTime();
             const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
-            
+
             // Get the current zoom level from the chart
             const chart = chartRef.current;
             if (!chart) return value;
-            
+
             const option = chart.getOption();
-            const dataZoom = option.dataZoom?.[0];
+            const dataZoom = Array.isArray(option.dataZoom)
+              ? option.dataZoom[0]
+              : undefined;
             if (!dataZoom) return value;
-            
+
             const zoomLevel = (dataZoom.end - dataZoom.start) / 100;
-            
+
             // Determine the appropriate format based on zoom level
             if (zoomLevel <= 0.1) {
               // Very zoomed in - show time
-              return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+              return `${date.getHours().toString().padStart(2, "0")}:${date
+                .getMinutes()
+                .toString()
+                .padStart(2, "0")}`;
             } else if (zoomLevel <= 0.3) {
               // Moderately zoomed in - show day and time
-              return `${date.getDate()}d ${date.getHours().toString().padStart(2, '0')}h`;
+              return `${date.getDate()}d ${date
+                .getHours()
+                .toString()
+                .padStart(2, "0")}h`;
             } else if (zoomLevel <= 0.6) {
               // Partially zoomed - show day
               return `${date.getMonth() + 1}/${date.getDate()}`;
             } else {
               // Zoomed out - show month and short year
-              return `${date.getMonth() + 1}/${date.getFullYear().toString().slice(-2)}`;
+              return `${date.getMonth() + 1}/${date
+                .getFullYear()
+                .toString()
+                .slice(-2)}`;
             }
           };
         };
@@ -346,17 +361,17 @@ const ChartContainer = memo(
         const option: echarts.EChartsOption = {
           animation: true,
           animationDuration: 300,
-          animationEasing: 'cubicInOut',
+          animationEasing: "cubicInOut",
           grid: {
-            left: '10px',
-            right: '10px',
-            bottom: '35px',
-            top: '20px',
-            containLabel: true
+            left: "10px",
+            right: "10px",
+            bottom: "35px",
+            top: "20px",
+            containLabel: true,
           },
           tooltip: {
             trigger: "axis",
-            axisPointer: { 
+            axisPointer: {
               type: "cross",
               label: {
                 backgroundColor: "rgba(0, 0, 0, 0.7)",
@@ -364,7 +379,7 @@ const ChartContainer = memo(
                 fontSize: 10,
                 padding: [4, 8],
                 borderRadius: 4,
-              }
+              },
             },
             confine: true,
             backgroundColor: "rgba(0, 0, 0, 0.7)",
@@ -378,17 +393,20 @@ const ChartContainer = memo(
             padding: [8, 12],
             extraCssText: "max-width: 200px;",
             formatter: (params: any) => {
-              if (!Array.isArray(params)) return '';
-              
+              if (!Array.isArray(params)) return "";
+
               const date = params[0].axisValue;
               let result = `<div style="margin-bottom: 4px; font-weight: 500;">${date}</div>`;
-              
+
               params.forEach((param: any) => {
                 if (param.value !== null && param.value !== undefined) {
-                  const color = param.color || '#fff';
-                  const value = typeof param.value === 'number' 
-                    ? param.value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                    : param.value;
+                  const color = param.color || "#fff";
+                  const value =
+                    typeof param.value === "number"
+                      ? param.value.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })
+                      : param.value;
                   result += `
                     <div style="display: flex; align-items: center; margin: 2px 0;">
                       <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; margin-right: 6px;"></span>
@@ -397,41 +415,41 @@ const ChartContainer = memo(
                   `;
                 }
               });
-              
+
               return result;
-            }
+            },
           },
           dataZoom: [
             {
-              type: 'slider',
+              type: "slider",
               show: true,
               xAxisIndex: [0],
               start: 0,
               end: 100,
               height: 12,
               bottom: 8,
-              borderColor: 'transparent',
-              backgroundColor: 'rgba(0,0,0,0.05)',
-              fillerColor: 'rgba(0,0,0,0.1)',
+              borderColor: "transparent",
+              backgroundColor: "rgba(0,0,0,0.05)",
+              fillerColor: "rgba(0,0,0,0.1)",
               handleStyle: {
-                color: theme?.colors?.[0] || '#666',
-                borderColor: 'transparent'
+                color: theme?.colors?.[0] || "#666",
+                borderColor: "transparent",
               },
               handleLabel: {
-                show: false
+                show: false,
               },
               moveHandleSize: 0,
               zoomLock: false,
               throttle: 100,
-              zoomOnMouseWheel: true
+              zoomOnMouseWheel: true,
             },
             {
-              type: 'inside',
+              type: "inside",
               xAxisIndex: [0],
               start: 0,
               end: 100,
-              zoomOnMouseWheel: true
-            }
+              zoomOnMouseWheel: true,
+            },
           ],
           xAxis: {
             type: "category",
@@ -481,72 +499,93 @@ const ChartContainer = memo(
         // Check if chart is still valid before setting option
         if (chartRef.current && !chartRef.current.isDisposed?.()) {
           // Force immediate update with smooth transitions for color changes
-          chartRef.current.setOption(option, { 
-            replaceMerge: ['series'],
-            lazyUpdate: false
+          chartRef.current.setOption(option, {
+            replaceMerge: ["series"],
+            lazyUpdate: false,
           });
         }
       } catch (error) {
         console.error("Error updating chart:", error);
       }
-    }, [filteredData, type, activeKPIs, kpiColors, theme, externalOptions, resolution]);
+    }, [
+      filteredData,
+      type,
+      activeKPIs,
+      kpiColors,
+      theme,
+      externalOptions,
+      resolution,
+    ]);
 
     // Add a specific effect to only update colors when theme changes
     useEffect(() => {
       if (!mounted || !chartRef.current) return;
-      
+
       try {
         // If the chart needs a theme update but is already initialized,
         // we can use a targeted update rather than full redraw
         if (chartRef.current && theme?.colors) {
           // Get current option without triggering a redraw
           const existingOption = chartRef.current.getOption();
-          
+
           if (existingOption && existingOption.series) {
             const series = existingOption.series as any[];
-            
+
             // Create a new series array with updated colors
             const updatedSeries = series.map((seriesItem, index) => {
               if (!seriesItem || !seriesItem.data) return seriesItem;
-              
+
               const categoryName = seriesItem.name;
               const colorIndex = index % theme.colors.length;
-              const newColor = kpiColors?.[categoryName]?.color || theme.colors[colorIndex];
-              
+              const newColor =
+                kpiColors?.[categoryName]?.color || theme.colors[colorIndex];
+
               // Create a new series item with updated colors
               return {
                 ...seriesItem,
                 itemStyle: {
                   ...seriesItem.itemStyle,
-                  color: newColor
+                  color: newColor,
                 },
-                lineStyle: seriesItem.type === 'line' ? {
-                  ...seriesItem.lineStyle,
-                  color: newColor
-                } : undefined,
-                areaStyle: seriesItem.type === 'line' ? {
-                  ...seriesItem.areaStyle,
-                  color: {
-                    type: 'linear',
-                    x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                      { offset: 0, color: `${newColor}40` },
-                      { offset: 1, color: `${newColor}00` }
-                    ]
-                  }
-                } : undefined
+                lineStyle:
+                  seriesItem.type === "line"
+                    ? {
+                        ...seriesItem.lineStyle,
+                        color: newColor,
+                      }
+                    : undefined,
+                areaStyle:
+                  seriesItem.type === "line"
+                    ? {
+                        ...seriesItem.areaStyle,
+                        color: {
+                          type: "linear",
+                          x: 0,
+                          y: 0,
+                          x2: 0,
+                          y2: 1,
+                          colorStops: [
+                            { offset: 0, color: `${newColor}40` },
+                            { offset: 1, color: `${newColor}00` },
+                          ],
+                        },
+                      }
+                    : undefined,
               };
             });
-            
+
             // Apply the updated series with a smooth transition
             if (chartRef.current && !chartRef.current.isDisposed?.()) {
-              chartRef.current.setOption({
-                series: updatedSeries
-              }, {
-                replaceMerge: ['series'],
-                lazyUpdate: true,
-                notMerge: false
-              });
+              chartRef.current.setOption(
+                {
+                  series: updatedSeries,
+                },
+                {
+                  replaceMerge: ["series"],
+                  lazyUpdate: true,
+                  notMerge: false,
+                }
+              );
             }
           }
         }
@@ -575,9 +614,10 @@ const ChartContainer = memo(
 
       try {
         const option = chartRef.current.getOption();
-        const dataZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
-          ? option.dataZoom[0]
-          : undefined;
+        const dataZoom =
+          Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+            ? option.dataZoom[0]
+            : undefined;
 
         if (!dataZoom) return;
 
@@ -591,13 +631,18 @@ const ChartContainer = memo(
         const newEnd = Math.min(100, end - 10);
 
         // Update dataZoom directly instead of using dispatchAction
-        chartRef.current.setOption({
-          dataZoom: [{
-            ...dataZoom,
-            start: newStart,
-            end: newEnd
-          }]
-        }, { replaceMerge: ['dataZoom'] });
+        chartRef.current.setOption(
+          {
+            dataZoom: [
+              {
+                ...dataZoom,
+                start: newStart,
+                end: newEnd,
+              },
+            ],
+          },
+          { replaceMerge: ["dataZoom"] }
+        );
       } catch (error) {
         console.error("Error in zoom in:", error);
       }
@@ -608,9 +653,10 @@ const ChartContainer = memo(
 
       try {
         const option = chartRef.current.getOption();
-        const dataZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
-          ? option.dataZoom[0]
-          : undefined;
+        const dataZoom =
+          Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+            ? option.dataZoom[0]
+            : undefined;
 
         if (!dataZoom) return;
 
@@ -624,13 +670,18 @@ const ChartContainer = memo(
         const newEnd = Math.min(100, end + 10);
 
         // Update dataZoom directly instead of using dispatchAction
-        chartRef.current.setOption({
-          dataZoom: [{
-            ...dataZoom,
-            start: newStart,
-            end: newEnd
-          }]
-        }, { replaceMerge: ['dataZoom'] });
+        chartRef.current.setOption(
+          {
+            dataZoom: [
+              {
+                ...dataZoom,
+                start: newStart,
+                end: newEnd,
+              },
+            ],
+          },
+          { replaceMerge: ["dataZoom"] }
+        );
       } catch (error) {
         console.error("Error in zoom out:", error);
       }
@@ -641,23 +692,26 @@ const ChartContainer = memo(
 
       try {
         // Configure brush options for box selection
-        chartRef.current.setOption({
-          brush: {
-            toolbox: ["rect", "keep", "clear"],
-            xAxisIndex: 0,
-            brushLink: "all",
-            outOfBrush: {
-              colorAlpha: 0.1,
-            },
-            throttleType: "debounce",
-            throttleDelay: 100,
-            brushStyle: {
-              borderWidth: 1,
-              color: "rgba(120, 140, 180, 0.3)",
-              borderColor: "rgba(120, 140, 180, 0.8)",
+        chartRef.current.setOption(
+          {
+            brush: {
+              toolbox: ["rect", "keep", "clear"],
+              xAxisIndex: 0,
+              brushLink: "all",
+              outOfBrush: {
+                colorAlpha: 0.1,
+              },
+              throttleType: "debounce",
+              throttleDelay: 100,
+              brushStyle: {
+                borderWidth: 1,
+                color: "rgba(120, 140, 180, 0.3)",
+                borderColor: "rgba(120, 140, 180, 0.8)",
+              },
             },
           },
-        }, { replaceMerge: ["brush"] });
+          { replaceMerge: ["brush"] }
+        );
 
         // Enable box selection
         chartRef.current.dispatchAction({
@@ -684,23 +738,26 @@ const ChartContainer = memo(
 
       try {
         // Configure brush options for lasso selection
-        chartRef.current.setOption({
-          brush: {
-            toolbox: ["polygon", "keep", "clear"],
-            xAxisIndex: 0,
-            brushLink: "all",
-            outOfBrush: {
-              colorAlpha: 0.1,
-            },
-            throttleType: "debounce",
-            throttleDelay: 100,
-            brushStyle: {
-              borderWidth: 1,
-              color: "rgba(120, 140, 180, 0.3)",
-              borderColor: "rgba(120, 140, 180, 0.8)",
+        chartRef.current.setOption(
+          {
+            brush: {
+              toolbox: ["polygon", "keep", "clear"],
+              xAxisIndex: 0,
+              brushLink: "all",
+              outOfBrush: {
+                colorAlpha: 0.1,
+              },
+              throttleType: "debounce",
+              throttleDelay: 100,
+              brushStyle: {
+                borderWidth: 1,
+                color: "rgba(120, 140, 180, 0.3)",
+                borderColor: "rgba(120, 140, 180, 0.8)",
+              },
             },
           },
-        }, { replaceMerge: ["brush"] });
+          { replaceMerge: ["brush"] }
+        );
 
         // Enable polygon selection
         chartRef.current.dispatchAction({
@@ -726,17 +783,20 @@ const ChartContainer = memo(
       if (!chartRef.current) return;
       setSelectedTool(null);
       setIsSelecting(false);
-      
+
       requestAnimationFrame(() => {
         if (!chartRef.current) return;
-        
-        chartRef.current.setOption({
-          brush: undefined
-        }, { replaceMerge: ['brush'] });
+
+        chartRef.current.setOption(
+          {
+            brush: undefined,
+          },
+          { replaceMerge: ["brush"] }
+        );
 
         chartRef.current.dispatchAction({
-          type: 'brush',
-          command: 'clear'
+          type: "brush",
+          command: "clear",
         });
       });
     }, []);
@@ -851,7 +911,7 @@ const ChartContainer = memo(
 
     const dispatchAction = useCallback((action: any) => {
       if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
-      
+
       try {
         chartRef.current.dispatchAction(action);
       } catch (error) {
@@ -867,9 +927,13 @@ const ChartContainer = memo(
           // Enter fullscreen
           if (fullscreenContainerRef.current.requestFullscreen) {
             fullscreenContainerRef.current.requestFullscreen();
-          } else if ((fullscreenContainerRef.current as any).webkitRequestFullscreen) {
+          } else if (
+            (fullscreenContainerRef.current as any).webkitRequestFullscreen
+          ) {
             (fullscreenContainerRef.current as any).webkitRequestFullscreen();
-          } else if ((fullscreenContainerRef.current as any).msRequestFullscreen) {
+          } else if (
+            (fullscreenContainerRef.current as any).msRequestFullscreen
+          ) {
             (fullscreenContainerRef.current as any).msRequestFullscreen();
           }
           setIsFullscreen(true);
@@ -895,14 +959,26 @@ const ChartContainer = memo(
         setIsFullscreen(!!document.fullscreenElement);
       };
 
-      document.addEventListener('fullscreenchange', handleFullscreenChange);
-      document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.addEventListener('msfullscreenchange', handleFullscreenChange);
+      document.addEventListener("fullscreenchange", handleFullscreenChange);
+      document.addEventListener(
+        "webkitfullscreenchange",
+        handleFullscreenChange
+      );
+      document.addEventListener("msfullscreenchange", handleFullscreenChange);
 
       return () => {
-        document.removeEventListener('fullscreenchange', handleFullscreenChange);
-        document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-        document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+        document.removeEventListener(
+          "fullscreenchange",
+          handleFullscreenChange
+        );
+        document.removeEventListener(
+          "webkitfullscreenchange",
+          handleFullscreenChange
+        );
+        document.removeEventListener(
+          "msfullscreenchange",
+          handleFullscreenChange
+        );
       };
     }, []);
 
@@ -915,14 +991,14 @@ const ChartContainer = memo(
               try {
                 chartRef.current?.resize();
               } catch (error) {
-                console.warn('Chart resize error in fullscreen:', error);
+                console.warn("Chart resize error in fullscreen:", error);
               }
             });
           }
         };
 
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
       }
     }, [isFullscreen]);
 
@@ -938,8 +1014,11 @@ const ChartContainer = memo(
         dispatchAction,
         toggleFullscreen,
         isValid: () => {
-          return chartRef.current !== null && chartRef.current.isDisposed?.() !== true;
-        }
+          return (
+            chartRef.current !== null &&
+            chartRef.current.isDisposed?.() !== true
+          );
+        },
       }),
       [
         zoomIn,
@@ -1053,7 +1132,7 @@ const ChartContainer = memo(
       if (mounted && chartRef.current && !chartRef.current.isDisposed?.()) {
         try {
           updateChart();
-          
+
           // Force resize after data update to ensure proper rendering
           setTimeout(() => {
             if (chartRef.current && !chartRef.current.isDisposed?.()) {
@@ -1078,10 +1157,7 @@ const ChartContainer = memo(
       >
         <div
           ref={chartContainerRef}
-          className={cn(
-            "w-full h-full",
-            isFullscreen ? "p-4" : ""
-          )}
+          className={cn("w-full h-full", isFullscreen ? "p-4" : "")}
         />
       </div>
     );
