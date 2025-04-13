@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { CalendarIcon } from "lucide-react"
-import { addDays } from "date-fns"
+import { addDays, format } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -109,14 +109,16 @@ export function DateRangePicker({
         from: '00:00',
         to: '23:59'
       })
+      onDateChange(newDate)
+      setIsOpen(false)
     }
-  }, [])
+  }, [onDateChange])
 
   const displayText = React.useMemo(() => {
-    if (!date?.from) return "Pick a date range"
+    if (!date?.from) return "Select dates"
     
-    const fromText = dayjs(date.from).format("MMM DD, YYYY")
-    const toText = date.to ? dayjs(date.to).format("MMM DD, YYYY") : ""
+    const fromText = dayjs(date.from).format("MMM DD")
+    const toText = date.to ? dayjs(date.to).format("MMM DD") : ""
     
     if (showTime) {
       const fromTime = dayjs(date.from).format("HH:mm")
@@ -135,7 +137,7 @@ export function DateRangePicker({
             id="date"
             variant={"outline"}
             className={cn(
-              "w-full justify-start text-left font-normal",
+              "w-full justify-start text-left font-normal h-9",
               !date && "text-muted-foreground"
             )}
           >
@@ -144,24 +146,11 @@ export function DateRangePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-auto p-0"
+          className="w-auto p-2"
           align={align}
         >
-          <div className="space-y-4 p-4">
-            <Select onValueChange={handlePresetChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a preset range" />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                {presets.map((preset) => (
-                  <SelectItem key={preset.value} value={preset.value}>
-                    {preset.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="border rounded-md p-3">
+          <div className="space-y-3">
+            <div className="flex gap-2">
               <Calendar
                 initialFocus
                 mode="range"
@@ -171,49 +160,66 @@ export function DateRangePicker({
                 numberOfMonths={1}
                 disabled={(date) => date > new Date() || date < new Date('2000-01-01')}
               />
-            </div>
+              <div className="space-y-2 min-w-[120px]">
+                <Select onValueChange={handlePresetChange}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Quick select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {presets.map((preset) => (
+                      <SelectItem key={preset.value} value={preset.value} className="text-xs">
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-            {showTime && tempDate?.from && tempDate?.to && (
-              <div className="grid gap-4">
-                <div className="flex gap-2">
-                  <div className="grid gap-1.5 flex-1">
-                    <label className="text-sm font-medium">Start Time</label>
-                    <input
-                      type="time"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                      value={tempTime.from}
-                      onChange={(e) => setTempTime(prev => ({ ...prev, from: e.target.value }))}
-                    />
-                  </div>
-                  <div className="grid gap-1.5 flex-1">
-                    <label className="text-sm font-medium">End Time</label>
-                    <input
-                      type="time"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                      value={tempTime.to}
-                      onChange={(e) => setTempTime(prev => ({ ...prev, to: e.target.value }))}
-                    />
-                  </div>
+                {showTime && tempDate?.from && tempDate?.to && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs">Start</label>
+                      <input
+                        type="time"
+                        className="w-full h-8 rounded-md border px-2 text-xs"
+                        value={tempTime.from}
+                        onChange={(e) => setTempTime(prev => ({ ...prev, from: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs">End</label>
+                      <input
+                        type="time"
+                        className="w-full h-8 rounded-md border px-2 text-xs"
+                        value={tempTime.to}
+                        onChange={(e) => setTempTime(prev => ({ ...prev, to: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="flex flex-col gap-1 pt-2">
+                  <Button
+                    size="sm"
+                    className="text-xs"
+                    onClick={handleApply}
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      setTempDate(undefined)
+                      setTempTime({ from: '00:00', to: '23:59' })
+                      onDateChange(undefined)
+                      setIsOpen(false)
+                    }}
+                  >
+                    Reset
+                  </Button>
                 </div>
               </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setTempDate(undefined)
-                  setTempTime({ from: '00:00', to: '23:59' })
-                  onDateChange(undefined)
-                  setIsOpen(false)
-                }}
-              >
-                Reset
-              </Button>
-              <Button size="sm" onClick={handleApply}>
-                Apply
-              </Button>
             </div>
           </div>
         </PopoverContent>

@@ -20,6 +20,8 @@ import {
   Siren,
   Tickets,
   Users2,
+  LogOut,
+  UserCircle,
 } from "lucide-react";
 import {
   TbLayoutSidebarLeftCollapse,
@@ -39,6 +41,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useRouter } from "next/navigation";
 import image from "../public/assets/1.png";
 
@@ -187,6 +199,18 @@ export function Sidebar() {
       case "Manage Systems":
         router.push("/systems/manage-systems");
         break;
+case "System Topology":
+router.push("/system-topology");
+break;
+case "System Topology":
+        router.push("/system-topology");
+        break;
+      case "System Topology":
+        router.push("/system-topology");
+        break;
+      case "System Topology":
+        router.push("/system-topology");
+        break;
       case "System Topology":
         router.push("/system-topology");
         break;
@@ -197,7 +221,13 @@ export function Sidebar() {
         router.push("/user-management/user-access");
         break;
       case "Manage User":
-        router.push("/user-management/Manage-user");
+        router.push("/user-management/manage-users");
+        break;
+case "Alert Monitering": // Fix the typo and add routing
+        router.push("/alerts");
+        break;
+      case "Incidents":
+        router.push("/incidents");
         break;
       default:
         break;
@@ -208,7 +238,7 @@ export function Sidebar() {
   const handleSubItemClick = (label: string, path: string) => {
     setActiveSubItem(label);
     if (label === "Add Systems") {
-      router.push("/manage-systems");
+      router.push("/systems/manage-systems");
     } else {
       router.push(path);
     }
@@ -263,10 +293,10 @@ export function Sidebar() {
               ) : (
                 <div className="h-8 w-32">
                   <Image
-                    src="/assets/1.png"
+                    src="/assets/13.png"
                     alt="SwiftAI"
                     fill
-                    className="object-contain"
+                    className="object-contain w-full h-full"
                     priority
                   />
                 </div>
@@ -342,7 +372,6 @@ export function Sidebar() {
                 <div className="space-y-1 py-1">
                   <div className="max-w-full  overflow-hidden space-y-2">
                     {[
-                      { path: "/manage-systems", label: "Add Systems" },
                       {
                         path: "/systems/extraction-config",
                         label: "Extarction Config",
@@ -392,32 +421,66 @@ export function Sidebar() {
                 onClick={() => handleItemClick("Incidents")}
               />
             </div>
-            {/* <div className="space-y- py-3">
-              {!isCollapsed && <div className="text-sm text-muted-foreground font-medium">Alerts</div>}
+            {/* <div className="space-y- py-2">
+              {!isCollapsed && (
+                <div className="text-sm text-muted-foreground font-medium">
+                  Account
+                </div>
+              )}
               <NavItem
-                icon={Siren}
-                label="Alert Monitering"
+                icon={UserCircle}
+                label="Profile"
                 isCollapsed={isCollapsed}
                 onExpand={handleExpand}
-                isActive={activeItem === "Alert Monitering"}
-                onClick={() => handleItemClick("Alert Monitering")}
+                isActive={activeItem === "Profile"}
+                onClick={() => {
+                  setIsCollapsed(false);
+                  const dropdown = document.getElementById(
+                    "profile-dropdown-trigger"
+                  );
+                  if (dropdown) {
+                    dropdown.click();
+                  }
+                }}
               />
             </div> */}
-
-            {/* [
-    {
-        "user_id": "USER_TEST_3",
-        "name": "Test User-3 updated",
-        "mail_id": "testuser3@switai.co",
-        "role": "User"
-    },
-    {
-        "user_id": "USER_TEST_4",
-        "name": "Test User-4",
-        "mail_id": "testuser4@switai.co",
-        "role": "User"
-    }
-] */}
+            <DropdownMenu>
+              <DropdownMenuTrigger id="profile-dropdown-trigger" className="hidden">
+                <span />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" side="right">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/account/profile")}
+                  >
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    <span>Profile Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/account/settings")}
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>General Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/account/notifications")}
+                  >
+                    <Bell className="mr-2 h-4 w-4" />
+                    <span>Notifications</span>
+                    <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+                      3
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push("/auth/logout")}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="space-y- py-2">
               {!isCollapsed && (
                 <div className="text-sm text-muted-foreground font-medium">
@@ -441,77 +504,85 @@ export function Sidebar() {
                 onClick={() => handleItemClick("User Access")}
               />
             </div>
-            {/* <div className="space-y-1 py-2">
-              {!isCollapsed && <div className="text-sm font-medium mb-2">User Access</div>}
-              <NavItem
-                icon={MonitorCog}
-                label="User Access"
-                isCollapsible={!isCollapsed}
-                isCollapsed={isCollapsed}
-                onExpand={handleExpand}
-                isActive={activeItem === "User Access"}
-                onClick={() => handleItemClick("User Access")}
-              >
-                <div className="space-y-1 py-1">
-                  <div className="max-w-full overflow-hidden space-y-2">
-                    {[
-                      { path: "/", label: "User Management" },
-                      { path: "/", label: "Create User" },
-                      { path: "/user-access", label: "User Access" },
-                    ].map((item, index) => (
-                      <Button
-                        key={index}
-                        variant="ghost"
-                        className={cn(
-                          "w-full justify-start text-sm py-2 px-2 h-auto whitespace-normal text-left",
-                          activeSubItem === item.label && "bg-accent text-accent-foreground font-medium"
-                        )}
-                        onClick={() => handleSubItemClick(item.label, item.path)}
-                      >
-                        {item.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </NavItem>
-            </div> */}
           </nav>
         </div>
 
         {/* Update footer section */}
         <div className="border-t p-3 mt-auto bg-card/50">
           <div className="space-y-1">
-            <NavItem
-              icon={Bell}
-              label="Notifications"
-              badge={3}
-              isCollapsed={isCollapsed}
-              onExpand={handleExpand}
-              isActive={activeItem === "Notifications"}
-              onClick={() => handleItemClick("Notifications")}
-            />
-            <NavItem
-              icon={Settings}
-              label="Settings"
-              isCollapsed={isCollapsed}
-              onExpand={handleExpand}
-              isActive={activeItem === "Settings"}
-              onClick={() => handleItemClick("Settings")}
-            />
+            {isCollapsed ? (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-center"
+                      onClick={() => setIsCollapsed(false)}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src="/avatars/user.png" alt="User" />
+                        <AvatarFallback>JD</AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Profile</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start p-3 h-auto hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src="/avatars/user.png" alt="User" />
+                        <AvatarFallback>JD</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">John Doe</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          johndoe@gmail.com
+                        </div>
+                      </div>
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" side="right">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => router.push("/profile")}>
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push("/settings")}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/notifications")}
+                    >
+                      <Bell className="mr-2 h-4 w-4" />
+                      <span>Notifications</span>
+                      {/* Optional: Add notification badge */}
+                      <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+                        3
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => router.push("/logout")}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
-          {!isCollapsed && (
-            <Link href="/profile">
-              <div className="mt-4 flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-accent/50 transition-colors">
-                <div className="h-8 w-8 rounded-full bg-muted" />
-                <div className="flex-1 truncate">
-                  <div className="text-sm font-medium">John Doe</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    johndoe@gmail.com
-                  </div>
-                </div>
-              </div>
-            </Link>
-          )}
         </div>
       </div>
     </div>

@@ -65,7 +65,7 @@ const EditSystemSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent>
+      <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
         <SheetHeader>
           <SheetTitle>Edit System</SheetTitle>
         </SheetHeader>

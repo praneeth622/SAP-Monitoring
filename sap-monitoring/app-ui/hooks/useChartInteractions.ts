@@ -1,12 +1,22 @@
 import { useCallback } from 'react'
-import type * as echarts from 'echarts'
+import * as echarts from 'echarts'
 
 interface UseChartInteractionsProps {
   chartRef: React.RefObject<HTMLDivElement>
-  chartInstance: React.RefObject<echarts.ECharts | null>
+  chartInstance: React.MutableRefObject<echarts.ECharts | null>
   theme?: string
   onBrushSelected?: (params: any) => void
   onDataZoom?: (params: any) => void
+}
+
+interface BrushSelectedParams {
+  batch: Array<{
+    selected: Array<any>
+  }>
+}
+
+interface DataZoomParams {
+  batch?: Array<any>
 }
 
 export const useChartInteractions = ({
@@ -26,14 +36,14 @@ export const useChartInteractions = ({
     chartInstance.current = echarts.init(chartRef.current, theme === 'dark' ? 'dark' : undefined)
 
     // Set up event listeners
-    chartInstance.current.on('brushSelected', (params) => {
+    chartInstance.current.on('brushSelected', (params: any) => {
       const brushComponent = params.batch[0]
       if (brushComponent?.selected?.length > 0) {
         onBrushSelected?.(brushComponent.selected)
       }
     })
 
-    chartInstance.current.on('datazoom', (params) => {
+    chartInstance.current.on('datazoom', (params: any) => {
       if (params.batch?.[0]) {
         onDataZoom?.(params.batch[0])
       }

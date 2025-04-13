@@ -1,19 +1,25 @@
 "use client";
-
-import React, {
-  useEffect,
-  useRef,
-  memo,
-  useState,
-  useCallback,
-  useImperativeHandle,
-} from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import React, { memo, useImperativeHandle } from "react";
 import * as echarts from "echarts";
 import { ChartType, DataPoint } from "@/types";
 import { ChartToolbar } from "./ChartToolbar";
 import { DateRange } from "react-day-picker";
 import dayjs from "dayjs";
 import type { EChartsOption, ECharts } from "echarts";
+import { cn } from "@/lib/utils";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { saveAs } from "file-saver";
+import { Button } from "../ui/button";
+import { jsPDF } from "jspdf";
 
 interface ChartContainerProps {
   data: DataPoint[];
@@ -28,9 +34,11 @@ interface ChartContainerProps {
     name: string;
     colors: string[];
   };
+  width?: string;
+  height?: string;
+  resolution?: string;
 }
 
-// Add React.forwardRef wrapper and define ref type
 const ChartContainer = memo(
   React.forwardRef<
     {
@@ -40,6 +48,9 @@ const ChartContainer = memo(
       lassoSelect: () => void;
       clearSelection: () => void;
       download: (format: "png" | "svg" | "pdf" | "csv" | "json") => void;
+      dispatchAction?: (action: any) => void;
+      isValid: () => boolean;
+      toggleFullscreen: () => void;
     },
     ChartContainerProps
   >((props, ref) => {
@@ -53,582 +64,1030 @@ const ChartContainer = memo(
       className,
       options: externalOptions,
       theme,
+      width,
+      height,
+      resolution,
     } = props;
 
-    const chartRef = useRef<HTMLDivElement>(null);
-    const chartInstance = useRef<echarts.ECharts | null>(null);
+    const chartRef = useRef<echarts.ECharts | null>(null);
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const [selectedTool, setSelectedTool] = useState<'box' | 'lasso' | null>(null);
     const [isSelecting, setIsSelecting] = useState(false);
-    const [selectedTool, setSelectedTool] = useState<"box" | "lasso" | null>(
-      null
-    );
     const [mounted, setMounted] = useState(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const fullscreenContainerRef = useRef<HTMLDivElement>(null);
 
     const filteredData = React.useMemo(() => {
       if (!dateRange?.from || !dateRange?.to) return data;
-
       return data.filter((item) => {
         const itemDate = dayjs(item.date);
         const fromDate = dayjs(dateRange.from);
         const toDate = dayjs(dateRange.to);
-        return itemDate.isAfter(fromDate) && itemDate.isBefore(toDate);
+        
+        // Include data points that fall within the exact date-time range (inclusive)
+        return (
+          (itemDate.isAfter(fromDate) || itemDate.isSame(fromDate)) &&
+          (itemDate.isBefore(toDate) || itemDate.isSame(toDate))
+        );
       });
     }, [data, dateRange]);
 
     const initChart = useCallback(() => {
-      if (!chartRef.current) return;
+      if (!chartContainerRef.current) return;
 
-      if (chartInstance.current) {
-        chartInstance.current.dispose();
-      }
-
-      chartInstance.current = echarts.init(chartRef.current);
-      setMounted(true);
-
-      // Set up resize observer
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-      }
-
-      resizeObserverRef.current = new ResizeObserver((entries) => {
-        if (chartInstance.current) {
-          requestAnimationFrame(() => {
-            chartInstance.current?.resize();
-          });
+      try {
+        // Safely dispose of the previous chart instance
+        if (chartRef.current) {
+          try {
+            chartRef.current.dispose();
+          } catch (err) {
+            console.warn("Error disposing previous chart instance:", err);
+          }
+          chartRef.current = null;
         }
-      });
 
-      resizeObserverRef.current.observe(chartRef.current);
+        // Create a new chart instance
+        const chart = echarts.init(chartContainerRef.current);
+
+        // Add brush component during initialization with safe defaults
+        const initOptions = {
+          brush: {
+            toolbox: ["rect", "polygon", "keep", "clear"] as const,
+            xAxisIndex: 0,
+            brushLink: "all",
+            outOfBrush: {
+              colorAlpha: 0.1,
+            },
+            brushStyle: {
+              borderWidth: 1,
+              color: "rgba(120, 140, 180, 0.2)",
+              borderColor: "rgba(120, 140, 180, 0.8)",
+            },
+            throttleType: "debounce",
+            throttleDelay: 300,
+            transformable: true,
+            removeOnClick: true
+          },
+          toolbox: {
+            feature: {
+              brush: {
+                type: ["rect", "polygon", "clear"] as const,
+              },
+            },
+            show: false,
+          },
+          timeline: undefined,
+        } satisfies echarts.EChartsOption;
+
+        chart.setOption(initOptions);
+        chartRef.current = chart;
+        setMounted(true);
+
+        // Set up resize observer
+        if (resizeObserverRef.current) {
+          resizeObserverRef.current.disconnect();
+        }
+
+        resizeObserverRef.current = new ResizeObserver((entries) => {
+          entries.forEach((entry) => {
+            if (chartRef.current && !chartRef.current.isDisposed?.()) {
+              requestAnimationFrame(() => {
+                try {
+                  chartRef.current?.resize();
+                } catch (error) {
+                  console.warn('Chart resize error:', error);
+                }
+              });
+            }
+          });
+        });
+
+        if (chartContainerRef.current) {
+          resizeObserverRef.current.observe(chartContainerRef.current);
+        }
+      } catch (error) {
+        console.error("Error initializing chart:", error);
+      }
     }, []);
 
     useEffect(() => {
       initChart();
 
+      // Force a resize after initialization to ensure proper rendering
+      const initialResizeTimeout = setTimeout(() => {
+        if (chartRef.current && !chartRef.current.isDisposed?.()) {
+          try {
+            chartRef.current.resize();
+          } catch (error) {
+            console.warn("Error resizing chart after init:", error);
+          }
+        }
+      }, 100);
+
       return () => {
+        clearTimeout(initialResizeTimeout);
+        
+        // Cleanup: disconnect observer and dispose chart
         if (resizeObserverRef.current) {
           resizeObserverRef.current.disconnect();
+          resizeObserverRef.current = null;
         }
-        if (chartInstance.current) {
-          chartInstance.current.dispose();
-          chartInstance.current = null;
+        
+        if (chartRef.current) {
+          try {
+            chartRef.current.dispose();
+          } catch (error) {
+            console.warn("Error disposing chart on unmount:", error);
+          }
+          chartRef.current = null;
         }
       };
     }, [initChart]);
 
     const updateChart = useCallback(() => {
-      if (!chartInstance.current) return;
-
-      // Debug the data coming in
-      console.log("Updating chart with data:", filteredData.length, "points");
-      console.log("Active KPIs:", activeKPIs ? 
-        (activeKPIs instanceof Set ? Array.from(activeKPIs) : activeKPIs) : 'none');
-      console.log("KPI Colors:", kpiColors || 'none');
-      console.log("Current theme:", theme);
-
-      // Create a fallback for activeKPIs if it's undefined or empty
-      let effectiveActiveKPIs: Set<string> | string[] = new Set();
-      
-      if (activeKPIs) {
-        if (activeKPIs instanceof Set && activeKPIs.size > 0) {
-          effectiveActiveKPIs = activeKPIs;
-        } else if (Array.isArray(activeKPIs) && activeKPIs.length > 0) {
-          effectiveActiveKPIs = activeKPIs;
-        } else {
-          // If empty, use all categories as active
-          effectiveActiveKPIs = Array.from(
-            new Set(filteredData.map(item => item.category.toLowerCase()))
-          );
-          console.log("No active KPIs specified, using all:", effectiveActiveKPIs);
-        }
-      } else {
-        // If activeKPIs is undefined, use all categories
-        effectiveActiveKPIs = Array.from(
-          new Set(filteredData.map(item => item.category.toLowerCase()))
-        );
-        console.log("ActiveKPIs is undefined, using all categories:", effectiveActiveKPIs);
-      }
-
-      const categories = Array.from(
-        new Set(filteredData.map((item) => item.category))
-      ).filter((category) => {
-        const categoryLower = category.toLowerCase();
-        
-        // Check if category is active based on effectiveActiveKPIs type
-        if (effectiveActiveKPIs instanceof Set) {
-          return effectiveActiveKPIs.has(categoryLower);
-        } else if (Array.isArray(effectiveActiveKPIs)) {
-          return effectiveActiveKPIs.includes(categoryLower);
-        }
-        
-        return true; // Default to including the category if activeKPIs is invalid
-      });
-
-      console.log("Filtered categories:", categories);
-
-      // Handle empty categories case
-      if (categories.length === 0) {
-        console.warn("No active categories found, showing chart with no data");
-        chartInstance.current.setOption({
-          title: {
-            text: 'No data available',
-            left: 'center',
-            top: 'center',
-            textStyle: {
-              fontSize: 14,
-              fontWeight: 'normal'
-            }
-          },
-          grid: {
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0
-          }
-        });
+      if (!chartRef.current || !filteredData || filteredData.length === 0) {
+        console.warn("No data to display or chart not initialized");
         return;
       }
 
-      const dates = Array.from(new Set(filteredData.map((item) => item.date))).sort((a, b) => {
-        return new Date(a).getTime() - new Date(b).getTime();
-      });
-
-      const options: echarts.EChartsOption = {
-        animation: true,
-        animationDuration: 300,
-        animationEasing: "cubicOut",
-
-        grid: {
-          top: 10, // Reduced from 25 to minimize space below title
-          right: "3%",
-          bottom: 35, // Reduced from 45
-          left: "3%",
-          containLabel: true,
-        },
-
-        tooltip: {
-          trigger: "axis",
-          axisPointer: {
-            type: "cross",
-            label: {
-              backgroundColor: "#6a7985",
-            },
-          },
-          formatter: (params: any) => {
-            const date = params[0].axisValue;
-            let html = `<div style="font-weight: bold">${dayjs(date).format(
-              "MMM D, YYYY HH:mm"
-            )}</div>`;
-            params.forEach((param: any) => {
-              const kpiId = param.seriesName.toLowerCase();
-              const color = kpiColors && kpiColors[kpiId]?.color || param.color;
-              html += `
-              <div style="color: ${color}">
-                <span style="display: inline-block; width: 10px; height: 10px; background: ${color};  margin-right: 5px;"></span>
-                ${param.seriesName}: ${param.value.toLocaleString("en-US", {
-                style: "currency",
-                currency: "INR",
-              })}
-              </div>`;
-            });
-            return html;
-          },
-        },
-
-        xAxis: {
-          type: "category",
-          boundaryGap: type === "bar",
-          data: dates,
-          axisLabel: {
-            formatter: (value: string) => {
-              // Adjust formatter based on date density
-              const dateObj = new Date(value);
-              if (dates.length > 200) {
-                // High density - show only hours and minutes
-                return dayjs(value).format("HH:mm");
-              } else if (dates.length > 50) {
-                // Medium density
-                return dayjs(value).format("MM/DD HH:mm");
-              } else {
-                // Low density - show more detail
-                return dayjs(value).format("MM/DD HH:mm");
-              }
-            },
-            interval: Math.ceil(dates.length / 12), // Show more labels for better readability
-            rotate: 0,
-            margin: 8, // Reduced from 12
-            color: "#666",
-            fontSize: 10, // Reduced from 11
-          },
-          axisTick: {
-            alignWithLabel: true,
-          },
-          axisLine: {
-            lineStyle: {
-              color: "#ddd", // Lighter axis line
-            },
-          },
-        },
-
-        yAxis: {
-          type: "value",
-          axisLabel: {
-            formatter: (value: number) =>
-              value >= 1000000
-                ? `${(value / 1000000).toFixed(1)}M`
-                : value >= 1000
-                ? `${(value / 1000).toFixed(0)}K`
-                : value.toString(),
-            color: "#666",
-            fontSize: 10, // Reduced from 11
-            margin: 4, // Added smaller margin
-          },
-          splitLine: {
-            lineStyle: {
-              color: "#f0f0f0", // Lighter grid lines
-            },
-          },
-          axisLine: {
-            show: false, // Hide y-axis line for cleaner look
-          },
-          axisTick: {
-            show: false, // Hide y-axis ticks
-          },
-        },
-
-        dataZoom: [
-          {
-            type: "inside",
-            start: 0,
-            end: 100,
-          },
-          {
-            show: true,
-            type: "slider",
-            bottom: 30, // Adjusted position to be above parameters
-            height: 12,
-            borderColor: "transparent",
-            backgroundColor: "rgba(200,200,200,0.15)",
-            fillerColor: "rgba(144,197,237,0.1)",
-            handleStyle: {
-              color: "#fff",
-              shadowBlur: 2,
-              shadowColor: "rgba(0,0,0,0.2)",
-              shadowOffsetX: 0,
-              shadowOffsetY: 1,
-            },
-            textStyle: {
-              fontSize: 10, // Use number instead of string with unit
-              color: "#666",
-            },
-            moveHandleStyle: {
-              opacity: 0.3,
-            },
-          },
-        ],
-
-        series: categories.map((category, index) => {
-          // Ensure we get the lowercase version of the category for kpiId
-          const kpiId = category.toLowerCase();
-          
-          // Log to debug color identification
-          console.log(`Applying color for KPI: ${kpiId}`);
-
-          // Always use color from kpiColors if available - highest priority
-          let color;
-          if (kpiColors && kpiColors[kpiId] && kpiColors[kpiId].color) {
-            color = kpiColors[kpiId].color;
-            console.log(`Using kpiColors color for ${kpiId}: ${color}`);
-          } 
-          // If no color from kpiColors, try theme colors as fallback
-          else if (theme?.colors && theme.colors.length > 0) {
-            color = theme.colors[index % theme.colors.length];
-            console.log(`Using theme color for ${kpiId}: ${color}`);
-          }
-          // Final fallback to default palette
-          else {
-            color = [
-              "#3B82F6", // blue
-              "#8B5CF6", // purple
-              "#EC4899", // pink
-              "#10B981", // green
-              "#F97316", // orange
-              "#EF4444", // red
-            ][index % 6];
-            console.log(`Using fallback color for ${kpiId}: ${color}`);
-          }
-
-          return {
-            name: category,
-            type,
-            data: dates.map((date) => {
-              const point = filteredData.find(
-                (item) => item.date === date && item.category === category
-              );
-              return point ? point.value : null;
-            }),
-            smooth: true,
-            symbolSize: 5, // Larger symbols for better visibility
-            showSymbol: dates.length < 50,
-            emphasis: {
-              focus: "series",
-              scale: 1.1,
-              lineStyle: {
-                width: 3.5, // Thicker on hover
-                shadowBlur: 10,
-                shadowColor: color
-              }
-            },
-            // Add !important to make sure color is applied
-            itemStyle: {
-              color: color,
-              borderWidth: 1,
-              borderColor: color
-            },
-            lineStyle: {
-              width: 3, // Thicker lines for better visibility
-              color: color, // Make sure color is explicitly set
-              shadowBlur: 0,
-              join: 'round'
-            },
-            ...(type === "line" && {
-              areaStyle: {
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                  {
-                    offset: 0,
-                    color: color.startsWith("rgb")
-                      ? color.replace(")", ", 0.35)").replace("rgb", "rgba")
-                      : color + "59", // Higher opacity for better visibility
-                  },
-                  {
-                    offset: 1,
-                    color: color.startsWith("rgb")
-                      ? color.replace(")", ", 0)").replace("rgb", "rgba")
-                      : color + "00",
-                  },
-                ]),
-              },
-            }),
-          };
-        }),
-      };
-
-      requestAnimationFrame(() => {
-        chartInstance.current?.setOption(options, { notMerge: true });
-      });
-    }, [filteredData, type]);
-
-    useEffect(() => {
-      if (!mounted || !chartInstance.current) return;
-
-      if (externalOptions) {
-        chartInstance.current?.setOption(externalOptions, { notMerge: true });
-      } else {
-        updateChart();
-      }
-    }, [mounted, updateChart, externalOptions]);
-
-    const handleZoomIn = useCallback(() => {
-      if (!chartInstance.current) return;
-      const option = chartInstance.current.getOption() as EChartsOption;
-      const dataZoom = (option.dataZoom as any)?.[0] as {
-        start: number;
-        end: number;
-      };
-      if (!dataZoom) return;
-
-      const range = dataZoom.end - dataZoom.start;
-      const center = (dataZoom.start + dataZoom.end) / 2;
-      const newRange = Math.max(range * 0.5, 10);
-      const newStart = Math.max(0, center - newRange / 2);
-      const newEnd = Math.min(100, center + newRange / 2);
-
-      requestAnimationFrame(() => {
-        chartInstance.current?.dispatchAction({
-          type: "dataZoom",
-          start: newStart,
-          end: newEnd,
-        });
-      });
-    }, []);
-
-    const handleZoomOut = useCallback(() => {
-      if (!chartInstance.current) return;
-      const option = chartInstance.current.getOption() as EChartsOption;
-      const dataZoom = (option.dataZoom as any)?.[0] as {
-        start: number;
-        end: number;
-      };
-      if (!dataZoom) return;
-
-      const range = dataZoom.end - dataZoom.start;
-      const center = (dataZoom.start + dataZoom.end) / 2;
-      const newRange = Math.min(range * 2, 100);
-      const newStart = Math.max(0, center - newRange / 2);
-      const newEnd = Math.min(100, center + newRange / 2);
-
-      requestAnimationFrame(() => {
-        chartInstance.current?.dispatchAction({
-          type: "dataZoom",
-          start: newStart,
-          end: newEnd,
-        });
-      });
-    }, []);
-
-    const handleDownload = useCallback(
-      (format: "png" | "svg" | "pdf" | "csv" | "json") => {
-        if (!chartInstance.current) return;
-
-        switch (format) {
-          case "png": {
-            const url = chartInstance.current.getDataURL({
-              type: "png",
-              pixelRatio: 2,
-              backgroundColor: "#fff",
-            });
-            const link = document.createElement("a");
-            link.download = `chart-${title}.png`;
-            link.href = url;
-            link.click();
-            break;
-          }
-          case "json": {
-            const blob = new Blob([JSON.stringify(data, null, 2)], {
-              type: "application/json",
-            });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.download = `chart-${title}.json`;
-            link.href = url;
-            link.click();
-            URL.revokeObjectURL(url);
-            break;
-          }
-          // ... implement other formats similarly
+      try {
+        // Check if chart has been disposed
+        if (chartRef.current.isDisposed?.() === true) {
+          console.warn("Chart has been disposed, cannot update");
+          return;
         }
-      },
-      [chartInstance, data, title]
-    );
 
-    const handleBoxSelect = useCallback(() => {
-      if (!chartInstance.current) return;
-      setSelectedTool("box");
-      setIsSelecting(true);
-
-      requestAnimationFrame(() => {
-        if (!chartInstance.current) return;
-
-        chartInstance.current.setOption(
-          {
-            brush: {
-              toolbox: ["rect"],
-              xAxisIndex: 0,
-              brushMode: "single",
-              brushStyle: {
-                borderWidth: 1,
-                color: "rgba(120, 140, 180, 0.2)",
-                borderColor: "rgba(120, 140, 180, 0.8)",
-              },
-              transformable: true,
-              throttleType: "debounce",
-              throttleDelay: 300,
-            },
-          },
-          { replaceMerge: ["brush"] }
+        const uniqueCategories = Array.from(
+          new Set(filteredData.map((item) => item.category))
         );
 
-        chartInstance.current.dispatchAction({
+        const categories = uniqueCategories.filter((category) => {
+          if (!activeKPIs) return true;
+          if (Array.isArray(activeKPIs)) {
+            return activeKPIs.includes(category);
+          } else if (activeKPIs instanceof Set) {
+            return activeKPIs.has(category);
+          }
+          return true;
+        });
+
+        if (categories.length === 0) {
+          console.warn("No categories match activeKPIs, showing all categories");
+          categories.push(...uniqueCategories);
+        }
+
+        const dates = Array.from(
+          new Set(filteredData.map((item) => item.date))
+        ).sort();
+
+        const isKpiActive = (category: string) => {
+          if (!activeKPIs) return true;
+          if (Array.isArray(activeKPIs)) {
+            return activeKPIs.includes(category);
+          }
+          return activeKPIs.has(category);
+        };
+
+        const series = categories.map((category, index) => {
+          const defaultColor =
+            theme?.colors && theme.colors.length > 0
+              ? theme.colors[index % theme.colors.length]
+              : `hsl(${(index * 60) % 360}, 70%, 50%)`;
+          const color = kpiColors?.[category]?.color || defaultColor;
+          const isActive = isKpiActive(category);
+
+          const categoryData = dates.map((date) => {
+            const points = filteredData.filter(
+              (p) => p.date === date && p.category === category
+            );
+            return points.length > 0
+              ? points.reduce((sum, p) => sum + p.value, 0)
+              : null;
+          });
+
+          const baseSeriesConfig = {
+            name: kpiColors?.[category]?.name || category,
+            data: categoryData,
+            itemStyle: { 
+              color,
+              opacity: isActive ? 1 : 0.3 
+            },
+            emphasis: {
+              focus: "series" as const,
+              itemStyle: {
+                shadowBlur: 10,
+                shadowColor: color,
+              },
+            },
+            smooth: true,
+            showSymbol: true,
+            symbolSize: 6,
+            lineStyle: { 
+              width: 2,
+              opacity: isActive ? 1 : 0.3 
+            },
+          };
+
+          return type === "line"
+            ? {
+                ...baseSeriesConfig,
+                type: "line" as const,
+                areaStyle: { 
+                  opacity: isActive ? 0.2 : 0.1 
+                },
+              }
+            : {
+                ...baseSeriesConfig,
+                type: "bar" as const,
+                itemStyle: {
+                  ...baseSeriesConfig.itemStyle,
+                  opacity: isActive ? 1 : 0.3,
+                },
+              };
+        }) as echarts.SeriesOption[];
+
+        // Configure proper x-axis formatting based on resolution
+        const getAxisLabelFormatter = () => {
+          // Different formatting based on resolution and zoom level
+          return (value: string) => {
+            const date = new Date(value);
+            const now = new Date();
+            const timeDiff = now.getTime() - date.getTime();
+            const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+            
+            // Get the current zoom level from the chart
+            const chart = chartRef.current;
+            if (!chart) return value;
+            
+            const option = chart.getOption();
+            const dataZoom = option.dataZoom?.[0];
+            if (!dataZoom) return value;
+            
+            const zoomLevel = (dataZoom.end - dataZoom.start) / 100;
+            
+            // Determine the appropriate format based on zoom level
+            if (zoomLevel <= 0.1) {
+              // Very zoomed in - show time
+              return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            } else if (zoomLevel <= 0.3) {
+              // Moderately zoomed in - show day and time
+              return `${date.getDate()}d ${date.getHours().toString().padStart(2, '0')}h`;
+            } else if (zoomLevel <= 0.6) {
+              // Partially zoomed - show day
+              return `${date.getMonth() + 1}/${date.getDate()}`;
+            } else {
+              // Zoomed out - show month and short year
+              return `${date.getMonth() + 1}/${date.getFullYear().toString().slice(-2)}`;
+            }
+          };
+        };
+
+        const option: echarts.EChartsOption = {
+          animation: true,
+          animationDuration: 300,
+          animationEasing: 'cubicInOut',
+          grid: {
+            left: '10px',
+            right: '10px',
+            bottom: '35px',
+            top: '20px',
+            containLabel: true
+          },
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { 
+              type: "cross",
+              label: {
+                backgroundColor: "rgba(0, 0, 0, 0.7)",
+                color: "#fff",
+                fontSize: 10,
+                padding: [4, 8],
+                borderRadius: 4,
+              }
+            },
+            confine: true,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            borderColor: "rgba(255, 255, 255, 0.1)",
+            borderWidth: 1,
+            textStyle: {
+              color: "#fff",
+              fontSize: 11,
+              lineHeight: 16,
+            },
+            padding: [8, 12],
+            extraCssText: "max-width: 200px;",
+            formatter: (params: any) => {
+              if (!Array.isArray(params)) return '';
+              
+              const date = params[0].axisValue;
+              let result = `<div style="margin-bottom: 4px; font-weight: 500;">${date}</div>`;
+              
+              params.forEach((param: any) => {
+                if (param.value !== null && param.value !== undefined) {
+                  const color = param.color || '#fff';
+                  const value = typeof param.value === 'number' 
+                    ? param.value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                    : param.value;
+                  result += `
+                    <div style="display: flex; align-items: center; margin: 2px 0;">
+                      <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; margin-right: 6px;"></span>
+                      <span style="color: ${color};">${param.seriesName}: ${value}</span>
+                    </div>
+                  `;
+                }
+              });
+              
+              return result;
+            }
+          },
+          dataZoom: [
+            {
+              type: 'slider',
+              show: true,
+              xAxisIndex: [0],
+              start: 0,
+              end: 100,
+              height: 12,
+              bottom: 8,
+              borderColor: 'transparent',
+              backgroundColor: 'rgba(0,0,0,0.05)',
+              fillerColor: 'rgba(0,0,0,0.1)',
+              handleStyle: {
+                color: theme?.colors?.[0] || '#666',
+                borderColor: 'transparent'
+              },
+              handleLabel: {
+                show: false
+              },
+              moveHandleSize: 0,
+              zoomLock: false,
+              throttle: 100,
+              zoomOnMouseWheel: true
+            },
+            {
+              type: 'inside',
+              xAxisIndex: [0],
+              start: 0,
+              end: 100,
+              zoomOnMouseWheel: true
+            }
+          ],
+          xAxis: {
+            type: "category",
+            data: dates,
+            axisLabel: {
+              formatter: getAxisLabelFormatter(),
+              margin: 8,
+              fontSize: 10,
+              color: "#666",
+              rotate: filteredData.length > 100 ? 45 : 0,
+            },
+            axisLine: {
+              lineStyle: {
+                color: "#666",
+              },
+            },
+            axisTick: {
+              show: false,
+            },
+          },
+          yAxis: {
+            type: "value",
+            axisLabel: {
+              formatter: (value: number) => value.toString(),
+              fontSize: 10,
+              color: "#666",
+              margin: 8,
+            },
+            axisLine: {
+              lineStyle: {
+                color: "#666",
+              },
+            },
+            splitLine: {
+              lineStyle: {
+                color: "rgba(0, 0, 0, 0.05)",
+              },
+            },
+          },
+          series,
+        };
+
+        if (externalOptions) {
+          Object.assign(option, externalOptions);
+        }
+
+        // Check if chart is still valid before setting option
+        if (chartRef.current && !chartRef.current.isDisposed?.()) {
+          // Force immediate update with smooth transitions for color changes
+          chartRef.current.setOption(option, { 
+            replaceMerge: ['series'],
+            lazyUpdate: false
+          });
+        }
+      } catch (error) {
+        console.error("Error updating chart:", error);
+      }
+    }, [filteredData, type, activeKPIs, kpiColors, theme, externalOptions, resolution]);
+
+    // Add a specific effect to only update colors when theme changes
+    useEffect(() => {
+      if (!mounted || !chartRef.current) return;
+      
+      try {
+        // If the chart needs a theme update but is already initialized,
+        // we can use a targeted update rather than full redraw
+        if (chartRef.current && theme?.colors) {
+          // Get current option without triggering a redraw
+          const existingOption = chartRef.current.getOption();
+          
+          if (existingOption && existingOption.series) {
+            const series = existingOption.series as any[];
+            
+            // Create a new series array with updated colors
+            const updatedSeries = series.map((seriesItem, index) => {
+              if (!seriesItem || !seriesItem.data) return seriesItem;
+              
+              const categoryName = seriesItem.name;
+              const colorIndex = index % theme.colors.length;
+              const newColor = kpiColors?.[categoryName]?.color || theme.colors[colorIndex];
+              
+              // Create a new series item with updated colors
+              return {
+                ...seriesItem,
+                itemStyle: {
+                  ...seriesItem.itemStyle,
+                  color: newColor
+                },
+                lineStyle: seriesItem.type === 'line' ? {
+                  ...seriesItem.lineStyle,
+                  color: newColor
+                } : undefined,
+                areaStyle: seriesItem.type === 'line' ? {
+                  ...seriesItem.areaStyle,
+                  color: {
+                    type: 'linear',
+                    x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                      { offset: 0, color: `${newColor}40` },
+                      { offset: 1, color: `${newColor}00` }
+                    ]
+                  }
+                } : undefined
+              };
+            });
+            
+            // Apply the updated series with a smooth transition
+            if (chartRef.current && !chartRef.current.isDisposed?.()) {
+              chartRef.current.setOption({
+                series: updatedSeries
+              }, {
+                replaceMerge: ['series'],
+                lazyUpdate: true,
+                notMerge: false
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error updating chart theme:", error);
+      }
+    }, [theme, kpiColors, mounted]);
+
+    // Original effect for other data changes
+    useEffect(() => {
+      if (!mounted || !chartRef.current) return;
+
+      try {
+        if (externalOptions) {
+          chartRef.current.setOption(externalOptions, { notMerge: true });
+        } else {
+          updateChart();
+        }
+      } catch (error) {
+        console.error("Error applying chart options:", error);
+      }
+    }, [mounted, updateChart, externalOptions, activeKPIs]);
+
+    const zoomIn = useCallback(() => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+
+      try {
+        const option = chartRef.current.getOption();
+        const dataZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+          ? option.dataZoom[0]
+          : undefined;
+
+        if (!dataZoom) return;
+
+        const start = dataZoom.start || 0;
+        const end = dataZoom.end || 100;
+        const range = end - start;
+
+        if (range <= 10) return;
+
+        const newStart = Math.max(0, start + 10);
+        const newEnd = Math.min(100, end - 10);
+
+        // Update dataZoom directly instead of using dispatchAction
+        chartRef.current.setOption({
+          dataZoom: [{
+            ...dataZoom,
+            start: newStart,
+            end: newEnd
+          }]
+        }, { replaceMerge: ['dataZoom'] });
+      } catch (error) {
+        console.error("Error in zoom in:", error);
+      }
+    }, []);
+
+    const zoomOut = useCallback(() => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+
+      try {
+        const option = chartRef.current.getOption();
+        const dataZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+          ? option.dataZoom[0]
+          : undefined;
+
+        if (!dataZoom) return;
+
+        const start = dataZoom.start || 0;
+        const end = dataZoom.end || 100;
+        const range = end - start;
+
+        if (range >= 100) return;
+
+        const newStart = Math.max(0, start - 10);
+        const newEnd = Math.min(100, end + 10);
+
+        // Update dataZoom directly instead of using dispatchAction
+        chartRef.current.setOption({
+          dataZoom: [{
+            ...dataZoom,
+            start: newStart,
+            end: newEnd
+          }]
+        }, { replaceMerge: ['dataZoom'] });
+      } catch (error) {
+        console.error("Error in zoom out:", error);
+      }
+    }, []);
+
+    const boxSelect = useCallback(() => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+
+      try {
+        // Configure brush options for box selection
+        chartRef.current.setOption({
+          brush: {
+            toolbox: ["rect", "keep", "clear"],
+            xAxisIndex: 0,
+            brushLink: "all",
+            outOfBrush: {
+              colorAlpha: 0.1,
+            },
+            throttleType: "debounce",
+            throttleDelay: 100,
+            brushStyle: {
+              borderWidth: 1,
+              color: "rgba(120, 140, 180, 0.3)",
+              borderColor: "rgba(120, 140, 180, 0.8)",
+            },
+          },
+        }, { replaceMerge: ["brush"] });
+
+        // Enable box selection
+        chartRef.current.dispatchAction({
           type: "takeGlobalCursor",
           key: "brush",
           brushOption: {
             brushType: "rect",
             brushMode: "single",
+            transformable: true,
           },
         });
-      });
+
+        setSelectedTool("box");
+        setIsSelecting(true);
+      } catch (error) {
+        console.error("Error in box selection:", error);
+        setSelectedTool(null);
+        setIsSelecting(false);
+      }
     }, []);
 
-    const handleLassoSelect = useCallback(() => {
-      if (!chartInstance.current) return;
-      setSelectedTool("lasso");
-      setIsSelecting(true);
+    const lassoSelect = useCallback(() => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
 
-      requestAnimationFrame(() => {
-        if (!chartInstance.current) return;
-
-        chartInstance.current.setOption(
-          {
-            brush: {
-              toolbox: ["polygon"],
-              xAxisIndex: 0,
-              brushMode: "single",
-              brushStyle: {
-                borderWidth: 1,
-                color: "rgba(120, 140, 180, 0.2)",
-                borderColor: "rgba(120, 140, 180, 0.8)",
-              },
-              transformable: true,
-              throttleType: "debounce",
-              throttleDelay: 300,
+      try {
+        // Configure brush options for lasso selection
+        chartRef.current.setOption({
+          brush: {
+            toolbox: ["polygon", "keep", "clear"],
+            xAxisIndex: 0,
+            brushLink: "all",
+            outOfBrush: {
+              colorAlpha: 0.1,
+            },
+            throttleType: "debounce",
+            throttleDelay: 100,
+            brushStyle: {
+              borderWidth: 1,
+              color: "rgba(120, 140, 180, 0.3)",
+              borderColor: "rgba(120, 140, 180, 0.8)",
             },
           },
-          { replaceMerge: ["brush"] }
-        );
+        }, { replaceMerge: ["brush"] });
 
-        chartInstance.current.dispatchAction({
+        // Enable polygon selection
+        chartRef.current.dispatchAction({
           type: "takeGlobalCursor",
           key: "brush",
           brushOption: {
             brushType: "polygon",
             brushMode: "single",
+            transformable: true,
           },
         });
-      });
+
+        setSelectedTool("lasso");
+        setIsSelecting(true);
+      } catch (error) {
+        console.error("Error in lasso selection:", error);
+        setSelectedTool(null);
+        setIsSelecting(false);
+      }
     }, []);
 
-    const handleClearSelection = useCallback(() => {
-      if (!chartInstance.current) return;
+    const clearSelection = useCallback(() => {
+      if (!chartRef.current) return;
       setSelectedTool(null);
       setIsSelecting(false);
-
+      
       requestAnimationFrame(() => {
-        if (!chartInstance.current) return;
+        if (!chartRef.current) return;
+        
+        chartRef.current.setOption({
+          brush: undefined
+        }, { replaceMerge: ['brush'] });
 
-        chartInstance.current.setOption(
-          {
-            brush: undefined,
-          },
-          { replaceMerge: ["brush"] }
-        );
-
-        chartInstance.current.dispatchAction({
-          type: "brush",
-          command: "clear",
+        chartRef.current.dispatchAction({
+          type: 'brush',
+          command: 'clear'
         });
       });
     }, []);
 
-    // Expose functions to parent component
-    useImperativeHandle(ref, () => ({
-      zoomIn: handleZoomIn,
-      zoomOut: handleZoomOut,
-      boxSelect: handleBoxSelect,
-      lassoSelect: handleLassoSelect,
-      clearSelection: handleClearSelection,
-      download: handleDownload,
-    }));
+    const download = useCallback(
+      (format: "png" | "svg" | "pdf" | "csv" | "json") => {
+        if (!chartRef.current) return;
+
+        try {
+          switch (format) {
+            case "png": {
+              const url = chartRef.current.getDataURL({
+                type: "png",
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
+              const link = document.createElement("a");
+              link.download = `${title.toLowerCase().replace(/\s+/g, "-")}.png`;
+              link.href = url;
+              link.click();
+              break;
+            }
+            case "svg": {
+              const url = chartRef.current.getDataURL({
+                type: "svg",
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
+              const link = document.createElement("a");
+              link.download = `${title.toLowerCase().replace(/\s+/g, "-")}.svg`;
+              link.href =
+                "data:image/svg+xml;charset=utf-8," + encodeURIComponent(url);
+              link.click();
+              break;
+            }
+            case "pdf": {
+              const url = chartRef.current.getDataURL({
+                type: "png",
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
+
+              const pdf = new jsPDF({
+                orientation: "landscape",
+                unit: "px",
+                format: "a4",
+              });
+
+              const pdfWidth = pdf.internal.pageSize.getWidth();
+              const pdfHeight = pdf.internal.pageSize.getHeight();
+              const imgWidth = chartRef.current.getWidth();
+              const imgHeight = chartRef.current.getHeight();
+
+              const ratio = Math.min(
+                pdfWidth / imgWidth,
+                pdfHeight / imgHeight
+              );
+              const width = imgWidth * ratio;
+              const height = imgHeight * ratio;
+              const x = (pdfWidth - width) / 2;
+              const y = (pdfHeight - height) / 2;
+
+              pdf.addImage(url, "PNG", x, y, width, height);
+              pdf.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+              break;
+            }
+            case "csv": {
+              if (!filteredData || !filteredData.length) {
+                console.error("No data available for CSV export");
+                return;
+              }
+
+              const headers = ["category", "date", "value"];
+              const csvContent = [
+                headers.join(","),
+                ...filteredData.map((row) =>
+                  headers
+                    .map((header) => {
+                      const cell = row[header as keyof DataPoint];
+                      return typeof cell === "string" && cell.includes(",")
+                        ? `"${cell}"`
+                        : cell;
+                    })
+                    .join(",")
+                ),
+              ].join("\n");
+
+              const blob = new Blob([csvContent], {
+                type: "text/csv;charset=utf-8;",
+              });
+              saveAs(blob, `${title.toLowerCase().replace(/\s+/g, "-")}.csv`);
+              break;
+            }
+            case "json": {
+              if (!filteredData) {
+                console.error("No data available for JSON export");
+                return;
+              }
+              const blob = new Blob([JSON.stringify(filteredData, null, 2)], {
+                type: "application/json",
+              });
+              saveAs(blob, `${title.toLowerCase().replace(/\s+/g, "-")}.json`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to download chart as ${format}:`, error);
+        }
+      },
+      [filteredData, title]
+    );
+
+    const dispatchAction = useCallback((action: any) => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+      
+      try {
+        chartRef.current.dispatchAction(action);
+      } catch (error) {
+        console.error("Error dispatching chart action:", error);
+      }
+    }, []);
+
+    const toggleFullscreen = useCallback(() => {
+      if (!fullscreenContainerRef.current) return;
+
+      try {
+        if (!document.fullscreenElement) {
+          // Enter fullscreen
+          if (fullscreenContainerRef.current.requestFullscreen) {
+            fullscreenContainerRef.current.requestFullscreen();
+          } else if ((fullscreenContainerRef.current as any).webkitRequestFullscreen) {
+            (fullscreenContainerRef.current as any).webkitRequestFullscreen();
+          } else if ((fullscreenContainerRef.current as any).msRequestFullscreen) {
+            (fullscreenContainerRef.current as any).msRequestFullscreen();
+          }
+          setIsFullscreen(true);
+        } else {
+          // Exit fullscreen
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+          } else if ((document as any).msExitFullscreen) {
+            (document as any).msExitFullscreen();
+          }
+          setIsFullscreen(false);
+        }
+      } catch (error) {
+        console.error("Error toggling fullscreen:", error);
+      }
+    }, []);
+
+    // Handle fullscreen change events
+    useEffect(() => {
+      const handleFullscreenChange = () => {
+        setIsFullscreen(!!document.fullscreenElement);
+      };
+
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+      return () => {
+        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+      };
+    }, []);
+
+    // Handle fullscreen resize
+    useEffect(() => {
+      if (isFullscreen && chartRef.current) {
+        const handleResize = () => {
+          if (chartRef.current && !chartRef.current.isDisposed?.()) {
+            requestAnimationFrame(() => {
+              try {
+                chartRef.current?.resize();
+              } catch (error) {
+                console.warn('Chart resize error in fullscreen:', error);
+              }
+            });
+          }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+      }
+    }, [isFullscreen]);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        zoomIn,
+        zoomOut,
+        boxSelect,
+        lassoSelect,
+        clearSelection,
+        download,
+        dispatchAction,
+        toggleFullscreen,
+        isValid: () => {
+          return chartRef.current !== null && chartRef.current.isDisposed?.() !== true;
+        }
+      }),
+      [
+        zoomIn,
+        zoomOut,
+        boxSelect,
+        lassoSelect,
+        clearSelection,
+        download,
+        dispatchAction,
+        toggleFullscreen,
+      ]
+    );
+
+    useEffect(() => {
+      if (!mounted || !chartRef.current) return;
+
+      const currentOption = chartRef.current.getOption();
+      const updatedOption = {
+        ...currentOption,
+        brush: {
+          toolbox: ["rect", "polygon", "keep", "clear"] as const,
+          xAxisIndex: 0,
+          brushLink: "all",
+          outOfBrush: {
+            colorAlpha: 0.1,
+          },
+        },
+        toolbox: {
+          feature: {
+            brush: {
+              type: ["rect", "polygon", "clear"] as const,
+            },
+          },
+          show: false,
+        },
+      } as const;
+
+      chartRef.current.setOption(updatedOption);
+    }, [mounted]);
+
+    useEffect(() => {
+      if (!chartRef.current) return;
+
+      const chart = chartRef.current;
+
+      const onBrushSelected = (params: any) => {
+        console.log("Brush selected:", params);
+        setIsSelecting(false);
+        setSelectedTool(null);
+      };
+
+      chart.on("brushSelected", onBrushSelected);
+
+      return () => {
+        chart.off("brushSelected", onBrushSelected);
+      };
+    }, [mounted]);
+
+    // Add this useEffect hook for improved brush event handling
+    useEffect(() => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+
+      try {
+        const chart = chartRef.current;
+
+        // Handle brush events
+        const handleBrushSelected = (params: any) => {
+          console.log("Brush selected event triggered:", params);
+
+          // Don't automatically clear selection, let user manually clear
+          if (!params.areas || params.areas.length === 0) {
+            setIsSelecting(false);
+          }
+        };
+
+        const handleBrushEnd = (params: any) => {
+          console.log("Brush end event triggered:", params);
+          // Keep the selection tool active but mark selection as complete
+          setIsSelecting(false);
+        };
+
+        // Add event listeners
+        chart.on("brushSelected", handleBrushSelected);
+        chart.on("brushEnd", handleBrushEnd);
+
+        return () => {
+          // Safety check before removing listeners
+          if (chart && !chart.isDisposed?.()) {
+            // Remove event listeners when component unmounts or re-renders
+            chart.off("brushSelected", handleBrushSelected);
+            chart.off("brushEnd", handleBrushEnd);
+          }
+        };
+      } catch (error) {
+        console.error("Error setting up brush events:", error);
+      }
+    }, [mounted]);
+
+    useEffect(() => {
+      if (chartRef.current && data && data.length > 0) {
+        try {
+          updateChart();
+        } catch (error) {
+          console.error("Error updating chart with new data:", error);
+        }
+      }
+    }, [data, type, dateRange, activeKPIs, kpiColors, theme, updateChart]);
+
+    // Add an effect to update chart when data changes or on layout shift
+    useEffect(() => {
+      if (mounted && chartRef.current && !chartRef.current.isDisposed?.()) {
+        try {
+          updateChart();
+          
+          // Force resize after data update to ensure proper rendering
+          setTimeout(() => {
+            if (chartRef.current && !chartRef.current.isDisposed?.()) {
+              chartRef.current.resize();
+            }
+          }, 50);
+        } catch (error) {
+          console.error("Error updating or resizing chart:", error);
+        }
+      }
+    }, [filteredData, activeKPIs, mounted, updateChart]);
 
     return (
-      <div className={`relative w-full h-full ${className || ""}`}>
-        <div ref={chartRef} className="w-full h-full pt-1" />{" "}
-        {/* Reduced padding-top from 2 to 1 */}
+      <div
+        ref={fullscreenContainerRef}
+        className={cn(
+          "w-full h-full transition-all duration-300",
+          isFullscreen ? "fixed inset-0 z-50 bg-white" : "relative",
+          className
+        )}
+        style={{ width, height }}
+      >
+        <div
+          ref={chartContainerRef}
+          className={cn(
+            "w-full h-full",
+            isFullscreen ? "p-4" : ""
+          )}
+        />
       </div>
     );
   })
 );
 
-// Add display name
 ChartContainer.displayName = "ChartContainer";
 
-// Change to default export
 export default ChartContainer;

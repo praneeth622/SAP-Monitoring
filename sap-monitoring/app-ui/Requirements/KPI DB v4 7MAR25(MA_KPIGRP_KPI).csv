@@ -1,0 +1,370 @@
+SID,Monitoring Area,KPI Group,KPI Name,KPI Description
+SW1,SYSTEM,OS,CPU_IDLE,CPU True Idle
+SW1,SYSTEM,OS,CPU_LOAD15_AVG,CPU Load - 15 Mins Average
+SW1,SYSTEM,OS,CPU_LOAD1_AVG,CPU Load - 1 Min Average
+SW1,SYSTEM,OS,CPU_LOAD5_AVG,CPU Load - 5 Mins Average
+SW1,SYSTEM,OS,CPU_NBR,Number of CPUs
+SW1,SYSTEM,OS,CPU_SYS,CPU - System Utilization
+SW1,SYSTEM,OS,CPU_S_IDLE,Single CPU Idle Time
+SW1,SYSTEM,OS,CPU_S_SERIAL,Single CPU Serial No.
+SW1,SYSTEM,OS,CPU_S_SYS,Single CPU used by System
+SW1,SYSTEM,OS,CPU_S_USER,Single CPU used by User
+SW1,SYSTEM,OS,CPU_USR,CPU - User Utilization
+SW1,SYSTEM,OS,CPU_WAIT,CPU I/O Waiting
+SW1,SYSTEM,OS,DISK_OPS_SEC,Average Disk operations per Second - System
+SW1,SYSTEM,OS,DISK_QUEUE_LEN,Average Disk Queue Length - System
+SW1,SYSTEM,OS,DISK_RESP_TIME,Average Disk response time - System
+SW1,SYSTEM,OS,DISK_SERV_TIME,Average Disk Service Time - System
+SW1,SYSTEM,OS,DISK_S_NAME,Name of the Disk
+SW1,SYSTEM,OS,DISK_S_OPS_SEC,Disk Operations per second
+SW1,SYSTEM,OS,DISK_S_QUEUE_LEN,Disk Avg. Queue length
+SW1,SYSTEM,OS,DISK_S_RESP_TIME,Disk Response time
+SW1,SYSTEM,OS,DISK_S_SERIALNR,Serial No. - Single Disk
+SW1,SYSTEM,OS,DISK_S_SERV_TIME,Disk Avg. Service time
+SW1,SYSTEM,OS,DISK_S_TRANSFER,Disk Transfer speed
+SW1,SYSTEM,OS,DISK_S_UTIL,Disk Utilization
+SW1,SYSTEM,OS,DISK_S_WAIT_TIME,Disk Avg. wait time - Single Disk
+SW1,SYSTEM,OS,DISK_TRANSFER,Average Disk Transfer Speed - System
+SW1,SYSTEM,OS,DISK_UTIL,Average Disk utilization - System
+SW1,SYSTEM,OS,DISK_WAIT_TIME,Average disk wait - System
+SW1,SYSTEM,OS,FREE_MEM_PERC,Free Physical memory percentage
+SW1,SYSTEM,OS,LAN_COLLISSIONS,LAN Collissions - System Level
+SW1,SYSTEM,OS,LAN_IN_ERRORS,LAN Errors Inbound - System Level
+SW1,SYSTEM,OS,LAN_IN_PACKETS,LAN Packets In - System Level
+SW1,SYSTEM,OS,LAN_OUT_ERRORS,LAN Errors outbound - System Level
+SW1,SYSTEM,OS,LAN_OUT_PACKETS,LAN Packets Out - System Level
+SW1,SYSTEM,OS,LAN_S_COLLISSIONS,LAN Collissions - Node Level
+SW1,SYSTEM,OS,LAN_S_IN_ERRORS,LAN Errors Inbound - Node Level
+SW1,SYSTEM,OS,LAN_S_IN_PACKETS,LAN Packets In - Node Level
+SW1,SYSTEM,OS,LAN_S_LANNAME,LAN Name - Node Level
+SW1,SYSTEM,OS,LAN_S_OUT_ERRORS,LAN Errors Outbound - Node Level
+SW1,SYSTEM,OS,LAN_S_OUT_PACKETS,LAN Packets Out - Node Level
+SW1,SYSTEM,OS,LAN_S_SERIALNR,LAN Serial No. - Node Level
+SW1,SYSTEM,OS,MEM_FREE,Free Physical memory
+SW1,SYSTEM,OS,MEM_PHYS,Total Physical memory
+SW1,SYSTEM,OS,PAGE_IN,Pages IN in kB/s
+SW1,SYSTEM,OS,PAGE_OUT,Pages OUT in kB/s
+SW1,SYSTEM,OS,SWAP_CONF,Configured Swap memory size
+SW1,SYSTEM,OS,SWAP_FREE,Free Swap memory size
+SW1,SYSTEM,OS,SWAP_FREE_PERC,Free Swap Memory percentage
+SW1,SYSTEM,OS,SWAP_MAX,Maximum Swap size
+SW1,SYSTEM,OS,SWAP_SIZE,Actual Swap size
+SW1,SYSTEM,OS,TOP_CPU_TIME_AVG,Top 40 Processes - CPU Time Average
+SW1,SYSTEM,OS,TOP_MEM_UTIL_AVG,Top 40 Processes - Memory Util. Average
+SW1,SYSTEM,OS,TOP_S_COMMAND,Top 40 CPU Processes - Process Name
+SW1,SYSTEM,OS,TOP_S_CPU_TIME,Top 40 CPU Processes - CPU Time
+SW1,SYSTEM,OS,TOP_S_CPU_UTIL,Top 40 CPU Processes - CPU Utilization %
+SW1,SYSTEM,OS,TOP_S_PRIORITY,Top 40 CPU Processes - Priority
+SW1,SYSTEM,OS,TOP_S_PRIV_PAGES,Top 40 CPU Processes - Process Pages
+SW1,SYSTEM,OS,TOP_S_PROC_ID,Top 40 CPU Processes - Process ID
+SW1,SYSTEM,OS,TOP_S_RES_SIZE,Top 40 CPU Processes - Memory Utilization
+SW1,SYSTEM,OS,TOP_S_SERIALNR,Top 40 CPU Processes - Serial No.
+SW1,SYSTEM,OS,TOP_S_USERNAME,Top 40 CPU Processes - Username
+SW1,JOBS,JOBS,JOB_DELAYED,Number of  Background Jobs delayed
+SW1,JOBS,JOBS,JOB_CANCELLED,Number of canvelled Background Jobs
+SW1,JOBS,JOBS,JOB_MAX_DELAY,Maximum delay to start a Job
+SW1,JOBS,JOBS,JOB_DELAYED_TIME,Total delay for the run period 
+SW1,JOBS,JOBS,JOB_COMPLETED,Number of completed Jobs
+SW1,JOBS,JOBS,JOB_ACTIVE,Number of Active Jobs
+SW1,JOBS,JOBS,JOB_TOTAL,Number of Total Jobs
+SW1,JOBS,JOBS,JOB_SCHEDULED,Number of Scheduled Jobs
+SW1,JOBS,JOBS,JOB_RELEASED,Number of Released Jobs
+SW1,JOBS,JOBS,JOB_MAX_RUNTIME,Maximum Runtime taken by a Job
+SW1,JOBS,JOBS,JOB_S_NAME        ,Job Name
+SW1,JOBS,JOBS,JOB_S_COUNT       ,Job Counter
+SW1,JOBS,JOBS,JOB_S_SCHD_STRTDT ,Job Scheduled Start Date
+SW1,JOBS,JOBS,JOB_S_SCHD_STRTTM ,Job Scheduled Start Time
+SW1,JOBS,JOBS,JOB_S_LASTCHDT    ,Job Last changed Date
+SW1,JOBS,JOBS,JOB_S_LASTCHTM    ,Job Last changed Time
+SW1,JOBS,JOBS,JOB_S_REL_DATE    ,Job Release Date
+SW1,JOBS,JOBS,JOB_S_REL_TIME    ,Job Release Time
+SW1,JOBS,JOBS,JOB_S_ACT_STRTDT  ,Job Actual Start Date
+SW1,JOBS,JOBS,JOB_S_ACT_STRTTM  ,Job Actual Start Time
+SW1,JOBS,JOBS,JOB_S_ACT_ENDDT   ,Job Actual End Date
+SW1,JOBS,JOBS,JOB_S_ACT_ENDTM   ,Job Actual End Time
+SW1,JOBS,JOBS,JOB_S_STATUS      ,Job Status
+SW1,JOBS,JOBS,JOB_S_SERVER,Job execution Server
+SW1,INTERFACES,IDOCS,IDOC_CHANGED_CNT,IDOCs changed
+SW1,INTERFACES,IDOCS,IDOC_INB_CNT      ,IDOC - Inbound count
+SW1,INTERFACES,IDOCS,IDOC_INB_ERR_CNT ,IDOC - Inbound Error count
+SW1,INTERFACES,IDOCS,IDOC_INB_PROC_AVG,IDOC - Inbound Average Processing time 
+SW1,INTERFACES,IDOCS,IDOC_OB_CNT    ,IDOC - Outbound count
+SW1,INTERFACES,IDOCS,IDOC_OB_ERR_CNT   ,IDOC - Outbound Error count
+SW1,INTERFACES,IDOCS,IDOC_OB_PROC_AVG  ,IDOC - Outbound Average Processing time
+SW1,INTERFACES,IDOCS,IDOC_OB_TRANS_AVG ,IDOC  - Average Transmission Time
+SW1,INTERFACES,IDOCS,IDOC_S_MESTYP,IDOC Message Type
+SW1,INTERFACES,IDOCS,IDOC_S_IDOCTP,IDOC Type
+SW1,INTERFACES,IDOCS,IDOC_S_DOCNUM,IDOC Document No.
+SW1,INTERFACES,IDOCS,IDOC_S_DIRECT,IDOC Direction
+SW1,INTERFACES,IDOCS,IDOC_S_CREDAT,IDOC - Creation Date
+SW1,INTERFACES,IDOCS,IDOC_S_CRETIM,IDOC - Creation Time
+SW1,INTERFACES,IDOCS,IDOC_S_STATUS,IDOC - Status
+SW1,INTERFACES,IDOCS,IDOC_S_UPDDAT,IDOC - Update date
+SW1,INTERFACES,IDOCS,IDOC_S_UPDTIM,IDOC - Update Time
+SW1,INTERFACES,IDOCS,IDOC_S_RCVPRN,IDOC - Receiver Port
+SW1,INTERFACES,IDOCS,IDOC_S_SNDPRN,IDOC - Sender Port
+SW1,INTERFACES,IDOCS,IDOC_S_STATXT,IDOC - Status Text
+SW1,LOGS,ALOGS,ALOG_VERY_IMP,Application Log - Problem Class Very Important
+SW1,LOGS,ALOGS,ALOG_IMP,Application Log - Problem Class Important
+SW1,LOGS,ALOGS,ALOG_MEDIUM,Application Log - Problem Class Medium
+SW1,LOGS,ALOGS,ALOG_USER_MAX,Application Log - Maximum logs with Single User
+SW1,LOGS,ALOGS,ALOG_BATCH_PROC,Application Log - Batch Processing
+SW1,LOGS,ALOGS,ALOG_DIALOG_PROC,Application Log - Dialog Processing
+SW1,LOGS,ALOGS,ALOG_BI_PROC,Application Log - Batch Input Processing
+SW1,LOGS,ALOGS,ALOG_AUTO_ABAP_PROC,Application Log - Auto ABAP Processing
+SW1,LOGS,ALOGS,ALOG_PROG_MAX,Application Log - Maximum logs with Single Program
+SW1,LOGS,ALOGS,ALOG_TCODE_MAX,Application Log - Maximum logs with Single Tcode
+SW1,LOGS,ALOGS,ALOG_S_LOG_NUMBER,Application Log Number
+SW1,LOGS,ALOGS,ALOG_S_LOG_TIMESTMP,Application Log - Time Stamp
+SW1,LOGS,ALOGS,ALOG_S_LOG_MSGID,Application Log - Message Class
+SW1,LOGS,ALOGS,ALOG_S_LOG_MSGTY,Application Log - Message Type
+SW1,LOGS,ALOGS,ALOG_S-LOG_MSGNO,Application Log - Message Number
+SW1,LOGS,ALOGS,ALOG_S-LOG_MSGTXT,Application Log - Message Text
+SW1,LOGS,ALOGS,ALOG_S_LOG_USER,Application Log - User name
+SW1,LOGS,ALOGS,ALOG_S_PROBCLASS,Application Log- Problem Class
+SW1,LOGS,ALOGS,ALOG_S_ALMODE,Application Log - Processing Mode
+SW1,LOGS,ALOGS,ALOG_S_ALTCODE,Application Log - Transaction Code
+SW1,LOGS,ALOGS,ALOG_S_ALPROG,Application Log - Program
+SW1,LOGS,SLOGS,SLOG_DIA,System Log - Dialog Workprocess 
+SW1,LOGS,SLOGS,SLOG_BTC,System Log - Background Workprocess 
+SW1,LOGS,SLOGS,SLOG_ENQ,System Log - Enqueue Workprocess 
+SW1,LOGS,SLOGS,SLOG_MS,System Log - Message Server
+SW1,LOGS,SLOGS,SLOG_RD,System Log - Gateway
+SW1,LOGS,SLOGS,SLOG_SPO,System Log - Spool
+SW1,LOGS,SLOGS,SLOG_UPD,System Log - Update Work Process
+SW1,LOGS,SLOGS,SLOG_VERY_IMP,System Log - Very Important
+SW1,LOGS,SLOGS,SLOG_IMP,System Log - Important
+SW1,LOGS,SLOGS,SLOG_MEDIUM,System Log - Medium
+SW1,LOGS,SLOGS,SLOG_PROG_MAX,System Log - Maximum logs with Single Program
+SW1,LOGS,SLOGS,SLOG_TCODE_MAX,System Log - Maximum logs with Single Tcode
+SW1,LOGS,SLOGS,SLOG_USER_MAX,System Log - Maximum logs with Single User
+SW1,LOGS,SLOGS,SLOG_S_INSTANCE,System Log - Instance name
+SW1,LOGS,SLOGS,SLOG_S_WP_TYPE,System Log - Work Process Type
+SW1,LOGS,SLOGS,SLOG_S_PROG,System Log - Program
+SW1,LOGS,SLOGS,SLOG_S_TCODE,System Log - Transaction Code
+SW1,LOGS,SLOGS,SLOG_S_USER,System Log - User name
+SW1,LOGS,SLOGS,SLOG_S_SEVERITY,System Log - Severity
+SW1,LOGS,SLOGS,SLOG_S_MESSAGEID,System Log - Message ID
+SW1,LOGS,SLOGS,SLOG_S_TEXT,System Log - Message Text
+SW1,SYSTEM,ENQ, ES2_CURR_LOCKS,ENQ - Current Number of Locks
+SW1,SYSTEM,ENQ, ES2_PEAK_LOCKS,ENQ - Peak Number of Locks
+SW1,SYSTEM,ENQ, ES2_CONFIG_LOCKS,ENQ - Configured Number of Locks
+SW1,SYSTEM,ENQ, ES2_TOTAL_CNT_LOCKS,ENQ - Total Number of Locks
+SW1,SYSTEM,ENQ, ES2_COLLISIONS_LOCK,ENQ - Lock Collisions
+SW1,SYSTEM,ENQ, ES2_OVERFLOWS_SESSION,ENQ - Session Overflows
+SW1,SYSTEM,ENQ, ES2_OVERFLOWS_LOCK_TAB,ENQ - Lock Table Overflows
+SW1,SYSTEM,ENQ, ES2_TOTAL_LOCK_OPS_CNT,ENQ - Total No. of Lock Operations
+SW1,SYSTEM,ENQ, ES2_LOCK_PROCESS_TIME,ENQ - Processing Time for Lock Operations
+SW1,SYSTEM,ENQ, ES2_LOCK_WAIT_TIME,ENQ - Waiting Time for Lock Operations
+SW1,SYSTEM,ENQ, ES2_OPS_ENQUEUE,ENQ - Enqueue Operations
+SW1,SYSTEM,ENQ, ES2_OPS_DEQUEUE,ENQ - Dequeue Operations
+SW1,SYSTEM,ENQ, ES2_OPS_ALL_DEQUEUE,ENQ - Dequeue All Operations
+SW1,SYSTEM,ENQ, ES2_OPS_REMOVE,ENQ - Remove Operations
+SW1,SYSTEM,ENQ, ES2_OPS_BACKUP,ENQ - Backup Operations
+SW1,SYSTEM,ENQ, ES2_OPS_READ,ENQ - Read Operations
+SW1,SYSTEM,ENQ, ES2_OPS_ROPO,ENQ - RemoveOwnerPattern Operations
+SW1,SYSTEM,ENQ, ES2_OP_RAPO,ENQ - RemoveArgumentPattern Operations
+SW1,SYSTEM,ENQ, ES2_OPS_CONF_REPL,ENQ - Configure Replica Operations
+SW1,SYSTEM,ENQ, ES2_UPDATE_REPL_OPS,ENQ - Update Replica Operations
+SW1,SYSTEM,ENQ, ES2_TAKEOVER_REPL_OPS,ENQ - Takeover Replica Operations
+SW1,SYSTEM,ENQ, ES2_ROLL_OUT_CONN,ENQ - Roll-Outs of Connection
+SW1,SYSTEM,ENQ, ES2_ROLL_IN_CONN,ENQ - Roll-Ins of Connection
+SW1,SYSTEM,ENQ, ES2_ERRORS_SERVER,ENQ - Server Errors
+SW1,SYSTEM,ENQ, ES2_CONN_ERRORS,ENQ - Connection Errors
+SW1,SYSTEM,ENQ, ES2_TIMEOUTS,ENQ - Timeouts
+SW1,SYSTEM,ENQ, ES2_NETWORK_REQ,ENQ - Network Requests
+SW1,SYSTEM,ENQ, ES2_RECD_DATA,ENQ - Received Data
+SW1,SYSTEM,ENQ, ES2_SENT_DATA,ENQ - Sent Data
+SW1,SYSTEM,ENQ, ES2_SER_CPU_TIME,ENQ - CPU Time of Enqueue Server
+SW1,SYSTEM,ENQ, ES2_BACKUP_REC_WRITTEN,ENQ - Backup Records Written
+SW1,SYSTEM,ENQ, ES2_ADMIN_REQ,ENQ - Administration Requests
+SW1,SYSTEM,ENQ, ES2_MAX_NUM_SEARCH,ENQ - Maximum Number in Search Result
+SW1,SYSTEM,ENQ, ES2_AVG_NUM_SEARCH,ENQ - Average Number in Search Result
+SW1,SYSTEM,ENQ, ES2_MAX_NUM_UPDATE,ENQ - Maximum Number in Update Replica
+SW1,SYSTEM,ENQ, ES2_AVG_NUM_UPDATE,ENQ - Average Number in Update Replica
+SW1,SYSTEM,ENQ, ES2_MAX_NUM_TAKEOVER,ENQ - Maximum Number in Takeover Replica
+SW1,SYSTEM,ENQ, ES2_AVG_NUM_TAKEOVER,ENQ - Average Number in Takeover Replica
+SW1,SYSTEM,ENQ, ENQ_REQ_CNT,ENQ - Enqueue Requests
+SW1,SYSTEM,ENQ, ENQ_REQ_REJ_CNT,ENQ - Rejects
+SW1,SYSTEM,ENQ, ENQ_ERR_CNT,ENQ - Errors
+SW1,SYSTEM,ENQ, DEQ_REQ_CNT,ENQ - Dequeue Requests
+SW1,SYSTEM,ENQ, DEQ_ERR_CNT,ENQ - Errors
+SW1,SYSTEM,ENQ, DEQ_ALL_REQ_CNT,ENQ - DequeueAll Requests
+SW1,SYSTEM,ENQ, ENQ_CLEAN_REQ,ENQ - CleanUp Requests
+SW1,SYSTEM,ENQ, ENQ_BACKUP_REQ,ENQ - Backup Requests
+SW1,SYSTEM,ENQ, ENQ_REPORT_REQ,ENQ - Reporting Requests
+SW1,SYSTEM,ENQ, ENQ_COMPR_REQ,ENQ - Compress Requests
+SW1,SYSTEM,ENQ, ENQ_VERIFY_REQ,ENQ - Verify Requests
+SW1,SYSTEM,ENQ, ENQ_FILE_WRITE,ENQ - Writes to File
+SW1,SYSTEM,ENQ, ENQ_FILE_WRT_BACKUP,ENQ - Backup
+SW1,SYSTEM,ENQ, ENQ_OWN_MAX_CNT,ENQ - Owner Names
+SW1,SYSTEM,ENQ, ENQ_OWN_MAX_LVL,ENQ - Peak Util
+SW1,SYSTEM,ENQ, ENQ_OWN_NOW_LVL,ENQ - Actual Util
+SW1,SYSTEM,ENQ, ENQ_ARG_MAX_CNT,ENQ - Granule Arguments
+SW1,SYSTEM,ENQ, ENQ_ARG_MAX_LVL,ENQ - Peak Util
+SW1,SYSTEM,ENQ, ENQ_ARG_NOW_LVL,ENQ - Actual Util
+SW1,SYSTEM,ENQ, ENQ_ENTR_MAX_CNT,ENQ - Granule Entries
+SW1,SYSTEM,ENQ, ENQ_ENTR_MAX_LVL,ENQ - Peak Util
+SW1,SYSTEM,ENQ, ENQ_ENTR_NOW_LVL,ENQ - Actual Util
+SW1,SYSTEM,ENQ, ENQ_UPD_MAX_CNT,ENQ - Update Queue Peak
+SW1,SYSTEM,ENQ, ENQ_UPD_NOW_LVL,ENQ - Actual
+SW1,SYSTEM,ENQ, ENQ_TOTAL_TIME,ENQ - Total Lock Time
+SW1,SYSTEM,ENQ, ENQ_TOTAL_WAIT,ENQ - Total Lock Wait Time
+SW1,SYSTEM,ENQ, ENQ_TOT_SER_TIME,ENQ - Total Server Time
+SW1,SYSTEM,ENQ,LOCK_LONGEST_DURATION,Duration of the longest lock entry
+SW1,SYSTEM,ENQ,LOCK_NUM_ALL,Number of all existing lock entries
+SW1,SYSTEM,ENQ,LOCK_NUM_OBJECT,Number of all existing lock Objects
+SW1,SYSTEM,ENQ,LOCK_NUM_USER_MAX,Maximum number of locks with a single user
+SW1,SYSTEM,ENQ,LOCK_NUM_TCODE_MAX,Maximum number of locks with a single Transaction code
+SW1,SYSTEM,ENQ,LOCK_NUM_MODE_E,Number of exclusive locks (lock mode E)
+SW1,SYSTEM,ENQ,LOCK_NUM_MODE_O,Number of optimistic locks (lock mode O)
+SW1,SYSTEM,ENQ,LOCK_NUM_MODE_S,Number of shared locks (lock mode S)
+SW1,SYSTEM,ENQ,LOCK_NUM_MODE_X,Number of exclusive non-cumulative locks (lock mode X)
+SW1,SYSTEM,ENQ,LOCK_S_GNAME,Elementary Lock of Lock Entry (Table Name)
+SW1,SYSTEM,ENQ,LOCK_S_GMODE,Lock Mode (Shared/Exclusive) of a Lock Entry
+SW1,SYSTEM,ENQ,LOCK_S_GOBJ,Name of Lock Object in the Lock Entry
+SW1,SYSTEM,ENQ,LOCK_S_GUNAME,User name in lock entry
+SW1,SYSTEM,ENQ,LOCK_S_GTCODE,Transaction Code in the Lock Entry
+SW1,SYSTEM,ENQ,LOCK_S_GTHOST,Host Name in the Lock Owner ID
+SW1,SYSTEM,WP,WP_BTC_NUM,Number of Background Work Processes
+SW1,SYSTEM,WP,WP_BTC_MAX_RUN,Maximum Runtime of a Background Process
+SW1,SYSTEM,WP,WP_BTC_USED,Number of Used Background Work Processes
+SW1,SYSTEM,WP,WP_BTC_USED_PERC,Percentage of Used Background Work Processes
+SW1,SYSTEM,WP,WP_COMMIT,Work Processes in COMMIT State
+SW1,SYSTEM,WP,WP_DIA_NUM,Number of Dialog Work Processes
+SW1,SYSTEM,WP,WP_DIA_MAX_RUN,Maximum Runtime of a Dialog Work Process
+SW1,SYSTEM,WP,WP_DIA_USED,Number of Used Dialog Work Processes
+SW1,SYSTEM,WP,WP_DIA_USED_PERC,Percentage of Used Dialog Work Processes
+SW1,SYSTEM,WP,WP_MEM_MAX,Work Processes - Maximum Memory Used
+SW1,SYSTEM,WP,WP_TCODE_MAX,Maximum Work Processes executing same Tcode
+SW1,SYSTEM,WP,WP_PROG_MAX,Maximum Work Processes executing same Program
+SW1,SYSTEM,WP,WP_BTCJOB_MAX,Maximum Work Processes executing same Background Job
+SW1,SYSTEM,WP,WP_USER_MAX,Maximum Work Processes used by same User
+SW1,SYSTEM,WP,WP_ENQ_NUM,Number of Enqueue Work Processes
+SW1,SYSTEM,WP,WP_ENQ_USED,Number of Used Enqueue Work Processes
+SW1,SYSTEM,WP,WP_UP2_NUM,Number of Update-2 Work Processes
+SW1,SYSTEM,WP,WP_UP2_USED,Number of Used Update-2 Work Processes
+SW1,SYSTEM,WP,WP_UPD_NUM,Number of Update Work Processes
+SW1,SYSTEM,WP,WP_UPD_USED,Number of Used Update Work Processes
+SW1,SYSTEM,WP,WP_SPO_NUM,Number of Spool Work Processes
+SW1,SYSTEM,WP,WP_SPO_USED,Number of Used Spool Work Processes
+SW1,SYSTEM,WP,WP_RUNNING,Workprocesses in Running status
+SW1,SYSTEM,WP,WP_WAITING,Workprocesses in Waiting status
+SW1,SYSTEM,WP,WP_STOPPED,Workprocesses in Stopped status
+SW1,SYSTEM,WP,WP_ENDED,Workprocesses in Ended status
+SW1,SYSTEM,WP,WP_SHUTDOWN,Workprocesses in Shutdown status
+SW1,SYSTEM,WP,WP_STANDBY,Workprocesses in Standby status
+SW1,SYSTEM,WP,WP_ONHOLD,Workprocesses in OnHold status
+SW1,SYSTEM,WP,WP_S_SERVER,Workprocesses :  Server name
+SW1,SYSTEM,WP,WP_S_BTCJOBNAME,Workprocesses : Background Job name
+SW1,SYSTEM,WP,WP_S_BNAME,Workprocesses : User name
+SW1,SYSTEM,WP,WP_S_REPORT,Workprocesses : Program Name
+SW1,SYSTEM,WP,WP_S_TCODE,Workprocesses : Transaction Code
+SW1,SYSTEM,WP,WP_S_MEMSUM,Workprocesses : Memory consumed
+SW1,SYSTEM,WP,WP_S_TYP,Workprocesses : Type
+SW1,SYSTEM,WP,WP_S_STATUS,Workprocesses : Status
+SW1,SYSTEM,WP,WP_S_ELTIME,Workprocesses : Elapsed time
+SW1,DATABASE,HDB,HDB_TOTAL_CPU_USER_TIME,HDB - CPU time spent in user mode
+SW1,DATABASE,HDB,HDB_TOTAL_CPU_SYSTEM_TIME,HDB - CPU time spent in kernel mode
+SW1,DATABASE,HDB,HDB_TOTAL_CPU_WIO_TIME,HDB - CPU time spent in wait IO 
+SW1,DATABASE,HDB,HDB_TOTAL_CPU_IDLE_TIME,HDB - CPU idle time
+SW1,DATABASE,HDB,HDB_FREE_PHYSICAL_MEMORY,HDB - Free Physical memory
+SW1,DATABASE,HDB,HDB_FREE_SWAP_SPACE,HDB - Free Swap Space
+SW1,DATABASE,HDB,HDB_USED_PHYSICAL_MEMORY,HDB - Used Physical Memory
+SW1,DATABASE,HDB,HDB_USED_SWAP_SPACE,HDB - Used Swap Space
+SW1,DATABASE,HDB,HDB_INST_TOT_MEM_USED_SIZE,HDB - Memory used from Pool
+SW1,DATABASE,HDB,HDB_INST_TOT_MEM_PEAK_USED,HDB - Peak Memory used from Pool
+SW1,DATABASE,HDB,HDB_OPEN_FILE_COUNT,HDB - Open File Count
+SW1,DATABASE,HDB,HDB_DISK_DATA_USED,HDB - Disk Data used
+SW1,DATABASE,HDB,HDB_DISK_DBCKUP_USED,HDB - Disk Backup used
+SW1,DATABASE,HDB,HDB_DISK_LOG_USED,HDB - Disk Log used
+SW1,DATABASE,HDB,HDB_DISK_LBCKUP_USED,HDB - Disk Log Backup used
+SW1,DATABASE,HDB,HDB_DISK_TRACE_USED,HDB - Disk Trace used
+SW1,DATABASE,HDB,HDB_MEM_CACHE_P,HDB - Cache Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_CS_P,HDB - Column Store Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_MS_P,HDB - Monitoring & STAT Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_RS_P,HDB - Row Store Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_SEI_P,HDB - Statement Execution Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_SYSTEM_P,HDB - System Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_CODE_P,HDB - Code Component Memory used
+SW1,DATABASE,HDB,HDB_MEM_STACK_P,HDB - Stack Component Memory used
+SW1,DATABASE,HDB,HDB_ALERT_ERROR,HDB - Alert - Error
+SW1,DATABASE,HDB,HDB_ALERT_HIGH,HDB -  Alert - High
+SW1,DATABASE,HDB,HDB_ALERT_INFORMATION,HDB - Alert - Information
+SW1,DATABASE,HDB,HDB_ALERT_LOW,HDB - Alert - Low
+SW1,DATABASE,HDB,HDB_ALERT_MEDIUM,HDB - Alert - Medium
+SW1,DATABASE,HDB,HDB_S_ALERT_DETAILS,HDB - Alert Details
+SW1,DATABASE,HDB,HDB_S_ALERT_NAME,HDB - Alert Name
+SW1,DATABASE,HDB,HDB_S_ALERT_RATING,HDB - Alert Rating
+SW1,DATABASE,HDB,HDB_S_ALERT_USERACTION,HDB - Alert User Action
+SW1,LOGS,RUNERR,RUNERR_INTERNAL ,Runtime Error - Internal Errors
+SW1,LOGS,RUNERR,RUNERR_ABAP_RT  ,Runtime Error - ABAP Runtime Errors
+SW1,LOGS,RUNERR,RUNERR_DYNP_RT  ,Runtime Error - Dynpro Errors
+SW1,LOGS,RUNERR,RUNERR_ABAP_PR  ,Runtime Error - ABAP Programming Errors
+SW1,LOGS,RUNERR,RUNERR_RES_BN   ,Runtime Error - Resource Bottleneck errors
+SW1,LOGS,RUNERR,RUNERR_ITS      ,Runtime Error - ITS errors
+SW1,LOGS,RUNERR,RUNERR_SQL      ,Runtime Error - Open SQL Errors
+SW1,LOGS,RUNERR,RUNERR_DI       ,Runtime Error - Databse Interface errors
+SW1,LOGS,RUNERR,RUNERR_COMM     ,Runtime Error - Communication errors
+SW1,LOGS,RUNERR,RUNERR_OTHER    ,Runtime Error - Other errors
+SW1,LOGS,RUNERR,RUNERR_USER_MAX ,Runtime Error - Maximum errors single user
+SW1,LOGS,RUNERR,RUNERR_S_UNAME,Runtime Error - User name
+SW1,LOGS,RUNERR,RUNERR_S_HOST,Runtime Error - Host name
+SW1,LOGS,RUNERR,RUNERR_S_ERRID,Runtime Error - Error Identifier
+SW1,LOGS,RUNERR,RUNERR_S_CATEGORY,Runtime Error - Error Category
+SW1,INTERFACES,RFC,RFC_ARFC_FREE_P,RFC - Available resource %
+SW1,INTERFACES,RFC,RFC_QRFC_IN_ENTRIES,RFC - Entries in Inbound Queue
+SW1,INTERFACES,RFC,RFC_QRFC_IN_COUNT,RFC - Inbound Queue Count
+SW1,INTERFACES,RFC,RFC_QRFC_OUT_ENTRIES,RFC - Entries in Outbound Queue
+SW1,INTERFACES,RFC,RFC_QRFC_OUT_COUNT,RFC - Outbound Queue Count
+SW1,INTERFACES,RFC,RFC_QRFC_IN_ERRORS,RFC - QRFC Inbound Errors
+SW1,INTERFACES,RFC,RFC_QRFC_OUT_ERRORS,RFC - QRFC Outbound Errors
+SW1,SYSTEM,STAT,STAT_DIA_DB_NUM_MOD,STAT - Dialog DB No. of Changes
+SW1,SYSTEM,STAT,STAT_DIA_DB_AVG_MOD_TIME,STAT - Dialog DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_DIA_DB_NUM_READS,STAT - Dialog DB No. of Reads
+SW1,SYSTEM,STAT,STAT_DIA_DB_AVG_READ_TIME,STAT - Dialog DB Average Read Time
+SW1,SYSTEM,STAT,STAT_DIA_AVG_RESP_TIME,STAT - Dialog Average Response Time
+SW1,SYSTEM,STAT,STAT_DIA_AVG_PROC_TIME,STAT - Dialog Average Processing Time
+SW1,SYSTEM,STAT,STAT_DIA_AVG_CPU_TIME,STAT - Dialog Average CPU Time
+SW1,SYSTEM,STAT,STAT_UPD_DB_NUM_MOD,STAT - Update DB No. of Changes
+SW1,SYSTEM,STAT,STAT_UPD_DB_AVG_MOD_TIME,STAT - Update DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_UPD_DB_NUM_READS,STAT - Update DB No. of Reads
+SW1,SYSTEM,STAT,STAT_UPD_DB_AVG_READ_TIME,STAT - Update DB Average Read Time
+SW1,SYSTEM,STAT,STAT_UPD_AVG_RESP_TIME,STAT - Update Average Response Time
+SW1,SYSTEM,STAT,STAT_UPD_AVG_PROC_TIME,STAT - Update Average Processing Time
+SW1,SYSTEM,STAT,STAT_UPD_AVG_CPU_TIME,STAT - Update Average CPU Time
+SW1,SYSTEM,STAT,STAT_SPO_DB_NUM_MOD,STAT - Spool DB No. of Changes
+SW1,SYSTEM,STAT,STAT_SPO_DB_AVG_MOD_TIME,STAT - Spool DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_SPO_DB_NUM_READS,STAT - Spool DB No. of Reads
+SW1,SYSTEM,STAT,STAT_SPO_DB_AVG_READ_TIME,STAT - Spool DB Average Read Time
+SW1,SYSTEM,STAT,STAT_SPO_AVG_RESP_TIME,STAT - Spool Average Response Time
+SW1,SYSTEM,STAT,STAT_SPO_AVG_PROC_TIME,STAT - Spool Average Processing Time
+SW1,SYSTEM,STAT,STAT_SPO_AVG_CPU_TIME,STAT - Spool Average CPU Time
+SW1,SYSTEM,STAT,STAT_BATCH_DB_NUM_MOD,STAT - Batch DB No. of Changes
+SW1,SYSTEM,STAT,STAT_BATCH_DB_AVG_MOD_TIME,STAT - Batch DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_BATCH_DB_NUM_READS,STAT - Batch DB No. of Reads
+SW1,SYSTEM,STAT,STAT_BATCH_DB_AVG_READ_TIME,STAT - Batch DB Average Read Time
+SW1,SYSTEM,STAT,STAT_BATCH_AVG_RESP_TIME,STAT - Batch Average Response Time
+SW1,SYSTEM,STAT,STAT_BATCH_AVG_PROC_TIME,STAT - Batch Average Processing Time
+SW1,SYSTEM,STAT,STAT_BATCH_AVG_CPU_TIME,STAT - Batch Average CPU Time
+SW1,SYSTEM,STAT,STAT_RFC_DB_NUM_MOD,STAT - RFC DB No. of Changes
+SW1,SYSTEM,STAT,STAT_RFC_DB_AVG_MOD_TIME,STAT - RFC DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_RFC_DB_NUM_READS,STAT - RFC DB No. of Reads
+SW1,SYSTEM,STAT,STAT_RFC_DB_AVG_READ_TIME,STAT - RFC DB Average Read Time
+SW1,SYSTEM,STAT,STAT_RFC_AVG_RESP_TIME,STAT - RFC Average Response Time
+SW1,SYSTEM,STAT,STAT_RFC_AVG_PROC_TIME,STAT - RFC Average Processing Time
+SW1,SYSTEM,STAT,STAT_RFC_AVG_CPU_TIME,STAT - RFC Average CPU Time
+SW1,SYSTEM,STAT,STAT_HTTP_DB_NUM_MOD,STAT - HTTP DB No. of Changes
+SW1,SYSTEM,STAT,STAT_HTTP_DB_AVG_MOD_TIME,STAT - HTTP DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_HTTP_DB_NUM_READS,STAT - HTTP DB No. of Reads
+SW1,SYSTEM,STAT,STAT_HTTP_DB_AVG_READ_TIME,STAT - HTTP DB Average Read Time
+SW1,SYSTEM,STAT,STAT_HTTP_AVG_RESP_TIME,STAT - HTTP Average Response Time
+SW1,SYSTEM,STAT,STAT_HTTP_AVG_PROC_TIME,STAT - HTTP Average Processing Time
+SW1,SYSTEM,STAT,STAT_HTTP_AVG_CPU_TIME,STAT - HTTP Average CPU Time
+SW1,SYSTEM,STAT,STAT_HTTPS_DB_NUM_MOD,STAT - HTTPS DB No. of Changes
+SW1,SYSTEM,STAT,STAT_HTTPS_DB_AVG_MOD_TIME,STAT - HTTPS DB Avg. Modification Time
+SW1,SYSTEM,STAT,STAT_HTTPS_DB_NUM_READS,STAT - HTTPS DB No. of Reads
+SW1,SYSTEM,STAT,STAT_HTTPS_DB_AVG_READ_TIME,STAT - HTTPS DB Average Read Time
+SW1,SYSTEM,STAT,STAT_HTTPS_AVG_RESP_TIME,STAT - HTTPS Average Response Time
+SW1,SYSTEM,STAT,STAT_HTTPS_AVG_PROC_TIME,STAT - HTTPS Average Processing Time
+SW1,SYSTEM,STAT,STAT_HTTPS_AVG_CPU_TIME,STAT - HTTPS Average CPU Time

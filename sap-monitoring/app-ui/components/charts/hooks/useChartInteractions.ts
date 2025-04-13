@@ -1,43 +1,63 @@
 "use client"
 
-import { useCallback } from 'react';
-import type * as echarts from 'echarts/core';
+import { useEffect } from 'react';
+import * as echarts from 'echarts';
+import type { EChartsType } from 'echarts';
+
+interface BrushSelectedParams {
+  batch: Array<{
+    selected: Array<{
+      dataIndex: number[];
+      seriesIndex: number;
+    }>;
+  }>;
+}
+
+interface DataZoomParams {
+  batch: Array<{
+    start: number;
+    end: number;
+  }>;
+}
 
 interface UseChartInteractionsProps {
-  chartInstance: React.RefObject<echarts.ECharts | null>;
-  onBrushSelected?: (selected: any[]) => void;
+  chartInstance: React.MutableRefObject<EChartsType | null>;
+  onBrushSelected?: (selected: Array<{ dataIndex: number[]; seriesIndex: number }>) => void;
   onDataZoom?: (params: { start: number; end: number }) => void;
 }
 
 export const useChartInteractions = ({
   chartInstance,
   onBrushSelected,
-  onDataZoom
+  onDataZoom,
 }: UseChartInteractionsProps) => {
-  const setupEventListeners = useCallback(() => {
+  useEffect(() => {
     if (!chartInstance.current) return;
 
-    chartInstance.current.on('brushSelected', (params) => {
-      const brushComponent = params.batch[0];
+    const handleBrushSelected = function(this: EChartsType, params: unknown) {
+      const brushParams = params as BrushSelectedParams;
+      const brushComponent = brushParams.batch[0];
       if (brushComponent?.selected?.length > 0) {
         onBrushSelected?.(brushComponent.selected);
       }
-    });
+    };
 
-    chartInstance.current.on('datazoom', (params) => {
-      if (params.batch?.[0]) {
-        const { start, end } = params.batch[0];
+    const handleDataZoom = function(this: EChartsType, params: unknown) {
+      const zoomParams = params as DataZoomParams;
+      if (zoomParams.batch?.[0]) {
+        const { start, end } = zoomParams.batch[0];
         onDataZoom?.({ start, end });
       }
-    });
+    };
+
+    chartInstance.current.on('brushSelected', handleBrushSelected);
+    chartInstance.current.on('datazoom', handleDataZoom);
 
     return () => {
-      if (chartInstance.current) {
-        chartInstance.current.off('brushSelected');
-        chartInstance.current.off('datazoom');
-      }
+      chartInstance.current?.off('brushSelected');
+      chartInstance.current?.off('datazoom');
     };
   }, [chartInstance, onBrushSelected, onDataZoom]);
 
-  return { setupEventListeners };
+  return { setupEventListeners: () => {} };
 };

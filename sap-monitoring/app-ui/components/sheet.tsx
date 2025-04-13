@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface SheetProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title?: string | React.ReactNode;
   children: React.ReactNode;
 }
 

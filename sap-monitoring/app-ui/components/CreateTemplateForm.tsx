@@ -4,19 +4,27 @@ import { Template, Graph } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { Select, SelectItem, SelectTrigger, SelectValue, SelectContent } from '@/components/ui/select';
 import { DynamicLayout } from '@/components/charts/DynamicLayout';
 
 export function CreateTemplateForm() {
-  const [template, setTemplate] = useState<Partial<Template>>({
+  const [template, setTemplate] = useState<Template>({
+    id: '',
     name: '',
+    description: '',
     system: '',
-    timeRange: 'auto',
-    resolution: 'auto',
-    graphs: []
+    timeRange: '',
+    resolution: '',
+    graphs: [],
   });
 
   const [currentGraph, setCurrentGraph] = useState<Partial<Graph> | null>(null);
+
+  const systemOptions = [
+    { value: 'system1', label: 'System 1' },
+    { value: 'system2', label: 'System 2' },
+    { value: 'system3', label: 'System 3' },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,51 +45,68 @@ export function CreateTemplateForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <Card className="p-6 space-y-6">
-        {/* Template Details */}
-        <div className="space-y-4">
-          <Input 
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-4">
+          <Input
             placeholder="Template Name"
             value={template.name}
             onChange={e => setTemplate(prev => ({ ...prev, name: e.target.value }))}
             required
           />
+          <Input
+            placeholder="Description"
+            value={template.description || ''}
+            onChange={e => setTemplate(prev => ({ ...prev, description: e.target.value }))}
+          />
           <Select
             value={template.system}
             onValueChange={value => setTemplate(prev => ({ ...prev, system: value }))}
-            options={systemOptions}
-            placeholder="Select System"
-          />
-          {/* Add other template fields */}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select System" />
+            </SelectTrigger>
+            <SelectContent>
+              {systemOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Graph Grid Layout */}
+          {(template.graphs || []).length > 0 && (
+            <DynamicLayout
+              charts={(template.graphs || []).map(g => ({
+                id: g.id,
+                data: [],
+                type: g.type,
+                title: g.name,
+                width: g.position.w,
+                height: g.position.h,
+              }))}
+              onLayoutChange={layout => {
+                setTemplate(prev => ({
+                  ...prev,
+                  graphs: (prev.graphs || []).map((g, i) => ({
+                    ...g,
+                    position: {
+                      ...g.position,
+                      x: layout[i].x,
+                      y: layout[i].y,
+                      w: layout[i].w,
+                      h: layout[i].h,
+                    },
+                  })),
+                }));
+              }}
+            />
+          )}
+
+          <Button type="submit">Create Template</Button>
         </div>
-
-        {/* Graph Configuration */}
-        {template.name && template.system && (
-          <div className="space-y-4">
-            <Button type="button" onClick={() => setCurrentGraph({})}>
-              Add Graph
-            </Button>
-
-            {/* Graph Grid Layout */}
-            {template.graphs.length > 0 && (
-              <DynamicLayout
-                charts={template.graphs.map(g => ({
-                  id: g.id,
-                  type: g.type,
-                  title: g.name,
-                  data: getDummyData(), // Generate dummy data for now
-                  width: g.layout.w * 100,
-                  height: g.layout.h * 100
-                }))}
-                // Add other props
-              />
-            )}
-          </div>
-        )}
-
-        <Button type="submit">Save Template</Button>
-      </Card>
-    </form>
+      </form>
+    </div>
   );
 }
