@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
+  Edit, // Add this import
 } from "lucide-react";
 import ChartContainer from "./ChartContainer";
 import { DataPoint, ChartType } from "@/types";
@@ -40,7 +41,7 @@ import {
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 
-// Update the interface to add hideControls and onDeleteGraph props
+// Add onEditGraph to the props interface
 interface DraggableChartProps {
   id: string;
   data: DataPoint[];
@@ -60,6 +61,7 @@ interface DraggableChartProps {
   isFullscreenMode?: boolean;
   hideControls?: boolean; // Add this to hide calendar, tools, download, and fullscreen buttons
   onDeleteGraph?: (id: string) => void; // Add this to handle graph deletion
+  onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
   isLoading?: boolean; // Add this line
 }
@@ -79,6 +81,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   isFullscreenMode,
   hideControls = false,
   onDeleteGraph,
+  onEditGraph, // Add this new prop
   resolution = "auto",
   isLoading = false, // Add this with default
 }) => {
@@ -696,6 +699,19 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                       )}
                     </Button>
 
+                    {/* Add Edit Button */}
+                    {onEditGraph && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                        onClick={() => onEditGraph && onEditGraph(id)}
+                        title="Edit Graph"
+                      >
+                        <Edit className={isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} />
+                      </Button>
+                    )}
+
                     {onDeleteGraph && (
                       <Button
                         size="icon"
@@ -725,7 +741,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               layout
               className={cn(
                 "h-full",
-                "pt-1 pb-10",
+                "pt-1 pb-8",
                 isFullscreen ? "flex items-center justify-center" : ""
               )}
             >
@@ -749,21 +765,27 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
             {/* KPI Parameters */}
             {kpiColors && Object.keys(kpiColors).length > 0 && (
               <div className="absolute bottom-0 left-0 right-0 bg-muted/10 border-t border-border/20">
-                <div className="flex flex-wrap justify-center gap-1 py-1.5 px-2">
+                <div className="flex items-center justify-evenly px-2 py-1">
                   {Object.entries(kpiColors).map(([kpiId, kpi]) => {
                     if (!kpi || !kpi.color) return null;
-
+                    
+                    // Adjust max width based on number of KPIs
+                    const kpiCount = Object.keys(kpiColors).length;
+                    const maxWidthClass = kpiCount > 5 ? "max-w-16" : 
+                                         kpiCount > 3 ? "max-w-20" : "max-w-24";
+                    
                     return (
                       <button
                         key={kpiId}
-                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                        className={`flex items-center flex-shrink-0 gap-1 rounded ${
                           isFullscreen ? "text-xs" : "text-[10px]"
                         } ${
                           localActiveKPIs.has(kpiId)
                             ? "bg-muted/20 opacity-100"
-                            : "opacity-40"
-                        } hover:bg-muted/30 transition-all`}
+                            : "opacity-60 hover:opacity-90"
+                        } hover:bg-muted/30 transition-all px-1.5 py-0.5`}
                         onClick={() => toggleKPI(kpiId)}
+                        title={kpi.name}
                       >
                         <span
                           className={cn(
@@ -775,7 +797,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                         <span
                           className={cn(
                             "truncate",
-                            isFullscreen ? "max-w-36" : "max-w-24",
+                            isFullscreen ? "max-w-32" : maxWidthClass,
                             "text-foreground/70"
                           )}
                         >
