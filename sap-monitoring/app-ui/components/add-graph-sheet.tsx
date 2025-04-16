@@ -251,7 +251,8 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         const response = await axios.get(
           `${baseUrl}/api/kpi?kpi_grp=${formData.kpiGroup}`
         );
-        setKpis(response.data || []);
+        // Filter for parent KPIs only
+        setKpis((response.data || []).filter((kpi: Kpi) => kpi.parent === true));
       } catch (error) {
         toast({
           title: "Error",
@@ -294,9 +295,10 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       const response = await axios.get(
         `${baseUrl}/api/kpi?kpi_grp=${kpiGroup}`
       );
+      // Filter for parent KPIs only
       setCorrelationKpis((prev) => ({
         ...prev,
-        [kpiGroup]: response.data || [],
+        [kpiGroup]: (response.data || []).filter((kpi: Kpi) => kpi.parent === true),
       }));
     } catch (error) {
       toast({
@@ -606,7 +608,8 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               const kpiResponse = await axios.get(
                 `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
               );
-              setKpis(kpiResponse.data || []);
+              // Filter for parent KPIs only
+              setKpis((kpiResponse.data || []).filter((kpi: Kpi) => kpi.parent === true));
             }
           }
           
@@ -625,9 +628,10 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             const kpiResponse = await axios.get(
               `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
             );
+            // Filter for parent KPIs only
             setCorrelationKpis(prev => ({
               ...prev,
-              [editingGraph.kpiGroup]: kpiResponse.data || []
+              [editingGraph.kpiGroup]: (kpiResponse.data || []).filter((kpi: Kpi) => kpi.parent === true)
             }));
             
             // For any correlation KPIs with different monitoring areas or KPI groups

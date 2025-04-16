@@ -924,21 +924,22 @@ export default function ManageUserPage() {
       toast.info("No access assigned", {
         description: "This user doesn't have any access assigned yet.",
       });
-      // Instead of viewing, offer to edit the user
-      handleEdit(userSystem);
       return;
     }
 
+    // Set view mode and config title
     setConfigTitle(`View Access for ${userSystem.name}`);
     setIsConfigOpen(true);
     setIsViewMode(true);
+    setIsEditing(false); // Ensure we're not in edit mode
+    setEditingId(null); // Clear any editing ID
 
     // Populate name and system for the sidebar header
     setName(userSystem.name);
     setSystemId(userSystem.system);
 
     // Set selected auth levels from the item
-    setSelectedAuthLevels(userSystem.auth_level.split(", "));
+    setSelectedAuthLevels(userSystem.auth_level === "N/A" ? [] : userSystem.auth_level.split(", "));
 
     // Reset data collections
     setMonitoringAreas([]);
@@ -955,8 +956,6 @@ export default function ManageUserPage() {
       );
 
       if (accessResponse.status === 200 && accessResponse.data) {
-        console.log("User access details:", accessResponse.data);
-
         // If API provides configuration details, use them
         // Otherwise use what we have stored locally
         if (accessResponse.data.configurations) {
@@ -1575,7 +1574,7 @@ export default function ManageUserPage() {
       {/* Updated Authorization Configuration Sheet */}
       <Sheet open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
-          <div className=" pt-3 pb-2">
+          <div className="pt-3 pb-2">
             <SheetHeader>
               <SheetTitle className="text-2xl font-bold">
                 {configTitle}
@@ -1584,7 +1583,6 @@ export default function ManageUserPage() {
                 {isViewMode ? "Viewing" : "Configuring"} access for {name} on
                 system {systemId}
               </p>
-              {/* Add this to verify data is loaded */}
               <p className="text-xs text-muted-foreground">
                 Monitoring Areas: {selectedMAs.size}, KPI Groups:{" "}
                 {selectedKPIGroups.size}, KPIs: {selectedKPIs.size}
@@ -1594,7 +1592,7 @@ export default function ManageUserPage() {
 
           <div className="flex-1 overflow-y-auto px-2">
             <div className="py-4 space-y-8">
-              {/* Monitoring Areas Section - only show if selected in auth levels */}
+              {/* Monitoring Areas Section */}
               {selectedAuthLevels.includes("Monitoring Areas") && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
@@ -1621,10 +1619,7 @@ export default function ManageUserPage() {
                           <Checkbox
                             id={`ma-${ma.mon_area_name}`}
                             checked={selectedMAs.has(ma.mon_area_name)}
-                            onCheckedChange={(checked) =>
-                              handleMAChange(ma.mon_area_name, checked === true)
-                            }
-                            disabled={isViewMode}
+                            disabled={true} // Always disabled in view mode
                           />
                           <div className="flex-1">
                             <Label
@@ -1645,14 +1640,12 @@ export default function ManageUserPage() {
                 </div>
               )}
 
-              {/* KPI Groups Section - only show if selected in auth levels */}
+              {/* KPI Groups Section */}
               {selectedAuthLevels.includes("KPI Group") && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
                     <h3 className="text-lg font-semibold">KPI Groups</h3>
-                    <Badge variant="outline">
-                      {selectedKPIGroups.size} selected
-                    </Badge>
+                    <Badge variant="outline">{selectedKPIGroups.size} selected</Badge>
                   </div>
 
                   {isLoadingKPIGroups ? (
@@ -1674,13 +1667,7 @@ export default function ManageUserPage() {
                           <Checkbox
                             id={`kg-${kg.kpi_grp_name}`}
                             checked={selectedKPIGroups.has(kg.kpi_grp_name)}
-                            onCheckedChange={(checked) =>
-                              handleKPIGroupChange(
-                                kg.kpi_grp_name,
-                                checked === true
-                              )
-                            }
-                            disabled={isViewMode}
+                            disabled={true} // Always disabled in view mode
                           />
                           <div className="flex-1">
                             <Label
@@ -1704,14 +1691,12 @@ export default function ManageUserPage() {
                 </div>
               )}
 
-              {/* KPIs Section - only show if selected in auth levels */}
+              {/* KPIs Section */}
               {selectedAuthLevels.includes("KPIs") && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
                     <h3 className="text-lg font-semibold">KPIs</h3>
-                    <Badge variant="outline">
-                      {selectedKPIs.size} selected
-                    </Badge>
+                    <Badge variant="outline">{selectedKPIs.size} selected</Badge>
                   </div>
 
                   {isLoadingKPIs ? (
@@ -1733,10 +1718,7 @@ export default function ManageUserPage() {
                           <Checkbox
                             id={`kpi-${kpi.kpi_name}`}
                             checked={selectedKPIs.has(kpi.kpi_name)}
-                            onCheckedChange={(checked) =>
-                              handleKPIChange(kpi.kpi_name, checked === true)
-                            }
-                            disabled={isViewMode}
+                            disabled={true} // Always disabled in view mode
                           />
                           <div className="flex-1">
                             <Label
@@ -1765,11 +1747,8 @@ export default function ManageUserPage() {
           {/* Action buttons - now in a sticky footer */}
           <div className="flex justify-end space-x-2 p-4 border-t sticky bottom-0 bg-background">
             <Button variant="outline" onClick={() => setIsConfigOpen(false)}>
-              {isViewMode ? "Close" : "Cancel"}
+              Close
             </Button>
-            {!isViewMode && (
-              <Button onClick={handleSaveSelections}>Save Configuration</Button>
-            )}
           </div>
         </SheetContent>
       </Sheet>
