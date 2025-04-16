@@ -324,6 +324,7 @@ const ChartContainer = memo(
             const chart = chartRef.current;
             if (!chart) return value;
 
+
             const option = chart.getOption();
             const dataZoom = Array.isArray(option.dataZoom)
               ? option.dataZoom[0]
@@ -331,6 +332,7 @@ const ChartContainer = memo(
             if (!dataZoom) return value;
 
             const zoomLevel = (dataZoom.end - dataZoom.start) / 100;
+
 
             // Determine the appropriate format based on zoom level
             if (zoomLevel <= 0.1) {
