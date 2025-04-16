@@ -320,11 +320,12 @@ const ChartContainer = memo(
             const chart = chartRef.current;
             if (!chart) return value;
             
-            const option = chart.getOption();
-            const dataZoom = option.dataZoom?.[0];
+            const option = chart.getOption() as echarts.EChartsOption;
+            const dataZoomArr = option.dataZoom as echarts.DataZoomComponentOption[] | undefined;
+            const dataZoom = dataZoomArr?.[0] as { start?: number; end?: number } | undefined;
             if (!dataZoom) return value;
             
-            const zoomLevel = (dataZoom.end - dataZoom.start) / 100;
+            const zoomLevel = ((dataZoom.end || 100) - (dataZoom.start || 0)) / 100;
             
             // Determine the appropriate format based on zoom level
             if (zoomLevel <= 0.1) {
