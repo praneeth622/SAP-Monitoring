@@ -82,6 +82,9 @@ const PieChart: React.FC<{
           color: theme === 'dark' ? '#fff' : '#000'
         }
       },
+      legend: {
+        show: false
+      },
       series: [
         {
           name: data.title,
@@ -90,7 +93,8 @@ const PieChart: React.FC<{
           avoidLabelOverlap: false,
           itemStyle: {
             borderColor: theme === 'dark' ? '#1e293b' : '#ffffff',
-            borderWidth: 2
+            borderWidth: 2,
+            borderRadius: 4
           },
           label: {
             show: false
@@ -100,6 +104,11 @@ const PieChart: React.FC<{
               show: true,
               fontSize: '14',
               fontWeight: 'bold'
+            },
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
             }
           },
           labelLine: {
@@ -147,6 +156,22 @@ const PieChart: React.FC<{
     });
   };
 
+  const exportToPNG = () => {
+    if (chart) {
+      const dataURL = chart.getDataURL({
+        type: 'png',
+        pixelRatio: 2,
+        backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff'
+      });
+      const link = document.createElement('a');
+      link.download = `${data.title.replace(/\s+/g, '-').toLowerCase()}-chart.png`;
+      link.href = dataURL;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   return (
     <div ref={containerRef} className="relative">
       <Card 
@@ -162,11 +187,19 @@ const PieChart: React.FC<{
             onClick={toggleFullscreen}
           />
         )}
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 bg-card/90 border-border/40"
+            onClick={exportToPNG}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 bg-card/90 border-border/40"
             onClick={toggleFullscreen}
           >
             {isFullscreen ? (
@@ -177,31 +210,44 @@ const PieChart: React.FC<{
           </Button>
         </div>
         <div className="absolute top-4 left-4 z-50">
-          <h3 className="font-semibold text-lg">{data.title}</h3>
+          <h3 className="font-semibold text-lg text-foreground">{data.title}</h3>
         </div>
         <div 
           ref={chartRef} 
           className={`w-full transition-all duration-300 ${
-            isFullscreen ? 'h-[calc(100%-100px)]' : 'h-[300px]'
+            isFullscreen ? 'h-[calc(100%-120px)]' : 'h-[280px]'
           }`}
         />
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex flex-wrap justify-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-xl border border-border/40">
-          {data.data.map((item, index) => (
-            <div
-              key={item.name}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/20"
-            >
+        <div 
+          className={`absolute ${
+            isFullscreen ? 'bottom-6' : 'bottom-4'
+          } left-1/2 transform -translate-x-1/2 z-20 transition-all duration-300`}
+        >
+          <div className="flex flex-wrap justify-center gap-2 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-md border border-border/40">
+            {data.data.map((item, index) => (
               <div
-                className="w-3 h-3 rounded-full"
-                style={{
-                  backgroundColor: chartThemes[selectedTheme as keyof typeof chartThemes].colors[index]
-                }}
-              />
-              <span className="text-sm font-medium">{item.name}</span>
-              <span className="text-sm text-muted-foreground">({item.value.toLocaleString()})</span>
-            </div>
-          ))}
+                key={item.name}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+              >
+                <div
+                  className="w-3 h-3 rounded-full shadow-sm"
+                  style={{
+                    backgroundColor: chartThemes[selectedTheme as keyof typeof chartThemes].colors[index % chartThemes[selectedTheme as keyof typeof chartThemes].colors.length]
+                  }}
+                />
+                <span className="text-sm font-medium">{item.name}</span>
+                <span className="text-sm text-muted-foreground">({item.value.toLocaleString()})</span>
+              </div>
+            ))}
+          </div>
         </div>
+        {isFullscreen && (
+          <div className="absolute bottom-4 right-4 z-50">
+            <p className="text-xs text-muted-foreground">
+              Click outside the chart to exit fullscreen
+            </p>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -327,10 +373,10 @@ const AlertsPage = () => {
     // Apply sorting
     if (sortConfig) {
       result.sort((a, b) => {
-        if (a[sortConfig.key as keyof typeof a] < b[sortConfig.key as keyof typeof b]) {
+        if (a[sortConfig.key as keyof typeof a] < b[sortConfig.key as keyof typeof a]) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        if (a[sortConfig.key as keyof typeof a] > b[sortConfig.key as keyof typeof b]) {
+        if (a[sortConfig.key as keyof typeof a] > b[sortConfig.key as keyof typeof a]) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
         return 0;

@@ -703,6 +703,14 @@ export default function TemplatesPage() {
 
   const handleAddGraph = () => {
     if (!isFormValid) {
+      // Update to set specific error states for missing fields
+      const newErrors: Record<string, boolean> = {};
+      if (!templateData.name.trim()) newErrors.name = true;
+      if (!templateData.system) newErrors.system = true;
+      if (!templateData.timeRange) newErrors.timeRange = true;
+      if (!templateData.resolution) newErrors.resolution = true;
+      setErrors(newErrors);
+      
       toast.error(ERROR_MESSAGES.REQUIRED_FIELDS);
       return;
     }
@@ -1045,9 +1053,9 @@ export default function TemplatesPage() {
           >
             {/* Combined header with all controls in a single row */}
             <div className="rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
-              <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0 md:space-x-6">
+              <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0">
                 {/* Left side - title */}
-                <div className="md:w-1/4">
+                <div className="md:w-1/5 flex-shrink-0">
                   <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
                     {pageTitle}
                   </h1>
@@ -1057,9 +1065,9 @@ export default function TemplatesPage() {
                 </div>
                 
                 {/* Right side - all controls in a row */}
-                <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-12 gap-3">
                   {/* Template Name */}
-                  <div>
+                  <div className="md:col-span-3">
                     <label className="block text-xs font-medium text-foreground/70 mb-1">
                       Template Name <span className="text-red-500">*</span>
                     </label>
@@ -1082,7 +1090,7 @@ export default function TemplatesPage() {
                   </div>
 
                   {/* System Select */}
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-foreground/70 mb-1">
                       System <span className="text-red-500">*</span>
                     </label>
@@ -1130,7 +1138,7 @@ export default function TemplatesPage() {
                   </div>
 
                   {/* Time Range */}
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-foreground/70 mb-1">
                       Time Range <span className="text-red-500">*</span>
                     </label>
@@ -1164,7 +1172,7 @@ export default function TemplatesPage() {
                   </div>
 
                   {/* Resolution */}
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-foreground/70 mb-1">
                       Resolution <span className="text-red-500">*</span>
                     </label>
@@ -1198,58 +1206,50 @@ export default function TemplatesPage() {
                   </div>
 
                   {/* Switches and Save Button */}
-                  <div className="flex flex-col">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium text-foreground/70">
-                        Options
-                      </label>
+                  <div className="md:col-span-3 flex flex-row items-end justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <Switch
+                          id="default-toggle"
+                          checked={templateData.isDefault}
+                          onCheckedChange={(checked) =>
+                            setTemplateData((prev) => ({
+                              ...prev,
+                              isDefault: checked,
+                            }))
+                          }
+                          className="scale-90"
+                        />
+                        <label htmlFor="default-toggle" className="text-xs font-medium cursor-pointer">
+                          Default
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Switch
+                          id="favorite-toggle"
+                          checked={templateData.isFavorite}
+                          onCheckedChange={(checked) =>
+                            setTemplateData((prev) => ({
+                              ...prev,
+                              isFavorite: checked,
+                            }))
+                          }
+                          className="scale-90"
+                        />
+                        <label htmlFor="favorite-toggle" className="text-xs font-medium cursor-pointer">
+                          Favorite
+                        </label>
+                      </div>
                     </div>
                     
-                    <div className="flex h-9 items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            id="default-toggle"
-                            checked={templateData.isDefault}
-                            onCheckedChange={(checked) =>
-                              setTemplateData((prev) => ({
-                                ...prev,
-                                isDefault: checked,
-                              }))
-                            }
-                            className="scale-90"
-                          />
-                          <label htmlFor="default-toggle" className="text-xs font-medium cursor-pointer">
-                            Default
-                          </label>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            id="favorite-toggle"
-                            checked={templateData.isFavorite}
-                            onCheckedChange={(checked) =>
-                              setTemplateData((prev) => ({
-                                ...prev,
-                                isFavorite: checked,
-                              }))
-                            }
-                            className="scale-90"
-                          />
-                          <label htmlFor="favorite-toggle" className="text-xs font-medium cursor-pointer">
-                            Favorite
-                          </label>
-                        </div>
-                      </div>
-                      
-                      <Button 
-                        onClick={handleSaveTemplate}
-                        disabled={!isFormValid || (showGraphs && graphs.length === 0)}
-                        className="h-9"
-                        size="sm"
-                      >
-                        {isEditMode ? "Update" : "Save"}
-                      </Button>
-                    </div>
+                    <Button 
+                      onClick={handleSaveTemplate}
+                      disabled={!isFormValid || (showGraphs && graphs.length === 0)}
+                      className="h-9 px-4 whitespace-nowrap ml-2"
+                      size="sm"
+                    >
+                      {isEditMode ? "Update Template" : "Save Template"}
+                    </Button>
                   </div>
                 </div>
               </div>
