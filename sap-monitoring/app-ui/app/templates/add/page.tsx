@@ -774,6 +774,78 @@ export default function TemplatesPage() {
         };
       });
 
+      // If this template is being set as default, we need to check other templates
+      if (templateData.isDefault) {
+        try {
+          // First, fetch all templates for the user
+          const templatesResponse = await fetch(
+            `https://shwsckbvbt.a.pinggy.link/api/utl?userId=USER_TEST_1`
+          );
+          
+          if (!templatesResponse.ok) {
+            throw new Error("Failed to fetch templates");
+          }
+
+          const templates = await templatesResponse.json();
+          
+          // Find any template that is currently set as default
+          const defaultTemplate = templates.find((template: any) => 
+            Array.isArray(template.default) ? template.default[0] : template.default
+          );
+
+          // If there is a default template and it's not the current one being edited
+          if (defaultTemplate && 
+              (!isEditMode || 
+               (Array.isArray(defaultTemplate.template_id) 
+                ? defaultTemplate.template_id[0] 
+                : defaultTemplate.template_id) !== newTemplateId)) {
+            
+            // Update the existing default template to set default to false
+            const updateDefaultTemplate = {
+              user_id: "USER_TEST_1",
+              template_id: Array.isArray(defaultTemplate.template_id) 
+                ? defaultTemplate.template_id[0] 
+                : defaultTemplate.template_id,
+              template_name: Array.isArray(defaultTemplate.template_name) 
+                ? defaultTemplate.template_name[0] 
+                : defaultTemplate.template_name,
+              template_desc: Array.isArray(defaultTemplate.template_desc) 
+                ? defaultTemplate.template_desc[0] 
+                : defaultTemplate.template_desc,
+              default: false,
+              favorite: Array.isArray(defaultTemplate.favorite) 
+                ? defaultTemplate.favorite[0] 
+                : defaultTemplate.favorite,
+              frequency: defaultTemplate.frequency 
+                ? (Array.isArray(defaultTemplate.frequency) 
+                  ? defaultTemplate.frequency[0] 
+                  : defaultTemplate.frequency)
+                : "auto",
+              systems: defaultTemplate.systems || [],
+              graphs: defaultTemplate.graphs || [],
+            };
+
+            const updateResponse = await fetch(
+              "https://shwsckbvbt.a.pinggy.link/api/ut",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(updateDefaultTemplate),
+              }
+            );
+
+            if (!updateResponse.ok) {
+              throw new Error("Failed to update existing default template");
+            }
+          }
+        } catch (error) {
+          console.error("Error handling default template:", error);
+          // Continue with saving the new template even if default handling fails
+        }
+      }
+
       const templatePayload = {
         user_id: "USER_TEST_1", // Hard-coded for now
         template_id: newTemplateId,
@@ -844,7 +916,7 @@ export default function TemplatesPage() {
         router.push("/templates");
       }
 
-      setHasChanges(false); // <-- Add this line
+      setHasChanges(false);
     } catch (error) {
       console.error("Save template error:", error);
       toast.error(ERROR_MESSAGES.SAVE_ERROR, {

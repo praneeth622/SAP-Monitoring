@@ -224,11 +224,13 @@ export default function ConfigDashboard() {
           return next;
         });
 
-        // Clear KPIs for this area but keep KPI groups
+        // Clear KPIs and KPI groups for this area
         if (areaName === "OS") {
           setOsKpis([]);
+          setOsKpiGroup([]);
         } else if (areaName === "JOBS") {
           setJobsKpis([]);
+          setJobsKpiGroup([]);
         }
 
         // Clear active KPI groups for this area
@@ -260,8 +262,6 @@ export default function ConfigDashboard() {
         // Set KPI groups based on area
         if (areaName === "OS") {
           setOsKpiGroup(kpiGroupData);
-          if (kpiGroupData.mon_area_name) {
-          }
         } else if (areaName === "JOBS") {
           setJobsKpiGroup(kpiGroupData);
         }
