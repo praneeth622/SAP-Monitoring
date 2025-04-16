@@ -53,25 +53,45 @@ export const fetchKpiData = async (
     let response;
 
     if (monitoringArea.toUpperCase() === "JOBS") {
-      endpoint = `${BASE_URL}/api/jobs?kpi_name=${kpiName}&from=${fromStr}&to=${toStr}&aggregation=${aggregation}`;
+      endpoint = `${BASE_URL}/api/jobs?kpi_name=${kpiName}&get_details=&from=${fromStr}&to=${toStr}&aggregation=${aggregation}`;
       response = await axios.get(endpoint);
 
+      if (!response.data || !Array.isArray(response.data)) {
+        console.error(`Invalid response format for JOBS API: ${kpiName}`);
+        return [];
+      }
+
       // Transform jobs API response to DataPoint format
-      return response.data.map((item: any) => ({
-        date: item.timestamp,
-        category: kpiName,
-        value: item.job_count,
-      }));
+      return response.data
+        .filter((item: any) => item && item.timestamp && item.job_count !== undefined)
+        .map((item: any) => ({
+          date: new Date(item.timestamp).toISOString(),
+          category: kpiName,
+          value: Number(item.job_count),
+        }))
+        .sort((a: DataPoint, b: DataPoint) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
     } else if (monitoringArea.toUpperCase() === "OS") {
       endpoint = `${BASE_URL}/api/os2?kpi_name=${kpiName}&from=${fromStr}&to=${toStr}&aggregation=${aggregation}`;
       response = await axios.get(endpoint);
 
+      if (!response.data || !Array.isArray(response.data)) {
+        console.error(`Invalid response format for OS API: ${kpiName}`);
+        return [];
+      }
+
       // Transform OS API response to DataPoint format
-      return response.data.map((item: any) => ({
-        date: item.timestamp,
-        category: kpiName,
-        value: item.kpi_value,
-      }));
+      return response.data
+        .filter((item: any) => item && item.timestamp && item.kpi_value !== undefined)
+        .map((item: any) => ({
+          date: new Date(item.timestamp).toISOString(),
+          category: kpiName,
+          value: Number(item.kpi_value),
+        }))
+        .sort((a: DataPoint, b: DataPoint) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
     } else {
       console.error(`Unknown monitoring area: ${monitoringArea}`);
       throw new Error(`Unknown monitoring area: ${monitoringArea}`);
@@ -303,54 +323,55 @@ export function getDummyData() {
   return data;
 }
 
-// Add this new function to handle actual API data fetching for templates
+// Function to fetch chart data for a template
 export const fetchTemplateChartData = async (
-  primaryKpi: string,
-  correlationKpis: string[],
+  kpiName: string,
   monitoringArea: string,
-  dateRange: { from: Date; to: Date },
-  resolution = "auto"
+  correlationKpis: string[],
+  from: Date,
+  to: Date,
+  resolution: string
 ): Promise<DataPoint[]> => {
   try {
-    // Start by getting the primary KPI data
-    const primaryData = await fetchKpiData(
-      primaryKpi,
-      monitoringArea,
-      dateRange.from,
-      dateRange.to,
-      resolution
-    );
+    // Fetch primary KPI data
+    const primaryData = await fetchKpiData(kpiName, monitoringArea, from, to, resolution);
 
-    // If we couldn't get primary data, return an empty array
-    if (primaryData.length === 0) {
+    if (!primaryData || primaryData.length === 0) {
+      console.error(`No data received for primary KPI: ${kpiName}`);
       return [];
     }
 
-    // Next, get all correlation KPIs data
-    const correlationPromises = correlationKpis.map((kpi) =>
-      fetchKpiData(
-        kpi,
-        monitoringArea,
-        dateRange.from,
-        dateRange.to,
-        resolution
-      )
+    if (correlationKpis.length === 0) {
+      return primaryData;
+    }
+
+    // Fetch correlation KPI data
+    const correlationPromises = correlationKpis.map((correlationKpi) =>
+      fetchKpiData(correlationKpi, monitoringArea, from, to, resolution)
     );
 
     const correlationResults = await Promise.allSettled(correlationPromises);
 
-    // Filter for successful results and combine all data
-    let allData = [...primaryData];
+    // Combine primary and correlation data
+    const allData: DataPoint[] = [...primaryData];
 
     correlationResults.forEach((result, index) => {
-      if (result.status === "fulfilled" && result.value.length > 0) {
-        allData = [...allData, ...result.value];
+      if (result.status === "fulfilled" && result.value && result.value.length > 0) {
+        const correlationData = result.value;
+        allData.push(...correlationData);
+      } else {
+        console.error(`Error fetching correlation data for ${correlationKpis[index]}:`, 
+          result.status === "rejected" ? result.reason : "No data received");
       }
     });
 
-    return allData;
+    // Sort all data by date to ensure consistent display
+    return allData.sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
   } catch (error) {
     console.error("Error fetching template chart data:", error);
+    // Return empty array on error to prevent application crashes
     return [];
   }
 };

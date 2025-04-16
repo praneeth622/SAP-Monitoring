@@ -273,42 +273,44 @@ export default function Mainscreen() {
 
   const handleDeleteTemplate = async (id: string) => {
     try {
-      // Find the template to delete
-      const templateToDelete = templates.find((t) => {
-        const tId = Array.isArray(t.template_id)
-          ? t.template_id[0]
-          : t.template_id;
-        return tId === id;
-      });
+      // Show loading state
+      setLoading(true);
 
-      if (!templateToDelete) return;
-
-      // Send delete request to API
-      const response = await fetch(`${baseUrl}/api/ut/${id}`, {
+      // Set up proper request options
+      const requestOptions = {
         method: "DELETE",
-      });
+        redirect: "follow",
+      };
+
+      // Use the API format provided in the prompt
+      const response = await fetch(
+        `${baseUrl}/api/ut?templateId=${id}`,
+        requestOptions
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to delete template");
+        const errorText = await response.text();
+        throw new Error(`Failed to delete template: ${errorText}`);
       }
 
-      // Update local state
-      setTemplates(
-        templates.filter((t) => {
-          const tId = Array.isArray(t.template_id)
-            ? t.template_id[0]
-            : t.template_id;
-          return tId !== id;
-        })
-      );
+      // Close the confirmation dialog
       setConfirmDelete(null);
 
+      // Show success message
       toast.success("Template deleted successfully");
+
+      // Refetch templates from API to ensure data is up-to-date
+      await fetchTemplates();
     } catch (error) {
       console.error("Error deleting template:", error);
       toast.error("Failed to delete template", {
-        description: "Please try again or contact support",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Please try again or contact support",
       });
+      // Make sure loading state is turned off even if there's an error
+      setLoading(false);
     }
   };
 
