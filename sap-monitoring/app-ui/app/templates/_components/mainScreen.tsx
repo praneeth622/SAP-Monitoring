@@ -279,7 +279,7 @@ export default function Mainscreen() {
       // Set up proper request options
       const requestOptions = {
         method: "DELETE",
-        redirect: "follow",
+        redirect: "follow" as const,
       };
 
       // Use the API format provided in the prompt
