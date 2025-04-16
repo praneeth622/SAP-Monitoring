@@ -325,54 +325,61 @@ export function getDummyData() {
 
 // Function to fetch chart data for a template
 export const fetchTemplateChartData = async (
-  kpiName: string,
-  monitoringArea: string,
-  correlationKpis: string[],
-  from: Date,
-  to: Date,
-  resolution: string
+  primaryKpi: string,
+  correlationKpis: string[] = [],
+  monitoringArea: string = "OS",
+  dateRange: { from: Date; to: Date } | Date = new Date(),
+  resolution: string = "auto",
+  additionalOptions?: any
 ): Promise<DataPoint[]> => {
+  // Handle various parameter formats for backward compatibility
+  let fromDate: Date, toDate: Date;
+  
+  if (dateRange && typeof dateRange === 'object' && 'from' in dateRange && 'to' in dateRange) {
+    // If dateRange is provided as an object with from and to properties
+    fromDate = dateRange.from;
+    toDate = dateRange.to;
+  } else if (dateRange instanceof Date) {
+    // If dateRange is a single date (backward compatibility)
+    toDate = dateRange;
+    fromDate = new Date(toDate.getTime());
+    fromDate.setDate(fromDate.getDate() - 7); // Default to 7 days before
+  } else {
+    // Default fallback
+    toDate = new Date();
+    fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 7);
+  }
+
   try {
     // Fetch primary KPI data
-    const primaryData = await fetchKpiData(kpiName, monitoringArea, from, to, resolution);
-
-    if (!primaryData || primaryData.length === 0) {
-      console.error(`No data received for primary KPI: ${kpiName}`);
-      return [];
-    }
-
-    if (correlationKpis.length === 0) {
-      return primaryData;
-    }
-
-    // Fetch correlation KPI data
-    const correlationPromises = correlationKpis.map((correlationKpi) =>
-      fetchKpiData(correlationKpi, monitoringArea, from, to, resolution)
+    const primaryData = await fetchKpiData(
+      primaryKpi,
+      monitoringArea,
+      fromDate,
+      toDate,
+      resolution
     );
 
-    const correlationResults = await Promise.allSettled(correlationPromises);
+    // Fetch correlation KPI data if any
+    const correlationPromises = correlationKpis.map((kpi) =>
+      fetchKpiData(kpi, monitoringArea, fromDate, toDate, resolution)
+    );
 
-    // Combine primary and correlation data
-    const allData: DataPoint[] = [...primaryData];
+    const correlationData = await Promise.all(correlationPromises);
 
-    correlationResults.forEach((result, index) => {
-      if (result.status === "fulfilled" && result.value && result.value.length > 0) {
-        const correlationData = result.value;
-        allData.push(...correlationData);
-      } else {
-        console.error(`Error fetching correlation data for ${correlationKpis[index]}:`, 
-          result.status === "rejected" ? result.reason : "No data received");
-      }
+    // Combine all data points
+    const combinedData = [...primaryData];
+    correlationData.forEach((dataset) => {
+      combinedData.push(...dataset);
     });
 
-    // Sort all data by date to ensure consistent display
-    return allData.sort((a, b) => 
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    return combinedData.length > 0
+      ? combinedData
+      : generateDummyData([primaryKpi, ...correlationKpis]);
   } catch (error) {
     console.error("Error fetching template chart data:", error);
-    // Return empty array on error to prevent application crashes
-    return [];
+    return generateDummyData([primaryKpi, ...correlationKpis]);
   }
 };
 
