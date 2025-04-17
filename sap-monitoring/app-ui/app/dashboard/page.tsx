@@ -388,6 +388,18 @@ const generateChartsFromTemplate = async (
       // Determine monitoring area - default to OS if not specified
       const monitoringArea = primaryKpi.includes("job") ? "JOBS" : "OS";
 
+      // Get the position from the template
+      // Ensure position is properly set using the values from the API
+      const position = {
+        x: graph.position.x,
+        y: graph.position.y,
+        w: graph.position.w,
+        h: graph.position.h,
+      };
+
+      // Log position data for debugging
+      console.log(`Graph ${graph.id} position from API:`, position);
+
       // Fetch real data from API
       try {
         const chartData = await fetchTemplateChartData(
@@ -406,12 +418,7 @@ const generateChartsFromTemplate = async (
           data: chartData,
           activeKPIs: new Set(allKpis),
           kpiColors: globalKpiColors,
-          layout: {
-            x: graph.position.x,
-            y: graph.position.y,
-            w: graph.position.w,
-            h: graph.position.h,
-          },
+          layout: position,
           width: 400,
           height: 300,
         };
@@ -425,12 +432,7 @@ const generateChartsFromTemplate = async (
           data: generateDummyData(allKpis),
           activeKPIs: new Set(allKpis),
           kpiColors: globalKpiColors,
-          layout: {
-            x: graph.position.x,
-            y: graph.position.y,
-            w: graph.position.w,
-            h: graph.position.h,
-          },
+          layout: position,
           width: 400,
           height: 300,
         };
@@ -973,12 +975,14 @@ export default function Dashboard() {
           // Important: Update the charts state with the new charts
           if (Array.isArray(templateCharts)) {
             // Apply the saved layout positions from the template
-            const chartsWithLayout = templateCharts.map(chart => {
-              const templateGraph = normalizedTemplate.graphs.find(g => g.id === chart.id);
+            const chartsWithLayout = templateCharts.map((chart) => {
+              const templateGraph = normalizedTemplate.graphs.find(
+                (g) => g.id === chart.id
+              );
               if (templateGraph) {
                 return {
                   ...chart,
-                  layout: templateGraph.position
+                  layout: templateGraph.position,
                 };
               }
               return chart;
@@ -1263,19 +1267,24 @@ export default function Dashboard() {
         setResolution(templateResolution);
 
         // Ensure we have a valid date range
-        const dateRange = globalDateRange?.from && globalDateRange?.to
-          ? { from: globalDateRange.from, to: globalDateRange.to }
-          : {
-              from: new Date(new Date().setDate(new Date().getDate() - 7)),
-              to: new Date(),
-            };
+        const dateRange =
+          globalDateRange?.from && globalDateRange?.to
+            ? { from: globalDateRange.from, to: globalDateRange.to }
+            : {
+                from: new Date(new Date().setDate(new Date().getDate() - 7)),
+                to: new Date(),
+              };
 
         // Generate charts from the template with the correct resolution
-        generateChartsFromTemplate(selectedTemplate, templateResolution, dateRange)
+        generateChartsFromTemplate(
+          selectedTemplate,
+          templateResolution,
+          dateRange
+        )
           .then((newCharts) => {
             console.log("Generated charts with saved layouts:", newCharts);
             setCharts(newCharts);
-            
+
             // Force a layout refresh with a slight delay to ensure proper sizing
             setTimeout(() => {
               window.dispatchEvent(new Event("resize"));
@@ -1458,27 +1467,33 @@ export default function Dashboard() {
           x: 0,
           y: 0,
           w: 4,
-          h: 4
+          h: 4,
         };
 
         return {
           graph_id: chart.id,
           graph_name: chart.title,
           top_xy_pos: `${layout.y * 10}:${layout.x * 10}`,
-          bottom_xy_pos: `${(layout.y + layout.h) * 10}:${(layout.x + layout.w) * 10}`,
-          primary_kpi_id: Array.isArray(chart.activeKPIs) ? chart.activeKPIs[0] || '' : Array.from(chart.activeKPIs || new Set())[0] || '',
-          secondary_kpis: Array.isArray(chart.activeKPIs) 
-            ? chart.activeKPIs.slice(1).map(kpiId => ({ kpi_id: kpiId }))
-            : Array.from(chart.activeKPIs || new Set()).slice(1).map(kpiId => ({ kpi_id: kpiId })),
+          bottom_xy_pos: `${(layout.y + layout.h) * 10}:${
+            (layout.x + layout.w) * 10
+          }`,
+          primary_kpi_id: Array.isArray(chart.activeKPIs)
+            ? chart.activeKPIs[0] || ""
+            : Array.from(chart.activeKPIs || new Set())[0] || "",
+          secondary_kpis: Array.isArray(chart.activeKPIs)
+            ? chart.activeKPIs.slice(1).map((kpiId) => ({ kpi_id: kpiId }))
+            : Array.from(chart.activeKPIs || new Set())
+                .slice(1)
+                .map((kpiId) => ({ kpi_id: kpiId })),
           frequency: "5m",
           resolution: "1d",
-          systems: []
+          systems: [],
         };
       });
 
       const payload = {
         template_id: selectedApiTemplate,
-        graphs: currentLayout
+        graphs: currentLayout,
       };
 
       const response = await fetch("/api/templates/save", {
@@ -1501,16 +1516,31 @@ export default function Dashboard() {
     }
   }, [charts, selectedApiTemplate]);
 
+  // Modify the handleLayoutChange function to preserve layout changes
   const handleLayoutChange = useCallback(
     (newLayout: any) => {
       console.log("Layout changed:", newLayout);
       console.log("Previous layoutChanged state:", layoutChanged);
 
-      // Update the charts with new layouts
+      // Update the charts with new layouts immediately to prevent flashing
       setCharts((prevCharts) => {
+        // Skip if we're in the process of loading a template
+        if (isContentLoading) {
+          console.log("Skipping layout update during content loading");
+          return prevCharts;
+        }
+
         return prevCharts.map((chart) => {
           const newLayoutItem = newLayout.find((l: any) => l.i === chart.id);
           if (newLayoutItem) {
+            // Log the update to help debugging
+            console.log(`Updating layout for chart ${chart.id}:`, {
+              x: newLayoutItem.x,
+              y: newLayoutItem.y,
+              w: newLayoutItem.w,
+              h: newLayoutItem.h,
+            });
+
             return {
               ...chart,
               layout: {
@@ -1540,7 +1570,7 @@ export default function Dashboard() {
 
       return () => clearTimeout(saveTimeout);
     },
-    [layoutChanged, saveLayout]
+    [layoutChanged, isContentLoading, saveLayout]
   );
 
   // Add this function to handle theme changes without resetting template
@@ -1661,26 +1691,45 @@ export default function Dashboard() {
           templateId={selectedApiTemplate}
           templateData={{
             template_id: selectedApiTemplate,
-            template_name: apiTemplates.find(t => t.id === selectedApiTemplate)?.name || '',
-            template_desc: apiTemplates.find(t => t.id === selectedApiTemplate)?.description || '',
-            default: apiTemplates.find(t => t.id === selectedApiTemplate)?.isDefault || false,
-            favorite: apiTemplates.find(t => t.id === selectedApiTemplate)?.isFavorite || false,
-            frequency: apiTemplates.find(t => t.id === selectedApiTemplate)?.frequency || '5m',
-            systems: apiTemplates.find(t => t.id === selectedApiTemplate)?.systems || [],
-            graphs: charts.map(chart => {
-              const templateGraph = apiTemplates.find(t => t.id === selectedApiTemplate)?.graphs.find(g => g.id === chart.id);
+            template_name:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)?.name ||
+              "",
+            template_desc:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.description || "",
+            default:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.isDefault || false,
+            favorite:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.isFavorite || false,
+            frequency:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.frequency || "5m",
+            systems:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)?.systems ||
+              [],
+            graphs: charts.map((chart) => {
+              const templateGraph = apiTemplates
+                .find((t) => t.id === selectedApiTemplate)
+                ?.graphs.find((g) => g.id === chart.id);
               return {
                 graph_id: chart.id,
                 graph_name: chart.title,
-                primary_kpi_id: Array.from(chart.activeKPIs || new Set<string>())[0] || '',
-                secondary_kpis: Array.from(chart.activeKPIs || new Set<string>()).slice(1).map(kpi => ({ kpi_id: kpi })),
-                frequency: '5m',
-                resolution: '1d',
+                primary_kpi_id:
+                  Array.from(chart.activeKPIs || new Set<string>())[0] || "",
+                secondary_kpis: Array.from(
+                  chart.activeKPIs || new Set<string>()
+                )
+                  .slice(1)
+                  .map((kpi) => ({ kpi_id: kpi })),
+                frequency: "5m",
+                resolution: "1d",
                 systems: [],
-                top_xy_pos: '0:0',
-                bottom_xy_pos: '0:0'
+                top_xy_pos: "0:0",
+                bottom_xy_pos: "0:0",
               };
-            })
+            }),
           }}
         />
       </div>
