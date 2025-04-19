@@ -21,6 +21,7 @@ import { generateDummyData, fetchTemplateChartData } from "@/utils/data";
 import { toast } from "sonner";
 import { useSearchParams, useRouter } from "next/navigation";
 import debounce from "lodash/debounce";
+import { app_globals } from "@/config/config";
 
 interface Template {
   id: string;
@@ -78,7 +79,6 @@ const timeRangeOptions = [
   "custom",
 ];
 
-const systemOptions = ["SVW", "System 1", "System 2"];
 
 // Add this near the top of the file with other constants
 const resolutionOptions = [
@@ -87,7 +87,7 @@ const resolutionOptions = [
   { value: "5m", label: "5 Minutes" },
   { value: "15m", label: "15 Minutes" },
   { value: "1h", label: "1 Hour" },
-  { value: "1d", label: "1 Day" }
+  { value: "1d", label: "1 Day" },
 ];
 
 // Utility function to create vibrant, consistent colors for KPIs
@@ -171,10 +171,13 @@ const retryFetch = async <T,>(
 
       // Log the retry attempt (except on the last attempt)
       if (attempt < maxRetries) {
-        console.log(`API call failed, retrying (${attempt + 1}/${maxRetries})...`, error);
+        console.log(
+          `API call failed, retrying (${attempt + 1}/${maxRetries})...`,
+          error
+        );
 
         // Wait before the next retry
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
   }
@@ -264,27 +267,36 @@ export default function TemplatesPage() {
 
   // Add this effect to handle form validation whenever inputs change
   useEffect(() => {
-    const isValid = templateData.name.trim() !== '' && 
-      templateData.system !== '' && 
-      templateData.timeRange !== '' && 
-      templateData.resolution !== '';
-    
+    const isValid =
+      templateData.name.trim() !== "" &&
+      templateData.system !== "" &&
+      templateData.timeRange !== "" &&
+      templateData.resolution !== "";
+
     setIsFormValid(isValid);
-  }, [templateData.name, templateData.system, templateData.timeRange, templateData.resolution]);
+  }, [
+    templateData.name,
+    templateData.system,
+    templateData.timeRange,
+    templateData.resolution,
+  ]);
 
   // Add a function to handle editing a graph
   const handleEditGraph = (graphId: string) => {
     // Check if the graph was just added (has a temporary ID)
-    const isNewlyAddedGraph = graphId.startsWith('graph-') && !isEditMode && hasChanges;
-    
+    const isNewlyAddedGraph =
+      graphId.startsWith("graph-") && !isEditMode && hasChanges;
+
     if (isNewlyAddedGraph) {
       // Show a friendly toast message instead of letting the error occur
-      toast.warning("Please save the template first before editing this newly added graph.");
+      toast.warning(
+        "Please save the template first before editing this newly added graph."
+      );
       return;
     }
-    
+
     // Otherwise, proceed with normal edit flow
-    const graphToEdit = graphs.find(graph => graph.id === graphId);
+    const graphToEdit = graphs.find((graph) => graph.id === graphId);
     if (graphToEdit) {
       // First set the selectedTemplate - this is the key fix
       setSelectedTemplate({
@@ -292,7 +304,7 @@ export default function TemplatesPage() {
         ...templateData,
         graphs,
       });
-      
+
       // Then set the editing graph and open the sheet
       setEditingGraph(graphToEdit);
       setIsAddGraphSheetOpen(true);
@@ -710,7 +722,7 @@ export default function TemplatesPage() {
       if (!templateData.timeRange) newErrors.timeRange = true;
       if (!templateData.resolution) newErrors.resolution = true;
       setErrors(newErrors);
-      
+
       toast.error(ERROR_MESSAGES.REQUIRED_FIELDS);
       return;
     }
@@ -787,54 +799,57 @@ export default function TemplatesPage() {
         try {
           // First, fetch all templates for the user
           const templatesResponse = await fetch(
-            `https://shwsckbvbt.a.pinggy.link/api/utl?userId=USER_TEST_1`
+            `${app_globals.base_url}/api/utl?userId=${app_globals.default_user_id}`
           );
-          
+
           if (!templatesResponse.ok) {
             throw new Error("Failed to fetch templates");
           }
 
           const templates = await templatesResponse.json();
-          
+
           // Find any template that is currently set as default
-          const defaultTemplate = templates.find((template: any) => 
-            Array.isArray(template.default) ? template.default[0] : template.default
+          const defaultTemplate = templates.find((template: any) =>
+            Array.isArray(template.default)
+              ? template.default[0]
+              : template.default
           );
 
           // If there is a default template and it's not the current one being edited
-          if (defaultTemplate && 
-              (!isEditMode || 
-               (Array.isArray(defaultTemplate.template_id) 
-                ? defaultTemplate.template_id[0] 
-                : defaultTemplate.template_id) !== newTemplateId)) {
-            
+          if (
+            defaultTemplate &&
+            (!isEditMode ||
+              (Array.isArray(defaultTemplate.template_id)
+                ? defaultTemplate.template_id[0]
+                : defaultTemplate.template_id) !== newTemplateId)
+          ) {
             // Update the existing default template to set default to false
             const updateDefaultTemplate = {
-              user_id: "USER_TEST_1",
-              template_id: Array.isArray(defaultTemplate.template_id) 
-                ? defaultTemplate.template_id[0] 
+              user_id: app_globals.default_user_id,
+              template_id: Array.isArray(defaultTemplate.template_id)
+                ? defaultTemplate.template_id[0]
                 : defaultTemplate.template_id,
-              template_name: Array.isArray(defaultTemplate.template_name) 
-                ? defaultTemplate.template_name[0] 
+              template_name: Array.isArray(defaultTemplate.template_name)
+                ? defaultTemplate.template_name[0]
                 : defaultTemplate.template_name,
-              template_desc: Array.isArray(defaultTemplate.template_desc) 
-                ? defaultTemplate.template_desc[0] 
+              template_desc: Array.isArray(defaultTemplate.template_desc)
+                ? defaultTemplate.template_desc[0]
                 : defaultTemplate.template_desc,
               default: false,
-              favorite: Array.isArray(defaultTemplate.favorite) 
-                ? defaultTemplate.favorite[0] 
+              favorite: Array.isArray(defaultTemplate.favorite)
+                ? defaultTemplate.favorite[0]
                 : defaultTemplate.favorite,
-              frequency: defaultTemplate.frequency 
-                ? (Array.isArray(defaultTemplate.frequency) 
-                  ? defaultTemplate.frequency[0] 
-                  : defaultTemplate.frequency)
+              frequency: defaultTemplate.frequency
+                ? Array.isArray(defaultTemplate.frequency)
+                  ? defaultTemplate.frequency[0]
+                  : defaultTemplate.frequency
                 : "auto",
               systems: defaultTemplate.systems || [],
               graphs: defaultTemplate.graphs || [],
             };
 
             const updateResponse = await fetch(
-              "https://shwsckbvbt.a.pinggy.link/api/ut",
+              `${app_globals.base_url}/api/ut`,
               {
                 method: "POST",
                 headers: {
@@ -855,7 +870,7 @@ export default function TemplatesPage() {
       }
 
       const templatePayload = {
-        user_id: "USER_TEST_1", // Hard-coded for now
+        user_id: app_globals.default_user_id, // Use the centralized user ID from config
         template_id: newTemplateId,
         template_name: templateData.name,
         template_desc: `${templateData.name} Template`, // Description
@@ -876,8 +891,7 @@ export default function TemplatesPage() {
         JSON.stringify(templatePayload, null, 2)
       );
 
-      const baseUrl = "https://shwsckbvbt.a.pinggy.link";
-      const response = await fetch(`${baseUrl}/api/ut`, {
+      const response = await fetch(`${app_globals.base_url}/api/ut`, {
         method: "POST", // API uses POST for both create and update
         headers: {
           "Content-Type": "application/json",
@@ -992,9 +1006,9 @@ export default function TemplatesPage() {
         generateConsistentColors(allKpis);
 
       // Update the graph with the new data
-      setGraphs((prev) => 
-        prev.map((graph) => 
-          graph.id === graphId 
+      setGraphs((prev) =>
+        prev.map((graph) =>
+          graph.id === graphId
             ? {
                 ...graph,
                 ...graphData,
@@ -1063,11 +1077,11 @@ export default function TemplatesPage() {
                     Create and manage your monitoring templates
                   </p>
                 </div>
-                
+
                 {/* Right side - all controls in a row */}
                 <div className="flex-1 grid grid-cols-2 md:grid-cols-12 gap-3">
                   {/* Template Name */}
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-foreground/70 mb-1">
                       Template Name <span className="text-red-500">*</span>
                     </label>
@@ -1206,7 +1220,7 @@ export default function TemplatesPage() {
                   </div>
 
                   {/* Switches and Save Button */}
-                  <div className="md:col-span-3 flex flex-row items-end justify-between">
+                  <div className="md:col-span-2 flex flex-row items-end justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-1">
                         <Switch
@@ -1220,7 +1234,10 @@ export default function TemplatesPage() {
                           }
                           className="scale-90"
                         />
-                        <label htmlFor="default-toggle" className="text-xs font-medium cursor-pointer">
+                        <label
+                          htmlFor="default-toggle"
+                          className="text-xs font-medium cursor-pointer"
+                        >
                           Default
                         </label>
                       </div>
@@ -1236,15 +1253,20 @@ export default function TemplatesPage() {
                           }
                           className="scale-90"
                         />
-                        <label htmlFor="favorite-toggle" className="text-xs font-medium cursor-pointer">
+                        <label
+                          htmlFor="favorite-toggle"
+                          className="text-xs font-medium cursor-pointer"
+                        >
                           Favorite
                         </label>
                       </div>
                     </div>
-                    
-                    <Button 
+
+                    <Button
                       onClick={handleSaveTemplate}
-                      disabled={!isFormValid || (showGraphs && graphs.length === 0)}
+                      disabled={
+                        !isFormValid || (showGraphs && graphs.length === 0)
+                      }
                       className="h-9 px-4 whitespace-nowrap ml-2"
                       size="sm"
                     >
@@ -1271,7 +1293,9 @@ export default function TemplatesPage() {
                 <div className="flex flex-col items-center justify-center py-4">
                   <Plus className="w-8 h-8 text-muted-foreground mb-2" />
                   <h3 className="text-base font-medium text-foreground/90">
-                    {showGraphs && graphs.length > 0 ? "Add Another Graph" : "Add Graph"}
+                    {showGraphs && graphs.length > 0
+                      ? "Add Another Graph"
+                      : "Add Graph"}
                   </h3>
                   {!showGraphs && (
                     <p className="text-sm text-muted-foreground mt-2">
@@ -1311,22 +1335,29 @@ export default function TemplatesPage() {
                   setIsAddGraphSheetOpen(false);
                   setEditingGraph(null);
                 }}
-                editingGraph={editingGraph ? {
-                  ...editingGraph,
-                  id: editingGraph.id || `temp-${Date.now()}`
-                } : null}
+                editingGraph={
+                  editingGraph
+                    ? {
+                        ...editingGraph,
+                        id: editingGraph.id || `temp-${Date.now()}`,
+                      }
+                    : null
+                }
                 onAddGraph={(graphData) => {
                   // Prevent multiple calls by immediately disabling the sheet
                   setIsAddGraphSheetOpen(false);
-                  
+
                   if (editingGraph) {
-                    handleUpdateGraph(editingGraph.id || `temp-${Date.now()}`, graphData);
+                    handleUpdateGraph(
+                      editingGraph.id || `temp-${Date.now()}`,
+                      graphData
+                    );
                   } else {
                     // Ensure graphData fully conforms to Graph type by providing defaults for optional properties
                     const completeGraphData: Graph = {
                       ...graphData,
                       activeKPIs: graphData.activeKPIs || new Set<string>(),
-                      kpiColors: graphData.kpiColors || {}
+                      kpiColors: graphData.kpiColors || {},
                     };
                     handleAddGraphToTemplate(completeGraphData);
                   }
