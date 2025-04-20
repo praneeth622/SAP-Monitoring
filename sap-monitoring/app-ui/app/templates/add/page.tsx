@@ -34,14 +34,19 @@ interface Template {
   graphs: Graph[];
 }
 
+// Update the Graph interface to include the description fields
 interface Graph {
   id?: string;
   name: string;
   type: "line" | "bar";
   monitoringArea: string;
+  monitoringAreaDesc?: string;
   kpiGroup: string;
+  kpiGroupDesc?: string;
   primaryKpi: string;
+  primaryKpiDesc?: string;
   correlationKpis: string[];
+  correlationKpisDesc?: string[];
   primaryFilterValues?: any[];
   secondaryKpisData?: any[];
   layout: {
@@ -788,6 +793,7 @@ export default function TemplatesPage() {
     setIsAddGraphSheetOpen(true);
   };
 
+  // Modify the handleSaveTemplate function to include descriptions for secondary KPIs
   const handleSaveTemplate = async () => {
     if (!isFormValid) {
       toast.error(ERROR_MESSAGES.VALIDATION_ERROR);
@@ -820,14 +826,18 @@ export default function TemplatesPage() {
         // Format secondary KPIs
         const formattedSecondaryKpis = graph.correlationKpis.map(
           (kpi, kpiIndex) => {
+            // Get descriptions
+            const kpiDesc = graph.correlationKpisDesc?.[kpiIndex] || "";
+
             // If we have detailed secondaryKpisData, use it
             if (graph.secondaryKpisData && graph.secondaryKpisData[kpiIndex]) {
               return {
-                ma:
-                  graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
-                kpigrp:
-                  graph.secondaryKpisData[kpiIndex].kpigrp || graph.kpiGroup,
+                ma: graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
+                ma_desc: graph.secondaryKpisData[kpiIndex].ma_desc || graph.monitoringAreaDesc || "",
+                kpigrp: graph.secondaryKpisData[kpiIndex].kpigrp || graph.kpiGroup,
+                kpigrp_desc: graph.secondaryKpisData[kpiIndex].kpigrp_desc || graph.kpiGroupDesc || "",
                 kpi_id: kpi,
+                kpi_desc: graph.secondaryKpisData[kpiIndex].kpi_desc || kpiDesc || "",
                 filter_values: normalizeFilterValues(
                   graph.secondaryKpisData[kpiIndex].filter_values || []
                 ),
@@ -837,8 +847,11 @@ export default function TemplatesPage() {
             // Otherwise use the monitoring area and KPI group from the primary KPI
             return {
               ma: graph.monitoringArea,
+              ma_desc: graph.monitoringAreaDesc || "",
               kpigrp: graph.kpiGroup,
+              kpigrp_desc: graph.kpiGroupDesc || "",
               kpi_id: kpi,
+              kpi_desc: kpiDesc || "",
               filter_values: [],
             };
           }
@@ -857,9 +870,13 @@ export default function TemplatesPage() {
               system_id: templateData.system.toLowerCase(),
             },
           ],
+          // Add all required fields with their values and descriptions
           primary_kpi_ma: graph.monitoringArea,
+          primary_kpi_ma_desc: graph.monitoringAreaDesc || "",
           primary_kpi_kpigrp: graph.kpiGroup,
+          primary_kpi_kpigrp_desc: graph.kpiGroupDesc || "",
           primary_kpi_id: graph.primaryKpi,
+          primary_kpi_desc: graph.primaryKpiDesc || "",
           primary_filter_values: normalizeFilterValues(
             graph.primaryFilterValues
           ),
@@ -1023,6 +1040,7 @@ export default function TemplatesPage() {
     }
   };
 
+  // Modify the handleAddGraphToTemplate function to capture descriptions
   const handleAddGraphToTemplate = (graphData: Graph) => {
     if (graphs.length >= 9) {
       toast.error(ERROR_MESSAGES.MAX_GRAPHS);
@@ -1056,7 +1074,7 @@ export default function TemplatesPage() {
       setGraphs((prev) => [...prev, newGraph]);
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
-      setHasChanges(true); // <-- Add this line
+      setHasChanges(true);
 
       // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
       setTimeout(() => {
@@ -1070,7 +1088,7 @@ export default function TemplatesPage() {
     }
   };
 
-  // Add a function to handle updating an existing graph
+  // Modify the handleUpdateGraph function to update descriptions
   const handleUpdateGraph = (graphId: string, graphData: any) => {
     try {
       // Create or update KPI colors and active KPIs as before
@@ -1096,9 +1114,13 @@ export default function TemplatesPage() {
                 name: graphData.name,
                 type: graphData.type,
                 monitoringArea: graphData.monitoringArea,
+                monitoringAreaDesc: graphData.monitoringAreaDesc,
                 kpiGroup: graphData.kpiGroup,
+                kpiGroupDesc: graphData.kpiGroupDesc,
                 primaryKpi: graphData.primaryKpi,
+                primaryKpiDesc: graphData.primaryKpiDesc,
                 correlationKpis: graphData.correlationKpis,
+                correlationKpisDesc: graphData.correlationKpisDesc,
                 primaryFilterValues: existingGraph.primaryFilterValues || [],
                 secondaryKpisData: existingGraph.secondaryKpisData || [],
                 activeKPIs: newActiveKPIs,

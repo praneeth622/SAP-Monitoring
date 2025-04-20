@@ -68,9 +68,13 @@ interface AddGraphSheetProps {
     name: string;
     type: "line" | "bar";
     monitoringArea: string;
+    monitoringAreaDesc?: string;
     kpiGroup: string;
+    kpiGroupDesc?: string;
     primaryKpi: string;
+    primaryKpiDesc?: string;
     correlationKpis: string[];
+    correlationKpisDesc?: string[];
     layout: {
       x: number;
       y: number;
@@ -84,9 +88,13 @@ interface AddGraphSheetProps {
     name: string;
     type: "line" | "bar";
     monitoringArea: string;
+    monitoringAreaDesc?: string;
     kpiGroup: string;
+    kpiGroupDesc?: string;
     primaryKpi: string;
+    primaryKpiDesc?: string;
     correlationKpis: string[];
+    correlationKpisDesc?: string[];
     layout: {
       x: number;
       y: number;
@@ -515,7 +523,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
-  // Update the handleSubmit function to prevent duplicate submissions
+  // Update the handleSubmit function to include description fields
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -558,20 +566,45 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       return;
     }
 
+    // Get descriptions for monitoring area, KPI group, and primary KPI
+    const monitoringAreaObj = monitoringAreas.find(
+      area => area.mon_area_name === formData.monitoringArea
+    );
+    const kpiGroupObj = kpiGroups.find(
+      group => group.kpi_grp_name === formData.kpiGroup
+    );
+    const kpiObj = kpis.find(k => k.kpi_name === formData.kpi);
+
+    // Get descriptions for correlation KPIs
+    const correlationKpisDesc = formData.correlationKpis
+      .filter(kpi => kpi.kpi)
+      .map(kpi => {
+        // Find the KPI in the correlationKpis object
+        const kpiList = correlationKpis[kpi.kpiGroup] || [];
+        const kpiObj = kpiList.find(k => k.kpi_name === kpi.kpi);
+        return kpiObj?.kpi_desc || "";
+      });
+
     // For edit mode, we only need to validate that the name is provided
     if (editingGraph) {
-      // Create the graph data with updated fields
+      // Create the graph data with updated fields and descriptions
       const graphData = {
         name: formData.graphName,
         type: formData.graphType as "line" | "bar",
         monitoringArea: formData.monitoringArea,
+        monitoringAreaDesc: monitoringAreaObj?.mon_area_desc || editingGraph.monitoringAreaDesc || "",
         kpiGroup: formData.kpiGroup,
+        kpiGroupDesc: kpiGroupObj?.kpi_grp_desc || editingGraph.kpiGroupDesc || "",
         primaryKpi: formData.kpi,
+        primaryKpiDesc: kpiObj?.kpi_desc || editingGraph.primaryKpiDesc || "",
         correlationKpis: formData.correlationKpis
           .filter((kpi) => kpi.kpi)
           .map((kpi) => kpi.kpi),
+        correlationKpisDesc: correlationKpisDesc,
         layout: editingGraph.layout || { x: 0, y: 0, w: 4, h: 4 },
         id: editingGraph.id,
+        activeKPIs: editingGraph.activeKPIs || new Set(),
+        kpiColors: editingGraph.kpiColors || {},
       };
 
       // Pass the data back to the parent component
@@ -588,16 +621,20 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       return;
     }
 
-    // Create the graph data to pass back to the parent component
+    // Create the graph data to pass back to the parent component with descriptions
     const graphData = {
       name: formData.graphName,
       type: formData.graphType as "line" | "bar",
       monitoringArea: formData.monitoringArea,
+      monitoringAreaDesc: monitoringAreaObj?.mon_area_desc || "",
       kpiGroup: formData.kpiGroup,
+      kpiGroupDesc: kpiGroupObj?.kpi_grp_desc || "",
       primaryKpi: formData.kpi,
+      primaryKpiDesc: kpiObj?.kpi_desc || "",
       correlationKpis: formData.correlationKpis
         .filter((kpi) => kpi.kpi)
         .map((kpi) => kpi.kpi),
+      correlationKpisDesc: correlationKpisDesc,
       layout: { x: 0, y: 0, w: 4, h: 4 },
     };
 
@@ -700,7 +737,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             }
           }
 
-          // Update form data with editing graph values
+          // Update form data with editing graph values and descriptions
           setFormData(prev => ({
             ...prev,
             monitoringArea: editingGraph.monitoringArea,
@@ -709,6 +746,14 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             graphType: editingGraph.type,
             graphName: editingGraph.name
           }));
+
+          // Log the descriptions we're working with
+          console.log("Editing graph with descriptions:", {
+            monitoringAreaDesc: editingGraph.monitoringAreaDesc,
+            kpiGroupDesc: editingGraph.kpiGroupDesc,
+            primaryKpiDesc: editingGraph.primaryKpiDesc,
+            correlationKpisDesc: editingGraph.correlationKpisDesc
+          });
 
         } catch (error) {
           console.error("Error loading data for edit graph:", error);
