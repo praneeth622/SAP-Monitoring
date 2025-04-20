@@ -396,35 +396,25 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  // Update the isKpiSelected function to check for duplicates across all selections
   const isKpiSelected = (kpiName: string, monitoringArea: string, kpiGroup: string) => {
-    // Check if this KPI is selected as primary KPI with same monitoring area and KPI group
-    if (formData.monitoringArea === monitoringArea &&
-        formData.kpiGroup === kpiGroup &&
-        formData.kpi === kpiName) {
+    // Check if this KPI is selected as primary KPI
+    if (formData.kpi === kpiName) {
       return true;
     }
 
-    // Check if this KPI is selected in any correlation KPI with same monitoring area and KPI group
+    // Check if this KPI is selected in any correlation KPI
     return formData.correlationKpis.some(
-      (corrKpi) =>
-        corrKpi.monitoringArea === monitoringArea &&
-        corrKpi.kpiGroup === kpiGroup &&
-        corrKpi.kpi === kpiName
+      (corrKpi) => corrKpi.kpi === kpiName
     );
   };
 
-  const canAddMoreCorrelationKpis = () => {
-    if (formData.correlationKpis.length === 0) return true;
-
-    const lastCorrelationKpi = formData.correlationKpis[formData.correlationKpis.length - 1];
-    return lastCorrelationKpi.monitoringArea && lastCorrelationKpi.kpiGroup && lastCorrelationKpi.kpi;
-  };
-
+  // Update the handleKPIChange function to prevent duplicates
   const handleKPIChange = (value: string) => {
     if (isKpiSelected(value, formData.monitoringArea, formData.kpiGroup)) {
       toast({
         title: "Error",
-        description: "This KPI is already selected for this monitoring area and KPI group",
+        description: "This KPI is already selected either as primary KPI or in correlation KPIs",
         variant: "destructive",
       });
       return;
@@ -435,6 +425,13 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       // Set the graph name to the KPI description when a KPI is selected
       graphName: kpis.find(k => k.kpi_name === value)?.kpi_desc || prev.graphName
     }));
+  };
+
+  const canAddMoreCorrelationKpis = () => {
+    if (formData.correlationKpis.length === 0) return true;
+
+    const lastCorrelationKpi = formData.correlationKpis[formData.correlationKpis.length - 1];
+    return lastCorrelationKpi.monitoringArea && lastCorrelationKpi.kpiGroup && lastCorrelationKpi.kpi;
   };
 
   const addCorrelationKpi = () => {
@@ -462,6 +459,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  // Update the handleCorrelationKpiChange function to prevent duplicates
   const handleCorrelationKpiChange = async (
     index: number,
     field: keyof CorrelationKpiField,
@@ -489,11 +487,11 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         // Fetch KPIs for this KPI group
         fetchCorrelationKpis(value);
       } else if (field === "kpi") {
-        // Check for duplicate KPIs only if monitoring area and KPI group are the same
+        // Check for duplicate KPIs across all selections
         if (isKpiSelected(value, newCorrelationKpis[index].monitoringArea, newCorrelationKpis[index].kpiGroup)) {
           toast({
             title: "Error",
-            description: "This KPI is already selected for this monitoring area and KPI group",
+            description: "This KPI is already selected either as primary KPI or in correlation KPIs",
             variant: "destructive",
           });
           return prev;
@@ -868,20 +866,23 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {kpis.map((kpi) => (
-                  <Tooltip key={kpi.kpi_desc}>
-                    <TooltipTrigger asChild>
-                      <SelectItem value={kpi.kpi_name}>
-                        {kpi.kpi_desc}
-                      </SelectItem>
-                    </TooltipTrigger>
-                    {kpi.kpi_desc && (
-                      <TooltipContent>
-                        <p>{kpi.kpi_desc}</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                ))}
+                {kpis
+                  // Filter out KPIs that are already selected in correlation KPIs
+                  .filter(kpi => !formData.correlationKpis.some(corrKpi => corrKpi.kpi === kpi.kpi_name))
+                  .map((kpi) => (
+                    <Tooltip key={kpi.kpi_desc}>
+                      <TooltipTrigger asChild>
+                        <SelectItem value={kpi.kpi_name}>
+                          {kpi.kpi_desc}
+                        </SelectItem>
+                      </TooltipTrigger>
+                      {kpi.kpi_desc && (
+                        <TooltipContent>
+                          <p>{kpi.kpi_desc}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  ))}
               </SelectContent>
             </Select>
             {showValidationErrors && !formData.kpi && (
@@ -1049,6 +1050,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                         </SelectTrigger>
                         <SelectContent>
                           {(correlationKpis[corrKpi.kpiGroup] || [])
+                            // Filter out KPIs that are already selected anywhere
                             .filter(kpi => !isKpiSelected(kpi.kpi_name, corrKpi.monitoringArea, corrKpi.kpiGroup))
                             .map((kpi) => (
                               <Tooltip key={kpi.kpi_desc}>

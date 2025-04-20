@@ -793,20 +793,72 @@ export default function TemplatesPage() {
     setIsAddGraphSheetOpen(true);
   };
 
-  // Modify the handleSaveTemplate function to include descriptions for secondary KPIs
+  // Modify the handleSaveTemplate function to check for unique template name
   const handleSaveTemplate = async () => {
     if (!isFormValid) {
-      toast.error(ERROR_MESSAGES.VALIDATION_ERROR);
+      toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
+        dismissible: true, // Add dismissible property for the X button
+      });
       return;
     }
 
     if (graphs.length === 0) {
-      toast.error(ERROR_MESSAGES.MIN_GRAPHS);
+      toast.error(ERROR_MESSAGES.MIN_GRAPHS, {
+        dismissible: true,
+      });
       return;
     }
 
     try {
       setLoadingState((prev) => ({ ...prev, savingTemplate: true }));
+
+      // First, check if the template name is unique
+      const templatesResponse = await fetch(
+        `${app_globals.base_url}/api/utl?userId=${app_globals.default_user_id}`
+      );
+
+      if (!templatesResponse.ok) {
+        throw new Error("Failed to fetch templates for name validation");
+      }
+
+      const existingTemplates = await templatesResponse.json();
+
+      // Extract template names (handle the array format from the API)
+      const existingTemplateNames = existingTemplates.map((template: any) =>
+        Array.isArray(template.template_name)
+          ? template.template_name[0].toLowerCase()
+          : template.template_name.toLowerCase()
+      );
+
+      // Extract current template ID if in edit mode
+      const currentTemplateId = isEditMode ? searchParams.get("templateId") : null;
+
+      // Check if name exists, but ignore if it's the same template being edited
+      const nameExists = existingTemplates.some((template: any) => {
+        const templateName = Array.isArray(template.template_name)
+          ? template.template_name[0].toLowerCase()
+          : template.template_name.toLowerCase();
+
+        const templateId = Array.isArray(template.template_id)
+          ? template.template_id[0]
+          : template.template_id;
+
+        // If we're editing and this is the same template, don't count it as a duplicate
+        if (isEditMode && templateId === currentTemplateId) {
+          return false;
+        }
+
+        return templateName === templateData.name.toLowerCase();
+      });
+
+      if (nameExists) {
+        toast.error("Template name already exists", {
+          description: "Please choose a different name for your template",
+          dismissible: true,
+        });
+        setLoadingState((prev) => ({ ...prev, savingTemplate: false }));
+        return;
+      }
 
       // Use existing templateId if in edit mode, otherwise create a new one
       const newTemplateId = isEditMode
@@ -833,11 +885,19 @@ export default function TemplatesPage() {
             if (graph.secondaryKpisData && graph.secondaryKpisData[kpiIndex]) {
               return {
                 ma: graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
-                ma_desc: graph.secondaryKpisData[kpiIndex].ma_desc || graph.monitoringAreaDesc || "",
-                kpigrp: graph.secondaryKpisData[kpiIndex].kpigrp || graph.kpiGroup,
-                kpigrp_desc: graph.secondaryKpisData[kpiIndex].kpigrp_desc || graph.kpiGroupDesc || "",
+                ma_desc:
+                  graph.secondaryKpisData[kpiIndex].ma_desc ||
+                  graph.monitoringAreaDesc ||
+                  "",
+                kpigrp:
+                  graph.secondaryKpisData[kpiIndex].kpigrp || graph.kpiGroup,
+                kpigrp_desc:
+                  graph.secondaryKpisData[kpiIndex].kpigrp_desc ||
+                  graph.kpiGroupDesc ||
+                  "",
                 kpi_id: kpi,
-                kpi_desc: graph.secondaryKpisData[kpiIndex].kpi_desc || kpiDesc || "",
+                kpi_desc:
+                  graph.secondaryKpisData[kpiIndex].kpi_desc || kpiDesc || "",
                 filter_values: normalizeFilterValues(
                   graph.secondaryKpisData[kpiIndex].filter_values || []
                 ),
@@ -887,19 +947,10 @@ export default function TemplatesPage() {
       // If this template is being set as default, we need to check other templates
       if (templateData.isDefault) {
         try {
-          // First, fetch all templates for the user
-          const templatesResponse = await fetch(
-            `${app_globals.base_url}/api/utl?userId=${app_globals.default_user_id}`
-          );
-
-          if (!templatesResponse.ok) {
-            throw new Error("Failed to fetch templates");
-          }
-
-          const templates = await templatesResponse.json();
+          // First, fetch all templates for the user (we already did this above)
 
           // Find any template that is currently set as default
-          const defaultTemplate = templates.find((template: any) =>
+          const defaultTemplate = existingTemplates.find((template: any) =>
             Array.isArray(template.default)
               ? template.default[0]
               : template.default
@@ -1004,6 +1055,7 @@ export default function TemplatesPage() {
           description: isEditMode
             ? "Your template has been updated successfully"
             : "Your template has been saved successfully",
+          dismissible: true,
         }
       );
 
@@ -1034,6 +1086,7 @@ export default function TemplatesPage() {
       toast.error(ERROR_MESSAGES.SAVE_ERROR, {
         description:
           error instanceof Error ? error.message : "Please try again",
+        dismissible: true,
       });
     } finally {
       setLoadingState((prev) => ({ ...prev, savingTemplate: false }));
