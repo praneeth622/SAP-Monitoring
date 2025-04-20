@@ -42,13 +42,15 @@ interface Graph {
   kpiGroup: string;
   primaryKpi: string;
   correlationKpis: string[];
+  primaryFilterValues?: any[];
+  secondaryKpisData?: any[];
   layout: {
     x: number;
     y: number;
     w: number;
     h: number;
   };
-  activeKPIs: Set<string> | string[]; // Changed to support both Set and Array
+  activeKPIs: Set<string> | string[];
   kpiColors: Record<string, { color: string; name: string }>;
 }
 
@@ -78,7 +80,6 @@ const timeRangeOptions = [
   "last 90 days",
   "custom",
 ];
-
 
 // Add this near the top of the file with other constants
 const resolutionOptions = [
@@ -186,6 +187,17 @@ const retryFetch = async <T,>(
   throw lastError;
 };
 
+// Add this utility function to normalize filter values
+const normalizeFilterValues = (filterValues: any) => {
+  if (!filterValues) return [];
+  if (Array.isArray(filterValues)) return filterValues;
+  // If it's an object, convert to array with single item
+  if (typeof filterValues === "object" && !Array.isArray(filterValues)) {
+    return [filterValues];
+  }
+  return [];
+};
+
 // First, add a Loading component we can use throughout the page
 const LoadingSpinner = ({ message = "Loading..." }: { message?: string }) => (
   <div className="flex flex-col items-center justify-center py-8 space-y-3">
@@ -256,7 +268,7 @@ export default function TemplatesPage() {
     loadingCharts: false,
   });
 
-  // Add state for the currently editing graph
+  // Add this state for the currently editing graph
   const [editingGraph, setEditingGraph] = useState<Graph | null>(null);
 
   // Add this state variable if it doesn't exist
@@ -283,31 +295,48 @@ export default function TemplatesPage() {
 
   // Add a function to handle editing a graph
   const handleEditGraph = (graphId: string) => {
-    // Check if the graph was just added (has a temporary ID)
-    const isNewlyAddedGraph =
-      graphId.startsWith("graph-") && !isEditMode && hasChanges;
-
-    if (isNewlyAddedGraph) {
-      // Show a friendly toast message instead of letting the error occur
-      toast.warning(
-        "Please save the template first before editing this newly added graph."
-      );
-      return;
-    }
-
-    // Otherwise, proceed with normal edit flow
+    // Find the graph to edit
     const graphToEdit = graphs.find((graph) => graph.id === graphId);
     if (graphToEdit) {
-      // First set the selectedTemplate - this is the key fix
+      console.log("Editing graph:", graphToEdit);
+
+      // Create a properly formatted editing graph object
+      const formattedEditingGraph = {
+        id: graphToEdit.id,
+        name: graphToEdit.name,
+        type: graphToEdit.type,
+        monitoringArea: graphToEdit.monitoringArea || graphToEdit.primary_kpi_ma, // Handle both formats
+        kpiGroup: graphToEdit.kpiGroup || graphToEdit.primary_kpi_kpigrp, // Handle both formats
+        primaryKpi: graphToEdit.primaryKpi || graphToEdit.primary_kpi_id, // Handle both formats
+        correlationKpis: graphToEdit.correlationKpis ||
+          (graphToEdit.secondary_kpis?.map(sk => sk.kpi_id) || []), // Map secondary KPIs
+        layout: graphToEdit.layout || {
+          x: parseInt(graphToEdit.top_xy_pos?.split(':')[0] || '0') / 10,
+          y: parseInt(graphToEdit.top_xy_pos?.split(':')[1] || '0') / 10,
+          w: 4,
+          h: 2
+        },
+        activeKPIs: graphToEdit.activeKPIs || new Set(),
+        kpiColors: graphToEdit.kpiColors || {}
+      };
+
+      // Set the editing graph
+      setEditingGraph(formattedEditingGraph);
+
+      // Set the selectedTemplate with the current template data and graphs
       setSelectedTemplate({
-        id: Date.now().toString(),
+        id: templateId || Date.now().toString(),
         ...templateData,
         graphs,
       });
 
-      // Then set the editing graph and open the sheet
-      setEditingGraph(graphToEdit);
-      setIsAddGraphSheetOpen(true);
+      // Open the sheet with a slight delay to ensure state updates
+      setTimeout(() => {
+        setIsAddGraphSheetOpen(true);
+      }, 100);
+    } else {
+      toast.error("Could not find graph to edit");
+      console.error("Graph not found with ID:", graphId);
     }
   };
 
@@ -507,6 +536,7 @@ export default function TemplatesPage() {
         kpiColors: chartKpiColors,
         hideControls: true,
         onDeleteGraph: handleDeleteGraph,
+        onEditGraph: handleEditGraph,
         isLoading,
       };
     },
@@ -514,7 +544,8 @@ export default function TemplatesPage() {
       chartDataCache,
       chartDataLoadState,
       templateData.resolution,
-      handleDeleteGraph, // This is now a stable reference
+      handleDeleteGraph,
+      handleEditGraph,
       fetchChartData,
     ]
   );
@@ -593,7 +624,6 @@ export default function TemplatesPage() {
       const template = data[0];
 
       // Extract system ID correctly from the API response
-      // In case it's nested or formatted differently than expected
       let systemId = "";
 
       if (template.systems && template.systems.length > 0) {
@@ -629,8 +659,12 @@ export default function TemplatesPage() {
             .split(":")
             .map(Number);
 
-          // Get primary and secondary KPIs
+          // Get primary KPI information
           const primaryKpi = apiGraph.primary_kpi_id;
+          const monitoringArea = apiGraph.primary_kpi_ma || "";
+          const kpiGroup = apiGraph.primary_kpi_kpigrp || "";
+
+          // Extract secondary KPIs
           const secondaryKpis = apiGraph.secondary_kpis || [];
           const correlationKpis = secondaryKpis.map((sk: any) => sk.kpi_id);
 
@@ -639,14 +673,23 @@ export default function TemplatesPage() {
           const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
             generateConsistentColors(allKpis);
 
+          // Normalize filter values to ensure consistent format
+          const primaryFilterValues = normalizeFilterValues(
+            apiGraph.primary_filter_values
+          );
+
           return {
             id: apiGraph.graph_id,
             name: apiGraph.graph_name,
-            type: "line" as "line" | "bar", // Default to line chart
-            monitoringArea: "", // We'll need to fetch this information
-            kpiGroup: "", // We'll need to fetch this information
-            primaryKpi: apiGraph.primary_kpi_id,
+            type: (apiGraph.graph_type?.toLowerCase() === "bar"
+              ? "bar"
+              : "line") as "line" | "bar",
+            monitoringArea: monitoringArea,
+            kpiGroup: kpiGroup,
+            primaryKpi: primaryKpi,
             correlationKpis: correlationKpis,
+            primaryFilterValues: primaryFilterValues,
+            secondaryKpisData: secondaryKpis, // Store the full secondary KPIs data
             layout: {
               x: topX / 10,
               y: topY / 10,
@@ -774,9 +817,37 @@ export default function TemplatesPage() {
           (graph.layout.x + graph.layout.w) * 10
         }`;
 
+        // Format secondary KPIs
+        const formattedSecondaryKpis = graph.correlationKpis.map(
+          (kpi, kpiIndex) => {
+            // If we have detailed secondaryKpisData, use it
+            if (graph.secondaryKpisData && graph.secondaryKpisData[kpiIndex]) {
+              return {
+                ma:
+                  graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
+                kpigrp:
+                  graph.secondaryKpisData[kpiIndex].kpigrp || graph.kpiGroup,
+                kpi_id: kpi,
+                filter_values: normalizeFilterValues(
+                  graph.secondaryKpisData[kpiIndex].filter_values || []
+                ),
+              };
+            }
+
+            // Otherwise use the monitoring area and KPI group from the primary KPI
+            return {
+              ma: graph.monitoringArea,
+              kpigrp: graph.kpiGroup,
+              kpi_id: kpi,
+              filter_values: [],
+            };
+          }
+        );
+
         return {
           graph_id: graph.id || `${newTemplateId}_G${index + 1}`,
           graph_name: graph.name,
+          graph_type: graph.type === "bar" ? "Bar" : "Line",
           top_xy_pos: topPos,
           bottom_xy_pos: bottomPos,
           frequency: templateData.timeRange,
@@ -786,11 +857,13 @@ export default function TemplatesPage() {
               system_id: templateData.system.toLowerCase(),
             },
           ],
+          primary_kpi_ma: graph.monitoringArea,
+          primary_kpi_kpigrp: graph.kpiGroup,
           primary_kpi_id: graph.primaryKpi,
-          primary_filter_values: [], // Using empty array as in original code
-          secondary_kpis: graph.correlationKpis.map((kpi) => ({
-            kpi_id: kpi,
-          })),
+          primary_filter_values: normalizeFilterValues(
+            graph.primaryFilterValues
+          ),
+          secondary_kpis: formattedSecondaryKpis,
         };
       });
 
@@ -1005,22 +1078,32 @@ export default function TemplatesPage() {
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
 
-      // Update the graph with the new data
+      // Find the existing graph to preserve properties not included in graphData
+      const existingGraph = graphs.find((graph) => graph.id === graphId);
+
+      if (!existingGraph) {
+        console.error(`Could not find graph with ID ${graphId} for updating`);
+        toast.error("Failed to update graph: Graph not found");
+        return;
+      }
+
+      // Update the graph with the new data while preserving existing properties
       setGraphs((prev) =>
         prev.map((graph) =>
           graph.id === graphId
             ? {
                 ...graph,
-                ...graphData,
+                name: graphData.name,
+                type: graphData.type,
+                monitoringArea: graphData.monitoringArea,
+                kpiGroup: graphData.kpiGroup,
+                primaryKpi: graphData.primaryKpi,
+                correlationKpis: graphData.correlationKpis,
+                primaryFilterValues: existingGraph.primaryFilterValues || [],
+                secondaryKpisData: existingGraph.secondaryKpisData || [],
                 activeKPIs: newActiveKPIs,
                 kpiColors: newKpiColors,
-                // Preserve existing layout
-                layout: graph.layout || {
-                  x: 0,
-                  y: 0,
-                  w: 4,
-                  h: 4,
-                },
+                // Layout is preserved through the spread of graph
               }
             : graph
         )
@@ -1028,7 +1111,7 @@ export default function TemplatesPage() {
 
       setIsAddGraphSheetOpen(false);
       setEditingGraph(null);
-      setHasChanges(true); // <-- Add this line
+      setHasChanges(true);
       toast.success("Graph updated successfully");
 
       // Force a layout refresh
@@ -1047,7 +1130,7 @@ export default function TemplatesPage() {
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background via-background/98 to-background/95">
-        <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl rounded-lg p-8 max-w-md">
+        <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl p-8 max-w-md">
           <LoadingSpinner
             message={`${isEditMode ? "Loading" : "Creating"} template...`}
           />
@@ -1331,29 +1414,35 @@ export default function TemplatesPage() {
             {selectedTemplate && (
               <AddGraphSheet
                 template={selectedTemplate}
+                editingGraph={
+                  editingGraph
+                    ? {
+                        id: editingGraph.id || "",
+                        name: editingGraph.name,
+                        type: editingGraph.type,
+                        monitoringArea: editingGraph.monitoringArea,
+                        kpiGroup: editingGraph.kpiGroup,
+                        primaryKpi: editingGraph.primaryKpi,
+                        correlationKpis: editingGraph.correlationKpis,
+                        layout: editingGraph.layout,
+                        activeKPIs: editingGraph.activeKPIs,
+                        kpiColors: editingGraph.kpiColors,
+                      }
+                    : null
+                }
                 onClose={() => {
                   setIsAddGraphSheetOpen(false);
                   setEditingGraph(null);
                 }}
-                editingGraph={
-                  editingGraph
-                    ? {
-                        ...editingGraph,
-                        id: editingGraph.id || `temp-${Date.now()}`,
-                      }
-                    : null
-                }
                 onAddGraph={(graphData) => {
                   // Prevent multiple calls by immediately disabling the sheet
                   setIsAddGraphSheetOpen(false);
 
                   if (editingGraph) {
-                    handleUpdateGraph(
-                      editingGraph.id || `temp-${Date.now()}`,
-                      graphData
-                    );
+                    // Update existing graph
+                    handleUpdateGraph(editingGraph.id!, graphData);
                   } else {
-                    // Ensure graphData fully conforms to Graph type by providing defaults for optional properties
+                    // Add new graph
                     const completeGraphData: Graph = {
                       ...graphData,
                       activeKPIs: graphData.activeKPIs || new Set<string>(),
