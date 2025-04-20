@@ -48,7 +48,7 @@ interface Graph {
     x: number;
     y: number;
     w: number;
-    h: number;
+    h: number
   };
   activeKPIs: Set<string> | string[];
   kpiColors: Record<string, { color: string; name: string }>;
