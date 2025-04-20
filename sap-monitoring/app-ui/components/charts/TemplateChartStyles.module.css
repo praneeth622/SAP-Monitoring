@@ -1,0 +1,221 @@
+/* CSS module to disable dragging and resizing in templates page only */
+
+/* Disable dragging */
+.templateChart .react-grid-item {
+  cursor: default !important;
+}
+
+.templateChart .react-grid-item:hover {
+  cursor: default !important;
+}
+
+/* Hide drag handle */
+.templateChart .chart-drag-handle {
+  display: none !important;
+}
+
+/* Global styles wrapped in local class */
+.globalStyles :global(.chart-drag-handle) {
+  cursor: grab !important;
+}
+
+.globalStyles :global(.chart-drag-handle:active) {
+  cursor: grabbing !important;
+}
+
+/* Define default cursor for all other elements except the drag handle */
+.globalStyles :global(.cursor-default),
+.globalStyles :global(.chart-title),
+.globalStyles :global(.chart-controls) {
+  cursor: default !important;
+}
+
+/* Additional specific styles for template mode elements */
+.templateChart .non-resizable-container {
+  resize: none !important;
+  overflow: hidden !important;
+}
+
+.templateChart .chart-template-mode {
+  resize: none !important;
+  user-select: auto !important;
+  pointer-events: auto !important;
+  cursor: default !important;
+}
+
+/* Disable resize cursors */
+.templateChart * {
+  cursor: default !important;
+}
+
+.templateChart *:hover {
+  cursor: default !important;
+}
+
+/* New: Completely disable react-resizable in template mode */
+.templateChart :global(.react-resizable) {
+  resize: none !important;
+}
+
+/* New: Disable resize interaction */
+.templateChart :global(.react-draggable),
+.templateChart :global(.react-draggable-dragging),
+.templateChart :global(.react-resizable) {
+  user-select: none !important;
+  resize: none !important;
+}
+
+.templateChart :global(.react-resizable-handle) {
+  cursor: default !important;
+  display: none !important;
+}
+
+/* Hide all resize handles very aggressively */
+.templateChart .react-grid-item > .react-resizable-handle,
+.templateChart .react-resizable-handle,
+.templateChart .react-resizable > .react-resizable-handle {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: default !important;
+  transform: scale(0) !important;
+}
+
+.templateChart .react-grid-item:hover > .react-resizable-handle,
+.templateChart .react-resizable:hover > .react-resizable-handle {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  cursor: default !important;
+}
+
+.templateChart .react-grid-item > .react-resizable-handle::after,
+.templateChart .react-resizable-handle::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Hide resize corners */
+.templateChart .react-resizable-handle.react-resizable-handle-se {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* Make chart container non-draggable */
+.templateChart .react-grid-item.react-draggable {
+  user-select: auto !important;
+  pointer-events: auto !important;
+}
+
+/* Disable transitions that suggest draggability */
+.templateChart .react-grid-item.react-draggable-dragging {
+  transition: none !important;
+  z-index: 1 !important;
+  transform: none !important;
+}
+
+/* Remove visual cues for drag operations */
+.templateChart .react-grid-item.react-grid-placeholder {
+  display: none !important;
+}
+
+/* Prevent dragging in templates */
+.templatesPage .react-grid-item {
+  cursor: default !important;
+}
+
+.templatesPage .react-grid-item .chart-drag-handle {
+  display: none !important;
+}
+
+.templatesPage .react-grid-item .react-resizable-handle {
+  display: none !important;
+}
+
+/* New: Disable resize functionality in templates page */
+.templatesPage .react-grid-item {
+  resize: none !important;
+}
+
+.templatesPage .react-resizable {
+  resize: none !important;
+}
+
+.templatesPage .react-resizable-handle {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Cursor styles for chart elements */
+.chartControls .chart-drag-handle {
+  cursor: grab !important;
+}
+
+.chartControls .chart-drag-handle:active {
+  cursor: grabbing !important;
+}
+
+.chartControls .chart-title {
+  cursor: default !important;
+}
+
+.chartControls .chart-controls {
+  cursor: default !important;
+}
+
+.chartControls .cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Ensure resize handles are properly styled */
+.chartControls .react-resizable-handle {
+  cursor: se-resize !important;
+}
+
+/* Prevent z-index issues with fullscreen charts */
+.fullscreen-chart {
+  z-index: 1000 !important;
+}
+
+/* New: Prevent text selection during resize/drag operations in dashboard */
+.resizePrevention :global(.react-grid-item.react-draggable-dragging) *,
+.resizePrevention :global(.react-grid-item.resizing) * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  pointer-events: none !important;
+}
+
+/* Add a global class for when resize is in progress */
+.resizePrevention :global(.resizing-in-progress) * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Ensure chart headers and KPI parameters are not selectable during resize */
+.resizePrevention :global(.react-grid-item) .chart-title,
+.resizePrevention :global(.react-grid-item) h3,
+.resizePrevention :global(.react-grid-item) .bottom-0 {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}

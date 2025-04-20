@@ -19,8 +19,9 @@ import {
   generateDummyData,
   generateMultipleDataSets,
 } from "@/utils/data";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useTheme } from "next-themes";
+import React, {  useEffect, useMemo, useCallback, useRef } from "react";
+import { useTheme as useThemeContext } from "@/contexts/ThemeContext";
+import { useTheme as useNextTheme } from "next-themes";
 import { DynamicLayout } from "@/components/charts/DynamicLayout";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { DateRange } from "react-day-picker";
@@ -525,6 +526,115 @@ const retryFetch = async <T,>(
   throw lastError;
 };
 
+// Create a Theme Context that will allow updating the chart theme separately
+import { createContext, useContext, useState } from 'react';
+
+// Create a separate component for the dashboard content to prevent header from re-rendering
+const DashboardContent = React.memo(({
+  charts,
+  isContentLoading,
+  hasError,
+  errorMessage,
+  fetchTemplates,
+  activeKPIs,
+  themedKpiColors,
+  globalDateRange,
+  selectedTheme,
+  resolution,
+  handleLayoutChange,
+}: {
+  charts: ChartConfig[];
+  isContentLoading: boolean;
+  hasError: boolean;
+  errorMessage: string | null;
+  fetchTemplates: () => void;
+  activeKPIs: Set<string>;
+  themedKpiColors: any;
+  globalDateRange: DateRange | undefined;
+  selectedTheme: string;
+  resolution: string;
+  handleLayoutChange: (layout: any) => void;
+}) => {
+  if (isContentLoading) {
+    return (
+      <div className="flex items-center justify-center h-[70vh] w-full">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          <div className="animate-pulse absolute inset-0 flex items-center justify-center text-xs text-primary font-medium">
+            Loading...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
+        <div className="text-destructive mb-4">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="64"
+            height="64"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mx-auto mb-4"
+          >
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
+        <p className="text-center text-muted-foreground mb-4">
+          {errorMessage || "Failed to load dashboard data."}
+        </p>
+        <Button
+          onClick={() => fetchTemplates()}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  if (charts.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
+        <div className="text-center max-w-lg">
+          <h3 className="text-lg font-medium mb-2">No charts available</h3>
+          <p className="text-muted-foreground mb-4">
+            There are no charts to display for this template. Try selecting a
+            different template or check your connection.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-[70vh]">
+      <DynamicLayout
+        charts={charts}
+        activeKPIs={activeKPIs}
+        kpiColors={themedKpiColors}
+        globalDateRange={globalDateRange}
+        theme={chartThemes[selectedTheme as keyof typeof chartThemes]} // Ensure this resolves to a valid theme object
+        resolution={resolution}
+        onLayoutChange={handleLayoutChange}
+      />
+    </div>
+  );
+});
+
+// Update your Dashboard component to use this approach
 export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
   const [charts, setCharts] = useState<ChartConfig[]>([]);
@@ -569,6 +679,7 @@ export default function Dashboard() {
   const refreshDataRef = useRef<() => Promise<void>>();
   const nextRefreshTimeRef = useRef<Date | null>(null);
   const autoRefreshIntervalRef = useRef<number | null>(null);
+  const isChangingThemeRef = useRef(false);
 
   // Add a new state to track whether auto-refresh is enabled
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(false);
@@ -579,6 +690,18 @@ export default function Dashboard() {
 
   // Add a state for content-only loading (won't affect header)
   const [isContentLoading, setIsContentLoading] = useState(false);
+  
+  // Create a state to track if theme is being changed
+  const [isChangingTheme, setIsChangingTheme] = useState(false);
+
+  // Sync isChangingTheme with ref
+  useEffect(() => {
+    isChangingThemeRef.current = isChangingTheme;
+  }, [isChangingTheme]);
+
+  // Add theme from our context
+  const { theme, setTheme } = useThemeContext();
+  const { theme: nextTheme } = useNextTheme();
 
   // Sync refreshingRef with isRefreshing state
   useEffect(() => {
@@ -1046,7 +1169,8 @@ export default function Dashboard() {
         }, 300);
       }
     },
-    [resolution, selectedTheme, globalDateRange]
+    // Remove selectedTheme from the dependency array to prevent reloading when theme changes
+    [resolution, globalDateRange]
   );
 
   const fetchTemplateForEditing = async (templateId: string) => {
@@ -1266,6 +1390,9 @@ export default function Dashboard() {
   // Update the handleApiTemplateChange function to ensure proper template loading
   const handleApiTemplateChange = useCallback(
     (templateId: string) => {
+      // Don't change template if we're in the middle of a theme change
+      if (isChangingThemeRef.current) return;
+      
       if (templateId === selectedApiTemplate) return;
 
       console.log(
@@ -1311,6 +1438,9 @@ export default function Dashboard() {
       // Use a shorter timeout for faster response
       setTimeout(async () => {
         try {
+          // Store the current template ID to maintain it after resolution change
+          const currentTemplateId = selectedApiTemplate;
+          
           // Reset auto-refresh timer if active
           if (autoRefreshInterval && nextRefreshTime) {
             const now = new Date();
@@ -1330,14 +1460,14 @@ export default function Dashboard() {
           };
 
           // If a template is selected, regenerate that template's charts with new resolution
-          if (selectedApiTemplate) {
+          if (currentTemplateId) {
             console.log(
-              `Updating template ${selectedApiTemplate} with ${newResolution} resolution`
+              `Updating template ${currentTemplateId} with ${newResolution} resolution`
             );
 
             // Find the current template
             const template = apiTemplates.find(
-              (t) => t.id === selectedApiTemplate
+              (t) => t.id === currentTemplateId
             );
 
             if (template) {
@@ -1348,10 +1478,18 @@ export default function Dashboard() {
                 dateRangeForAPI
               );
 
-              // Preserve existing layouts when updating charts (exact same approach as refreshData)
+              // Store the current layout of charts before updating
+              const currentLayouts: Record<string, any> = {};
+              charts.forEach(chart => {
+                if (chart.id && chart.layout) {
+                  currentLayouts[chart.id] = chart.layout;
+                }
+              });
+
+              // Preserve existing layouts, active KPIs, and colors when updating charts
               setCharts((prevCharts) => {
                 return newCharts.map((newChart) => {
-                  // Find matching chart in previous charts to preserve layout
+                  // Find matching chart in previous charts to preserve settings
                   const matchingChart = prevCharts.find(
                     (c) => c.id === newChart.id
                   );
@@ -1369,8 +1507,8 @@ export default function Dashboard() {
                 });
               });
 
-              // Ensure selected template is maintained
-              setSelectedApiTemplate(selectedApiTemplate);
+              // Explicitly maintain selected template ID to prevent navigation
+              setSelectedApiTemplate(currentTemplateId);
             }
           } else {
             // No template selected, refresh with generated data
@@ -1403,6 +1541,9 @@ export default function Dashboard() {
         } catch (error) {
           console.error("Error changing resolution:", error);
           toast.error("Failed to change resolution", { duration: 2000 });
+          
+          // If there was an error, revert to the previous resolution
+          setResolution(resolution);
         } finally {
           // Use a very short delay to stop loading for smooth transition
           setTimeout(() => {
@@ -1418,6 +1559,7 @@ export default function Dashboard() {
       autoRefreshInterval,
       nextRefreshTime,
       globalDateRange,
+      charts
     ]
   );
 
@@ -1552,125 +1694,152 @@ export default function Dashboard() {
     }
   }, [selectedApiTemplate, charts, apiTemplates, layoutChanged, resolution]);
 
-  // Add this function to handle theme changes without resetting template
-  const handleThemeChange = useCallback((themeKey: string) => {
-    setSelectedTheme(themeKey);
-    const newTheme = chartThemes[themeKey as keyof typeof chartThemes];
-
-    // Update KPI colors without resetting the template
+  // Modify handleThemeChange to prevent full reload and API calls
+  const handleThemeChange = (selectedThemeName: string) => {
+    // Prevent theme changes from triggering template refreshes
+    setIsChangingTheme(true);
+    isChangingThemeRef.current = true;
+    
+    // Get the theme object directly from chartThemes
+    const themeObj = chartThemes[selectedThemeName as keyof typeof chartThemes] || chartThemes.default;
+    
+    console.log("Changing theme to:", selectedThemeName, themeObj); // Add logging
+    
+    // Set the theme context
+    setTheme({
+      name: selectedThemeName,
+      colors: themeObj.colors // Use colors from the theme object
+    });
+    
+    // Show a subtle loading indicator only for the chart area
+    setIsContentLoading(true);
+    
+    // Update the KPI colors with the new theme colors
     setThemedKpiColors((prevColors) => {
       const updatedColors = { ...prevColors };
-      Object.entries(updatedColors).forEach(([kpi, kpiInfo], index) => {
+      Object.entries(updatedColors).forEach(([kpiId, kpiInfo], index) => {
         if (kpiInfo && typeof kpiInfo === "object") {
-          updatedColors[kpi as keyof typeof kpiColors] = {
+          updatedColors[kpiId as keyof typeof kpiColors] = {
             ...kpiInfo,
-            color: newTheme.colors[index % newTheme.colors.length],
+            color: themeObj.colors[index % themeObj.colors.length],
           };
         }
       });
       return updatedColors;
     });
-
-    // Update existing charts' colors without resetting the template
+    
+    // Update charts with the new theme colors
     setCharts((prevCharts) => {
       return prevCharts.map((chart) => {
+        // Create a copy of the kpiColors to modify
         const updatedKpiColors = { ...chart.kpiColors };
-        Object.entries(updatedKpiColors).forEach(([kpi, kpiInfo], index) => {
-          if (kpiInfo && typeof kpiInfo === "object") {
-            updatedKpiColors[kpi] = {
-              ...kpiInfo,
-              color: newTheme.colors[index % newTheme.colors.length],
-            };
-          }
-        });
+        
+        // Update each KPI color using the new theme
+        if (updatedKpiColors) {
+          Object.keys(updatedKpiColors).forEach((kpi, index) => {
+            if (updatedKpiColors[kpi] && typeof updatedKpiColors[kpi] === "object") {
+              updatedKpiColors[kpi] = {
+                ...updatedKpiColors[kpi],
+                color: themeObj.colors[index % themeObj.colors.length],
+              };
+            }
+          });
+        }
+        
+        // Return updated chart with new colors
         return {
           ...chart,
           kpiColors: updatedKpiColors,
         };
       });
     });
-  }, []);
-
+    
+    // Update the selectedTheme state
+    setSelectedTheme(selectedThemeName);
+    
+    // Show success notification
+    toast.success(`Theme changed to ${selectedThemeName}`, { duration: 1500 });
+    
+    // End loading state after a short delay
+    setTimeout(() => {
+      setIsContentLoading(false);
+      setIsChangingTheme(false);
+      isChangingThemeRef.current = false;
+      
+      // Force a window resize to ensure charts render with new colors
+      window.dispatchEvent(new Event("resize"));
+    }, 300);
+  };
+  
+  // Helper function to get colors for each theme
+  const getThemeColors = (themeName: string) => {
+    switch (themeName) {
+      case 'blue':
+        return ['#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c', '#98df8a', '#d62728', '#ff9896', '#9467bd', '#c5b0d5'];
+      case 'green':
+        return ['#2ca02c', '#98df8a', '#d62728', '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94', '#e377c2', '#f7b6d2'];
+      case 'red':
+        return ['#d62728', '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94', '#e377c2', '#f7b6d2', '#7f7f7f', '#c7c7c7'];
+      case 'purple':
+        return ['#9467bd', '#c5b0d5', '#8c564b', '#c49c94', '#e377c2', '#f7b6d2', '#7f7f7f', '#c7c7c7', '#bcbd22', '#dbdb8d'];
+      case 'orange':
+        return ['#ff7f0e', '#ffbb78', '#2ca02c', '#98df8a', '#d62728', '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94'];
+      case 'default':
+      default:
+        return ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+    }
+  };
+  
   // Modify the render dashboard content function to use content-only loading
   const renderDashboardContent = () => {
-    if (isContentLoading) {
-      return (
-        <div className="flex items-center justify-center h-[70vh] w-full">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            <div className="animate-pulse absolute inset-0 flex items-center justify-center text-xs text-primary font-medium">
-              Loading...
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (hasError) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
-          <div className="text-destructive mb-4">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="64"
-              height="64"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="mx-auto mb-4"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
-          <p className="text-center text-muted-foreground mb-4">
-            {errorMessage || "Failed to load dashboard data."}
-          </p>
-          <Button
-            onClick={() => fetchTemplates()}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Try Again
-          </Button>
-        </div>
-      );
-    }
-
-    if (charts.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
-          <div className="text-center max-w-lg">
-            <h3 className="text-lg font-medium mb-2">No charts available</h3>
-            <p className="text-muted-foreground mb-4">
-              There are no charts to display for this template. Try selecting a
-              different template or check your connection.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="relative min-h-[70vh]">
-        <DynamicLayout
-          charts={charts}
-          activeKPIs={activeKPIs}
-          kpiColors={themedKpiColors}
-          globalDateRange={globalDateRange}
-          theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
-          resolution={resolution}
-          onLayoutChange={handleLayoutChange}
-        />
-      </div>
+      <DashboardContent 
+        charts={charts}
+        isContentLoading={isContentLoading}
+        hasError={hasError}
+        errorMessage={errorMessage}
+        fetchTemplates={fetchTemplates}
+        activeKPIs={activeKPIs}
+        themedKpiColors={themedKpiColors}
+        globalDateRange={globalDateRange}
+        selectedTheme={selectedTheme}
+        resolution={resolution}
+        handleLayoutChange={handleLayoutChange}
+      />
     );
   };
+
+  // Initialize theme on component mount
+  useEffect(() => {
+    if (chartThemes[selectedTheme as keyof typeof chartThemes]) {
+      const themeObj = chartThemes[selectedTheme as keyof typeof chartThemes];
+      
+      // Set the theme context
+      setTheme({
+        name: selectedTheme,
+        colors: themeObj.colors
+      });
+      
+      // Update KPI colors to match theme
+      setThemedKpiColors((prevColors) => {
+        const updatedColors = { ...prevColors };
+        Object.entries(updatedColors).forEach(([kpiId, kpiInfo], index) => {
+          if (kpiInfo && typeof kpiInfo === "object") {
+            updatedColors[kpiId as keyof typeof kpiColors] = {
+              ...kpiInfo,
+              color: themeObj.colors[index % themeObj.colors.length],
+            };
+          }
+        });
+        return updatedColors;
+      });
+      
+      // Force resize to ensure charts update
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 100);
+    }
+  }, []);
 
   if (!mounted || isLoading) {
     return (
@@ -1796,7 +1965,7 @@ export default function Dashboard() {
                         <Button variant="outline" size="sm" className="h-8 flex items-center gap-2">
                           <div className="relative w-5 h-5">
                             <svg viewBox="0 0 100 100" className="w-full h-full">
-                              {chartThemes[selectedTheme as keyof typeof chartThemes].colors.map((color, index) => {
+                              {theme.colors.map((color, index) => {
                                 const angle = (index * 72) - 90; // 72 degrees per segment (360/5)
                                 const nextAngle = ((index + 1) * 72) - 90;
                                 const x1 = 50 + 50 * Math.cos(angle * Math.PI / 180);
@@ -1813,7 +1982,7 @@ export default function Dashboard() {
                               })}
                             </svg>
                           </div>
-                          <span>{chartThemes[selectedTheme as keyof typeof chartThemes].name}</span>
+                          <span>{theme.name}</span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[200px]">
@@ -2064,3 +2233,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

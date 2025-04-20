@@ -44,6 +44,7 @@ const ChartContainer = memo(
     {
       zoomIn: () => void;
       zoomOut: () => void;
+      resetZoom: () => void;
       boxSelect: () => void;
       lassoSelect: () => void;
       clearSelection: () => void;
@@ -689,6 +690,36 @@ const ChartContainer = memo(
       }
     }, []);
 
+    const resetZoom = useCallback(() => {
+      if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
+
+      try {
+        const option = chartRef.current.getOption();
+        const dataZoom =
+          Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+            ? option.dataZoom[0]
+            : undefined;
+
+        if (!dataZoom) return;
+
+        // Reset dataZoom to default view (0-100%)
+        chartRef.current.setOption(
+          {
+            dataZoom: [
+              {
+                ...dataZoom,
+                start: 0,
+                end: 100,
+              },
+            ],
+          },
+          { replaceMerge: ["dataZoom"] }
+        );
+      } catch (error) {
+        console.error("Error in reset zoom:", error);
+      }
+    }, []);
+
     const boxSelect = useCallback(() => {
       if (!chartRef.current || chartRef.current.isDisposed?.() === true) return;
 
@@ -1009,6 +1040,7 @@ const ChartContainer = memo(
       () => ({
         zoomIn,
         zoomOut,
+        resetZoom,
         boxSelect,
         lassoSelect,
         clearSelection,
@@ -1025,6 +1057,7 @@ const ChartContainer = memo(
       [
         zoomIn,
         zoomOut,
+        resetZoom,
         boxSelect,
         lassoSelect,
         clearSelection,

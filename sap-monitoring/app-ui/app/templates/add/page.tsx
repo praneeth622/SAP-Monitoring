@@ -49,6 +49,8 @@ interface Graph {
   };
   activeKPIs: Set<string> | string[]; // Changed to support both Set and Array
   kpiColors: Record<string, { color: string; name: string }>;
+  timeInterval?: string; // Add this field
+  resolution?: string;   // Add this field
 }
 
 interface DataPoint {
@@ -876,16 +878,15 @@ export default function TemplatesPage() {
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
 
-      console.log("Created KPI colors:", newKpiColors);
-      console.log("Active KPIs:", newActiveKPIs);
-
       // Create API-compatible graph object with minimal layout
-      // Let the DynamicLayout component handle actual positioning
       const newGraph: Graph = {
         ...graphData,
         id: `graph-${Date.now()}`,
         activeKPIs: newActiveKPIs,
         kpiColors: newKpiColors,
+        // Use the selected timeInterval and resolution from the form
+        timeInterval: graphData.timeInterval || templateData.timeRange,
+        resolution: graphData.resolution || templateData.resolution,
         layout: {
           x: 0,
           y: 0,
@@ -897,9 +898,9 @@ export default function TemplatesPage() {
       setGraphs((prev) => [...prev, newGraph]);
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
-      setHasChanges(true); // <-- Add this line
+      setHasChanges(true);
 
-      // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
+      // Force a layout refresh
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 200);
@@ -914,21 +915,21 @@ export default function TemplatesPage() {
   // Add a function to handle updating an existing graph
   const handleUpdateGraph = (graphId: string, graphData: any) => {
     try {
-      // Create or update KPI colors and active KPIs as before
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
 
-      // Update the graph with the new data
       setGraphs((prev) => 
         prev.map((graph) => 
           graph.id === graphId 
             ? {
                 ...graph,
                 ...graphData,
+                // Also update timeInterval and resolution
+                timeInterval: graphData.timeInterval || graph.timeInterval,
+                resolution: graphData.resolution || graph.resolution,
                 activeKPIs: newActiveKPIs,
                 kpiColors: newKpiColors,
-                // Preserve existing layout
                 layout: graph.layout || {
                   x: 0,
                   y: 0,
@@ -942,10 +943,9 @@ export default function TemplatesPage() {
 
       setIsAddGraphSheetOpen(false);
       setEditingGraph(null);
-      setHasChanges(true); // <-- Add this line
+      setHasChanges(true);
       toast.success("Graph updated successfully");
 
-      // Force a layout refresh
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 200);
@@ -1219,6 +1219,7 @@ export default function TemplatesPage() {
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
+                  isTemplatePage={true}
                 />
               </div>
             )}

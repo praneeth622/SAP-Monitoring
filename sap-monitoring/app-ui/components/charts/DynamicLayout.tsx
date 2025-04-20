@@ -8,6 +8,7 @@ import _ from "lodash";
 import { DateRange } from "react-day-picker";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import styles from "./TemplateChartStyles.module.css";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -40,6 +41,7 @@ interface DynamicLayoutProps {
   onDeleteGraph?: (id: string) => void;
   onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
+  isTemplatePage?: boolean; // Add this prop for templates page detection
 }
 
 export function DynamicLayout({
@@ -53,6 +55,7 @@ export function DynamicLayout({
   onDeleteGraph,
   onEditGraph, // Add this new prop
   resolution = "auto", // Default to auto
+  isTemplatePage = false, // Default to false
 }: DynamicLayoutProps) {
   // Define a proper type for layouts - a Record with breakpoint strings as keys and Layout arrays as values
   const [layouts, setLayouts] = useState<Record<string, Layout[]>>({});
@@ -605,7 +608,7 @@ export function DynamicLayout({
           }));
           
           // Trigger a single resize event after layout update
-          setTimeout(() => window.dispatchEvent(new Event("resize")), 150);
+          setTimeout(() => window.dispatchEvent(new Event("resize")), 100);
         }, 100);
       }
     };
@@ -646,6 +649,35 @@ export function DynamicLayout({
     return optimalHeight;
   }, [viewportHeight, rowHeight]);
 
+  useEffect(() => {
+    // Add global event handlers to disable text selection during resize/drag
+    const disableSelection = (e: Event) => {
+      document.body.classList.add('resizing-in-progress');
+    };
+    
+    const enableSelection = (e: Event) => {
+      // Use a small delay to ensure resize is fully complete
+      setTimeout(() => {
+        document.body.classList.remove('resizing-in-progress');
+      }, 100);
+    };
+    
+    // Use an event listener on the document to catch the start and end of resize events
+    document.addEventListener('mousedown', (e) => {
+      // Check if the click is on a resize handle
+      if ((e.target as HTMLElement)?.classList?.contains('react-resizable-handle')) {
+        disableSelection(e);
+      }
+    });
+    
+    document.addEventListener('mouseup', enableSelection);
+    
+    return () => {
+      document.removeEventListener('mousedown', disableSelection);
+      document.removeEventListener('mouseup', enableSelection);
+    };
+  }, []);
+
   if (!mounted) return null;
 
   // When in fullscreen mode, render just the fullscreen chart
@@ -681,6 +713,7 @@ export function DynamicLayout({
                 onDeleteGraph={fullscreenChart.onDeleteGraph || onDeleteGraph}
                 onEditGraph={onEditGraph} // Add this prop
                 isLoading={fullscreenChart.isLoading} // Add this line
+                isTemplatePage={isTemplatePage} // Add the isTemplatePage prop
               />
             </div>
           </div>
@@ -707,18 +740,25 @@ export function DynamicLayout({
         )}
 
         <ResponsiveGridLayout
-          className="layout"
+          className={cn(
+            "layout", 
+            isTemplatePage && styles.templatesPage,
+            !isTemplatePage && styles.resizePrevention
+          )}
           layouts={layouts}
           breakpoints={{ lg: 1200, md: 992, sm: 768, xs: 576, xxs: 320 }}
           cols={{ lg: 12, md: 9, sm: 6, xs: 3, xxs: 2 }}
           rowHeight={rowHeight} // Use dynamic row height
           margin={[6, 6]} // Reduced from [8, 8] to [6, 6]
           containerPadding={[4, 4]}
-          onLayoutChange={handleLayoutChange}
+          onLayoutChange={!isTemplatePage ? handleLayoutChange : undefined}
           onBreakpointChange={(breakpoint) => {
             setCurrentBreakpoint(breakpoint);
             // Force a resize to recalculate optimal layout
             window.dispatchEvent(new Event("resize"));
+            
+            // Skip custom layout manipulation if in template page
+            if (isTemplatePage) return;
             
             // Special handling for 3 and 8 graphs to ensure proper layout on breakpoint change
             if (charts.length === 8) {
@@ -814,22 +854,32 @@ export function DynamicLayout({
               }, 100);
             }
           }}
-          onResize={() => {
+          onResize={!isTemplatePage ? (layout, oldItem, newItem, placeholder, e, element) => {
+            // Add resizing class to the element
+            element.classList.add('resizing');
+            
             // Force charts to rerender after resize events
             if (resizeTimeoutRef.current) {
               clearTimeout(resizeTimeoutRef.current);
             }
             resizeTimeoutRef.current = setTimeout(() => {
               window.dispatchEvent(new Event("resize"));
+              
+              // Remove resizing class after a delay
+              setTimeout(() => {
+                if (element && element.classList) {
+                  element.classList.remove('resizing');
+                }
+              }, 100);
             }, 50);
-          }}
+          } : undefined}
           // Ensure we use the full height with vertical compaction
           verticalCompact={true}
           compactType="vertical"
           useCSSTransforms={true}
-          isResizable={true}
-          isDraggable={true}
-          draggableHandle=".cursor-grab"
+          isResizable={!isTemplatePage}
+          isDraggable={!isTemplatePage}
+          draggableHandle=".chart-drag-handle"
           preventCollision={false}
           measureBeforeMount={false}
           // Use autoSize to fill container
@@ -852,8 +902,10 @@ export function DynamicLayout({
                   "bg-card rounded-lg shadow-sm border border-border overflow-hidden",
                   fullscreenChartId &&
                     chart.id !== fullscreenChartId &&
-                    "opacity-0"
+                    "opacity-0",
+                  isTemplatePage && styles.templateChart
                 )}
+                style={isTemplatePage ? { resize: 'none' } : undefined}
               >
                 <DraggableChart
                   id={chart.id}
@@ -874,6 +926,7 @@ export function DynamicLayout({
                   onDeleteGraph={chart.onDeleteGraph || onDeleteGraph}
                   onEditGraph={onEditGraph} // Add this prop
                   isLoading={chart.isLoading} // Add this line
+                  isTemplatePage={isTemplatePage} // Add the isTemplatePage prop
                 />
               </div>
             );
