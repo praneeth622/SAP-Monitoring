@@ -60,6 +60,8 @@ import {
 import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { useSearchParams } from "next/navigation";
+import axios from "axios";
+import { Responsive, WidthProvider, Layout } from "react-grid-layout";
 
 // Add API template interface
 interface ApiTemplate {
@@ -143,6 +145,7 @@ declare module "@/components/charts/DynamicLayout" {
     templateId?: string;
     templateData?: any;
     useDynamicLayout?: boolean;
+    onSaveLayout?: (layouts: Record<string, Layout[]>) => void;
   }
 }
 
@@ -214,17 +217,54 @@ const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
   // Extract and transform graphs with careful layout handling
   const graphs =
     template.graphs?.map((graph) => {
-      // Parse position data with validation
-      const topPos = graph.top_xy_pos?.split(":").map(Number) || [0, 0];
-      const bottomPos = graph.bottom_xy_pos?.split(":").map(Number) || [0, 0];
-
-      // Ensure we have valid numbers for positions
-      const [topY, topX] = topPos.length === 2 ? topPos : [0, 0];
-      const [bottomY, bottomX] = bottomPos.length === 2 ? bottomPos : [0, 0];
-
-      // Validate and calculate width and height
-      const width = bottomX > topX ? bottomX - topX : 40; // Default to 4 grid units if invalid
-      const height = bottomY > topY ? bottomY - topY : 40; // Default to 4 grid units if invalid
+      // Better parsing of position data - note the reversed order!
+      let topY = 0, topX = 0, bottomY = 0, bottomX = 0;
+      
+      // Parse top_xy_pos (y:x format in API)
+      if (graph.top_xy_pos) {
+        const parts = graph.top_xy_pos.split(":");
+        if (parts.length === 2) {
+          // IMPORTANT: API stores as "y:x", so first number is Y, second is X
+          topY = parseInt(parts[0], 10);
+          topX = parseInt(parts[1], 10);
+          // Handle NaN values
+          if (isNaN(topY)) topY = 0;
+          if (isNaN(topX)) topX = 0;
+        }
+      }
+      
+      // Parse bottom_xy_pos (y:x format in API)
+      if (graph.bottom_xy_pos) {
+        const parts = graph.bottom_xy_pos.split(":");
+        if (parts.length === 2) {
+          // IMPORTANT: API stores as "y:x", so first number is Y, second is X
+          bottomY = parseInt(parts[0], 10);
+          bottomX = parseInt(parts[1], 10);
+          // Handle NaN values
+          if (isNaN(bottomY)) bottomY = 0;
+          if (isNaN(bottomX)) bottomX = 0;
+        }
+      }
+      
+      // Calculate width and height from coordinates
+      // Ensure positive values by using Math.abs if needed
+      const width = Math.max(1, bottomX - topX);
+      const height = Math.max(1, bottomY - topY);
+      
+      console.log(`Parsing graph ${graph.graph_id} position:`, {
+        topY, topX, bottomY, bottomX,
+        width, height,
+        gridX: Math.floor(topX / 10),
+        gridY: Math.floor(topY / 10),
+        gridW: Math.max(1, Math.ceil(width / 10)),
+        gridH: Math.max(1, Math.ceil(height / 10))
+      });
+      
+      // Convert to grid units by dividing by 10
+      const gridX = Math.floor(topX / 10);
+      const gridY = Math.floor(topY / 10);
+      const gridW = Math.max(1, Math.ceil(width / 10));
+      const gridH = Math.max(1, Math.ceil(height / 10));
 
       // Extract KPIs
       const primaryKpi = graph.primary_kpi_id;
@@ -235,10 +275,10 @@ const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
         id: graph.graph_id,
         name: graph.graph_name,
         position: {
-          x: topX / 10,
-          y: topY / 10,
-          w: width / 10,
-          h: height / 10,
+          x: gridX,
+          y: gridY,
+          w: gridW,
+          h: gridH
         },
         type:
           graph.graph_type?.toLowerCase() === "bar"
@@ -352,7 +392,7 @@ const generateChartConfigs = (resolution = "auto") => {
   }));
 };
 
-// Update the generateChartsFromTemplate function to better handle dynamic layout
+// Update the generateChartsFromTemplate function
 const generateChartsFromTemplate = async (
   template: NormalizedTemplate,
   resolution = "auto",
@@ -414,7 +454,8 @@ const generateChartsFromTemplate = async (
       return hasValidPosition && hasNonZeroValues;
     });
 
-    console.log(`Template has saved layouts: ${hasSavedLayouts}`);
+    console.log(`Template has saved layouts: ${hasSavedLayouts}`, 
+      template.graphs.map(g => `${g.id}: ${JSON.stringify(g.position)}`));
 
     // Process each graph to fetch real data
     const chartPromises = template.graphs.map(async (graph, index) => {
@@ -427,7 +468,7 @@ const generateChartsFromTemplate = async (
       const monitoringArea = primaryKpi.includes("job") ? "JOBS" : "OS";
 
       // Determine the layout for this chart
-      let position;
+      let position = null;
       
       if (hasSavedLayouts && graph.position && 
           graph.position.w > 0 && graph.position.h > 0) {
@@ -438,14 +479,11 @@ const generateChartsFromTemplate = async (
           w: graph.position.w,
           h: graph.position.h,
         };
+        
+        console.log(`Using saved position for graph ${graph.id}:`, position);
       } else {
-        // If there are no saved layouts, we'll let the dynamic layout handle it
-        // by not setting a position
-        position = undefined;
+        console.log(`No saved position for graph ${graph.id}, will use dynamic layout`);
       }
-
-      // Log position data for debugging
-      console.log(`Graph ${graph.id} position:`, position || "Using dynamic layout");
 
       // Fetch real data from API
       try {
@@ -457,7 +495,7 @@ const generateChartsFromTemplate = async (
           resolution
         );
 
-        // Create chart config with saved layout
+        // Create chart config with saved layout if available
         return {
           id: graph.id,
           title: graph.name,
@@ -465,7 +503,7 @@ const generateChartsFromTemplate = async (
           data: chartData,
           activeKPIs: new Set(allKpis),
           kpiColors: globalKpiColors,
-          layout: position, // This could be undefined, which is fine for dynamic layout
+          layout: position, // This could be null for dynamic layout
           width: 400,
           height: 300,
         };
@@ -479,7 +517,7 @@ const generateChartsFromTemplate = async (
           data: generateDummyData(allKpis),
           activeKPIs: new Set(allKpis),
           kpiColors: globalKpiColors,
-          layout: position, // This could be undefined, which is fine for dynamic layout
+          layout: position, // This could be null for dynamic layout
           width: 400,
           height: 300,
         };
@@ -487,7 +525,7 @@ const generateChartsFromTemplate = async (
     });
 
     const charts = await Promise.all(chartPromises);
-    console.log("Generated charts:", charts);
+    console.log("Generated charts with layouts:", charts.map(c => ({id: c.id, layout: c.layout})));
     return charts;
   } catch (error) {
     console.error("Error generating charts from template:", error);
@@ -560,6 +598,8 @@ export default function Dashboard() {
   // Add state for API templates
   const [apiTemplates, setApiTemplates] = useState<NormalizedTemplate[]>([]);
   const [selectedApiTemplate, setSelectedApiTemplate] = useState<string>("");
+
+  const [useDynamicLayout, setUseDynamicLayout] = useState(true);
 
   // Apply theme colors to KPI colors
   const [themedKpiColors, setThemedKpiColors] = useState(kpiColors);
@@ -856,8 +896,7 @@ export default function Dashboard() {
           toast.success(`Will refresh once in ${option.label}`);
         }
       }
-    },
-    [autoRefreshOptions, isAutoRefreshEnabled]
+    }, [autoRefreshOptions, isAutoRefreshEnabled]
   );
 
   // Stop auto-refresh
@@ -1007,6 +1046,28 @@ export default function Dashboard() {
 
       // Normalize the template
       const template = normalizeTemplate(data[0]);
+      
+      // Get the dynamic layout flag from template data
+      // Prioritize dynamicLayout (camelCase) over dynamiclayout (lowercase)
+      // If neither property exists, default to true
+      const hasDynamicLayout = 
+        typeof data[0].dynamicLayout !== 'undefined' 
+          ? data[0].dynamicLayout !== false
+          : typeof data[0].dynamiclayout !== 'undefined' 
+            ? data[0].dynamiclayout !== false 
+            : true;
+            
+      console.log(`Template uses dynamic layout: ${hasDynamicLayout}`);
+
+      // Update useDynamicLayout state based on the template
+      setUseDynamicLayout(hasDynamicLayout);
+
+      // Show a toast indicating the layout mode
+      if (hasDynamicLayout) {
+        toast.success("Using dynamic layout");
+      } else {
+        toast.success("Using saved layout");
+      }
 
       // Create date range from the global date range
       const dateRangeForAPI = {
@@ -1375,69 +1436,6 @@ export default function Dashboard() {
     return Object.keys(templateData).includes(value);
   };
 
-  const saveLayout = useCallback(async () => {
-    if (!selectedApiTemplate) {
-      console.warn("No template selected, cannot save layout");
-      return;
-    }
-
-    try {
-      // Get current layout from charts
-      const currentLayout = charts.map((chart) => {
-        // Use default layout if chart.layout is undefined
-        const layout = chart.layout || {
-          x: 0,
-          y: 0,
-          w: 4,
-          h: 4,
-        };
-
-        return {
-          graph_id: chart.id,
-          graph_name: chart.title,
-          top_xy_pos: `${layout.y * 10}:${layout.x * 10}`,
-          bottom_xy_pos: `${(layout.y + layout.h) * 10}:${
-            (layout.x + layout.w) * 10
-          }`,
-          primary_kpi_id: Array.isArray(chart.activeKPIs)
-            ? chart.activeKPIs[0] || ""
-            : Array.from(chart.activeKPIs || new Set())[0] || "",
-          secondary_kpis: Array.isArray(chart.activeKPIs)
-            ? chart.activeKPIs.slice(1).map((kpiId) => ({ kpi_id: kpiId }))
-            : Array.from(chart.activeKPIs || new Set())
-                .slice(1)
-                .map((kpiId) => ({ kpi_id: kpiId })),
-          frequency: "5m",
-          resolution: "1d",
-          systems: [],
-        };
-      });
-
-      const payload = {
-        template_id: selectedApiTemplate,
-        graphs: currentLayout,
-      };
-
-      const response = await fetch("/api/templates/save", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save layout");
-      }
-
-      const data = await response.json();
-      console.log("Layout saved successfully:", data);
-      setLayoutChanged(false);
-    } catch (error) {
-      console.error("Error saving layout:", error);
-    }
-  }, [charts, selectedApiTemplate]);
-
   // Modify the handleLayoutChange function
   const handleLayoutChange = useCallback(
     (newLayout: any) => {
@@ -1497,20 +1495,9 @@ export default function Dashboard() {
       if (isSignificantChange) {
         setLayoutChanged(true);
         console.log("Layout has been modified by user");
-        
-        // Auto-save the layout after a delay
-        const saveTimeout = setTimeout(async () => {
-          try {
-            await saveLayout();
-          } catch (error) {
-            console.error("Error auto-saving layout:", error);
-          }
-        }, 1000);
-        
-        return () => clearTimeout(saveTimeout);
       }
     },
-    [charts, isContentLoading, saveLayout]
+    [charts, isContentLoading]
   );
 
   // Add this function to handle theme changes without resetting template
@@ -1618,13 +1605,49 @@ export default function Dashboard() {
       );
     }
 
-    // Check if these charts have saved layouts
-    const hasSavedLayouts = charts.some(chart => !!chart.layout);
+    // Debug charts data to see what's happening
+    console.log("Chart data for rendering:", charts);
 
+    // Find the current template
+    const currentTemplate = apiTemplates.find(t => t.id === selectedApiTemplate);
+    
+    // Check if charts have saved layouts
+    const hasSavedLayouts = charts.some(chart => 
+      chart.layout && 
+      chart.layout.w > 0 && 
+      chart.layout.h > 0
+    );
+    
+    const useCalculatedLayout = !hasSavedLayouts;
+    console.log("Using calculated layout:", useCalculatedLayout);
+    
+    // Make sure to process chart data correctly
+    const processedCharts = charts.map(chart => {
+      // Ensure the chart has all required properties
+      return {
+        ...chart,
+        // Set width and height if missing
+        width: chart.width || 400,
+        height: chart.height || 300,
+        // Keep existing layout if available
+        layout: chart.layout || undefined,
+        // Ensure we have a complete set of KPIs
+        activeKPIs: chart.activeKPIs || activeKPIs || new Set(),
+        // Use global kpi colors if necessary
+        kpiColors: chart.kpiColors || themedKpiColors || {},
+        // Add handlers as needed
+        onDeleteGraph: (id: string) => {
+          if (onDeleteGraph) {
+            onDeleteGraph(id);
+          }
+        }
+      };
+    });
+    
     return (
       <div className="relative min-h-[70vh]">
         <DynamicLayout
-          charts={charts}
+          charts={processedCharts}
           activeKPIs={activeKPIs}
           kpiColors={themedKpiColors}
           globalDateRange={globalDateRange}
@@ -1632,57 +1655,240 @@ export default function Dashboard() {
           resolution={resolution}
           onLayoutChange={handleLayoutChange}
           templateId={selectedApiTemplate}
-          templateData={{
-            template_id: selectedApiTemplate,
-            template_name:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)?.name ||
-              "",
-            template_desc:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.description || "",
-            default:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.isDefault || false,
-            favorite:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.isFavorite || false,
-            frequency:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.frequency || "5m",
-            systems:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)?.systems ||
-              [],
-            graphs: charts.map((chart) => {
-              const templateGraph = apiTemplates
-                .find((t) => t.id === selectedApiTemplate)
-                ?.graphs.find((g) => g.id === chart.id);
-              return {
-                graph_id: chart.id,
-                graph_name: chart.title,
-                primary_kpi_id:
-                  Array.from(chart.activeKPIs || new Set<string>())[0] || "",
-                secondary_kpis: Array.from(
-                  chart.activeKPIs || new Set<string>()
-                )
-                  .slice(1)
-                  .map((kpi) => ({ kpi_id: kpi })),
-                frequency: "5m",
-                resolution: "1d",
-                systems: [],
-                top_xy_pos: chart.layout 
-                  ? `${chart.layout.y * 10}:${chart.layout.x * 10}` 
-                  : "0:0",
-                bottom_xy_pos: chart.layout 
-                  ? `${(chart.layout.y + chart.layout.h) * 10}:${(chart.layout.x + chart.layout.w) * 10}` 
-                  : "0:0",
-              };
-            }),
-          }}
-          useDynamicLayout={!hasSavedLayouts} // Tell DynamicLayout whether to use saved or dynamic layout
+          templateData={templateData}
+          useDynamicLayout={useDynamicLayout}
+          onSaveLayout={saveLayout}
         />
+        
+        {/* Layout control buttons */}
+        {layoutChanged && (
+          <div className="fixed bottom-4 right-4 z-50 flex gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  // Set dynamic layout mode
+                  setUseDynamicLayout(true);
+                  
+                  // Clear layout from all charts
+                  setCharts(prevCharts => prevCharts.map(chart => ({
+                    ...chart,
+                    layout: undefined
+                  })));
+                  
+                  // Use the pinggy.link API URL
+                  const apiUrl = "https://shwsckbvbt.a.pinggy.link";
+                  
+                  // Update the template to set dynamicLayout flag to true
+                  if (selectedApiTemplate) {
+                    // First get the current template data
+                    const response = await fetch(`${apiUrl}/api/ut?templateId=${selectedApiTemplate}`);
+                    
+                    if (!response.ok) {
+                      throw new Error(`Failed to fetch template data: ${response.statusText}`);
+                    }
+                    
+                    const templateData = await response.json();
+                    
+                    if (!templateData || !templateData.length || !templateData[0]) {
+                      throw new Error("Invalid template data received");
+                    }
+                    
+                    // Get the full template object
+                    const template = templateData[0];
+                    
+                    // Set dynamicLayout to true for reset
+                    template.dynamicLayout = true;
+                    
+                    // Save the updated template
+                    const saveResponse = await fetch(`${apiUrl}/api/ut`, {
+                      method: "POST",
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify(template)
+                    });
+                    
+                    if (!saveResponse.ok) {
+                      throw new Error(`Failed to update template: ${saveResponse.statusText}`);
+                    }
+                    
+                    console.log("Template updated to use dynamic layout");
+                  }
+                  
+                  // Update state
+                  setLayoutChanged(false);
+                  
+                  // Force a resize to update the layout
+                  setTimeout(() => window.dispatchEvent(new Event("resize")), 100);
+                  
+                  // Show success message
+                  toast.success("Layout reset to default");
+                } catch (error) {
+                  console.error("Error resetting layout:", error);
+                  toast.error("Error resetting layout", {
+                    description: error instanceof Error ? error.message : "Unknown error"
+                  });
+                }
+              }}
+              variant="outline"
+              className="bg-background/90"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reset Layout
+            </Button>
+
+            <Button
+              onClick={() => saveLayout({ lg: charts.map(chart => chart.layout) })}
+              disabled={isSaving}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Layout
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
+
+  // Define saveLayout within the component
+  const saveLayout = async (layouts: Record<string, Layout[]>) => {
+    try {
+      // Ensure we have a template ID
+      if (!selectedApiTemplate) {
+        toast.error("No template selected to save layout");
+        return;
+      }
+
+      setIsSaving(true);
+      
+      // Use the pinggy.link API URL
+      const apiUrl = "https://shwsckbvbt.a.pinggy.link";
+      
+      // First get the current template data so we can update it
+      const response = await fetch(`${apiUrl}/api/ut?templateId=${selectedApiTemplate}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch template data: ${response.statusText}`);
+      }
+      
+      const templateData = await response.json();
+      
+      if (!templateData || !templateData.length || !templateData[0]) {
+        throw new Error("Invalid template data received");
+      }
+      
+      // Get the full template object
+      const template = templateData[0];
+      
+      // Log layouts before processing
+      console.log("Saving layout with layout data:", layouts.lg);
+      
+      // Update the graphs with new positions
+      if (template.graphs && Array.isArray(template.graphs)) {
+        template.graphs = template.graphs.map(graph => {
+          // Find this graph's layout in the current layout
+          const layoutItem = layouts.lg?.find(l => l.i === graph.graph_id);
+          
+          if (layoutItem) {
+            // IMPORTANT: Convert grid layout to top_xy_pos and bottom_xy_pos format
+            // In API, format is "y:x" not "x:y"
+            // Multiply by 10 to get the coordinates in the expected format
+            const x = Math.floor(layoutItem.x * 10);
+            const y = Math.floor(layoutItem.y * 10);
+            const w = Math.floor(layoutItem.w * 10);
+            const h = Math.floor(layoutItem.h * 10);
+            
+            // Log conversion for debugging
+            console.log(`Converting layout for ${graph.graph_id}:`, {
+              grid: `x:${layoutItem.x}, y:${layoutItem.y}, w:${layoutItem.w}, h:${layoutItem.h}`,
+              api: `top_xy_pos: "${y}:${x}", bottom_xy_pos: "${y + h}:${x + w}"`
+            });
+            
+            return {
+              ...graph,
+              top_xy_pos: `${y}:${x}`,
+              bottom_xy_pos: `${y + h}:${x + w}`
+            };
+          }
+          
+          return graph;
+        });
+      }
+      
+      // Set dynamicLayout to false since we're saving custom positions
+      template.dynamicLayout = false;
+      
+      console.log("Saving template with dynamicLayout set to false", template);
+      
+      // Now save the updated template
+      const saveResponse = await fetch(`${apiUrl}/api/ut`, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(template)
+      });
+
+      if (!saveResponse.ok) {
+        throw new Error(`Failed to save layout: ${saveResponse.statusText}`);
+      }
+
+      // Update local state to reflect saved layouts
+      setCharts(prevCharts => 
+        prevCharts.map(chart => {
+          const layoutItem = layouts.lg?.find(l => l.i === chart.id);
+          if (layoutItem) {
+            return {
+              ...chart,
+              layout: {
+                x: layoutItem.x,
+                y: layoutItem.y,
+                w: layoutItem.w,
+                h: layoutItem.h
+              }
+            };
+          }
+          return chart;
+        })
+      );
+      
+      // Update the useDynamicLayout state to false
+      setUseDynamicLayout(false);
+      
+      toast.success("Layout saved successfully");
+      // Reset the layoutChanged flag
+      setLayoutChanged(false);
+    } catch (error) {
+      console.error("Error saving layout:", error);
+      
+      // Error handling
+      toast.error("Failed to save layout", {
+        description: axios.isAxiosError(error) 
+          ? error.response?.data?.message || error.message
+          : error instanceof Error ? error.message : "An unexpected error occurred"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Add onDeleteGraph function to fix the related errors
+  const onDeleteGraph = useCallback((id: string) => {
+    if (window.confirm("Are you sure you want to delete this graph?")) {
+      setCharts(prevCharts => prevCharts.filter(chart => chart.id !== id));
+      toast.success("Graph deleted successfully");
+    }
+  }, []);
 
   if (!mounted || isLoading) {
     return (
@@ -2098,13 +2304,13 @@ export default function Dashboard() {
                   </div>
 
                   {/* Save button */}
-                  {layoutChanged && selectedTemplate && (
+                  {/* {layoutChanged && selectedTemplate && (
                     <div className="flex flex-col">
                       <label className="text-xs text-muted-foreground mb-1">
                         Save Layout
                       </label>
                       <Button
-                        onClick={saveLayout}
+                        onClick={() => saveLayout({ lg: charts.map(chart => chart.layout) })}
                         disabled={
                           !layoutChanged || isSaving || !selectedTemplate
                         }
@@ -2123,7 +2329,7 @@ export default function Dashboard() {
                         <span>{isSaving ? "Saving..." : "Save Layout"}</span>
                       </Button>
                     </div>
-                  )}
+                  )} */}
                 </div>
               </div>
             </motion.div>

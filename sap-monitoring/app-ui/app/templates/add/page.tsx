@@ -30,6 +30,7 @@ interface Template {
   resolution: string;
   isDefault: boolean;
   isFavorite: boolean;
+  dynamiclayout?: boolean;
   graphs: Graph[];
 }
 
@@ -214,6 +215,7 @@ export default function TemplatesPage() {
     resolution: "auto",
     isDefault: false,
     isFavorite: false,
+    dynamiclayout: true,
     graphs: [] as Graph[],
   });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -272,7 +274,17 @@ export default function TemplatesPage() {
 
     // Set form as valid when all required fields are filled
     setIsFormValid(isValid);
-  }, [templateData.name, templateData.system, templateData.timeRange, templateData.resolution]);
+  }, [templateData.name, templateData.system, templateData.timeRange, templateData.resolution, graphs.length]);
+
+  // Add an effect to track changes to template data
+  useEffect(() => {
+    if (isEditMode && templateId) {
+      // Only set hasChanges after initial template load is complete
+      if (!loadingState.fetchingTemplate) {
+        setHasChanges(true);
+      }
+    }
+  }, [templateData, isEditMode, templateId, loadingState.fetchingTemplate]);
 
   // Add a function to handle editing a graph
   const handleEditGraph = (graphId: string) => {
@@ -619,6 +631,7 @@ export default function TemplatesPage() {
         resolution: template.resolution || "auto", // Added fallback
         isDefault: template.default || false,
         isFavorite: template.favorite || false,
+        dynamiclayout: template.dynamiclayout !== undefined ? template.dynamiclayout : true,
         graphs: [], // We'll populate this separately
       });
 
@@ -668,6 +681,10 @@ export default function TemplatesPage() {
 
       setGraphs(mappedGraphs);
       setShowGraphs(mappedGraphs.length > 0);
+      
+      // Set form as valid since we loaded a valid template
+      setIsFormValid(true);
+      setHasChanges(false);
 
       // Force a layout refresh with a slight delay to ensure proper sizing
       setTimeout(() => {
@@ -721,10 +738,29 @@ export default function TemplatesPage() {
   };
 
   const handleAddGraph = () => {
-    if (!isFormValid) {
+    // Check form validity immediately before proceeding
+    const isValid = 
+      templateData.name.trim() !== '' &&
+      templateData.system !== '' &&
+      templateData.timeRange !== '' &&
+      templateData.resolution !== '';
+    
+    setIsFormValid(isValid);
+    
+    if (!isValid) {
       // Update to set specific error states for missing fields
       const newErrors: Record<string, boolean> = {};
       if (!templateData.name.trim()) newErrors.name = true;
+      if (!templateData.system) newErrors.system = true;
+      if (!templateData.timeRange) newErrors.timeRange = true;
+      if (!templateData.resolution) newErrors.resolution = true;
+      
+      setErrors(newErrors);
+      
+      toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
+        dismissible: true
+      });
+      return;
     }
 
     setSelectedTemplate({
@@ -745,8 +781,8 @@ export default function TemplatesPage() {
       return;
     }
 
-    // Then check if we have graphs
-    if (graphs.length === 0) {
+    // Additional check for graphs in create mode only
+    if (!isEditMode && graphs.length === 0) {
       toast.error(ERROR_MESSAGES.MIN_GRAPHS, {
         dismissible: true
       });
@@ -872,6 +908,7 @@ export default function TemplatesPage() {
         default: templateData.isDefault,
         favorite: templateData.isFavorite,
         frequency: templateData.timeRange,
+        dynamiclayout: templateData.dynamiclayout,
         systems: [
           {
             system_id: templateData.system.toLowerCase(),
@@ -923,6 +960,7 @@ export default function TemplatesPage() {
           resolution: "auto",
           isDefault: false,
           isFavorite: false,
+          dynamiclayout: true,
           graphs: [],
         });
         setGraphs([]);
@@ -980,6 +1018,14 @@ export default function TemplatesPage() {
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
       setHasChanges(true);
+      
+      // Recalculate isFormValid after adding a graph
+      const isValid = 
+        templateData.name.trim() !== '' &&
+        templateData.system !== '' &&
+        templateData.timeRange !== '' &&
+        templateData.resolution !== '';
+      setIsFormValid(isValid);
   
       // Force a layout refresh with a delay
       setTimeout(() => {
@@ -1028,7 +1074,16 @@ export default function TemplatesPage() {
 
       setIsAddGraphSheetOpen(false);
       setEditingGraph(null);
-      setHasChanges(true); // <-- Add this line
+      setHasChanges(true);
+      
+      // Ensure form validity is updated
+      const isValid = 
+        templateData.name.trim() !== '' &&
+        templateData.system !== '' &&
+        templateData.timeRange !== '' &&
+        templateData.resolution !== '';
+      setIsFormValid(isValid);
+      
       toast.success("Graph updated successfully");
 
       // Force a layout refresh
@@ -1258,7 +1313,7 @@ export default function TemplatesPage() {
 
                     <Button
                       onClick={handleSaveTemplate}
-                      disabled={!isFormValid || graphs.length === 0}
+                      disabled={!isFormValid || (graphs.length === 0 && !isEditMode)}
                       className="h-9 px-4 whitespace-nowrap ml-2"
                       size="sm"
                     >
@@ -1305,8 +1360,7 @@ export default function TemplatesPage() {
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
-                  hideLayoutControls={true}
-                  isEditMode={isEditMode}
+                  hideControls={true}
                 />
               </div>
             )}
