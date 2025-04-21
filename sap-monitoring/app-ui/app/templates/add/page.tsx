@@ -262,13 +262,15 @@ export default function TemplatesPage() {
   // Add this new state for tracking validity
   const [isFormValid, setIsFormValid] = useState(false);
 
-  // Add this effect to handle form validation whenever inputs change
+  // Update the useEffect for isFormValid to properly handle templates with graphs
   useEffect(() => {
-    const isValid = templateData.name.trim() !== '' &&
+    const isValid = 
+      templateData.name.trim() !== '' &&
       templateData.system !== '' &&
       templateData.timeRange !== '' &&
       templateData.resolution !== '';
 
+    // Set form as valid when all required fields are filled
     setIsFormValid(isValid);
   }, [templateData.name, templateData.system, templateData.timeRange, templateData.resolution]);
 
@@ -733,17 +735,25 @@ export default function TemplatesPage() {
     setIsAddGraphSheetOpen(true);
   };
 
+  // Update handleSaveTemplate to have more detailed validation
   const handleSaveTemplate = async () => {
+    // First check if basic form data is valid
     if (!isFormValid) {
-      toast.error(ERROR_MESSAGES.VALIDATION_ERROR);
+      toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
+        dismissible: true
+      });
       return;
     }
 
+    // Then check if we have graphs
     if (graphs.length === 0) {
-      toast.error(ERROR_MESSAGES.MIN_GRAPHS);
+      toast.error(ERROR_MESSAGES.MIN_GRAPHS, {
+        dismissible: true
+      });
       return;
     }
 
+    // Rest of the function stays the same...
     try {
       setLoadingState((prev) => ({ ...prev, savingTemplate: true }));
 
@@ -936,23 +946,22 @@ export default function TemplatesPage() {
     }
   };
 
+  // Update handleAddGraphToTemplate to ensure proper graph data with valid layout
   const handleAddGraphToTemplate = (graphData: Graph) => {
     if (graphs.length >= 9) {
-      toast.error(ERROR_MESSAGES.MAX_GRAPHS);
+      toast.error(ERROR_MESSAGES.MAX_GRAPHS, {
+        dismissible: true
+      });
       return;
     }
-
+  
     try {
       // Use the utility function to generate consistent colors
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
-
-      console.log("Created KPI colors:", newKpiColors);
-      console.log("Active KPIs:", newActiveKPIs);
-
-      // Create API-compatible graph object with minimal layout
-      // Let the DynamicLayout component handle actual positioning
+  
+      // Create API-compatible graph object with reliable layout
       const newGraph: Graph = {
         ...graphData,
         id: `graph-${Date.now()}`,
@@ -961,25 +970,30 @@ export default function TemplatesPage() {
         layout: {
           x: 0,
           y: 0,
-          w: 4,
-          h: 2,
+          w: 4, 
+          h: 4,  // Use consistent size for better layout
         },
       };
-
+  
+      // Update graphs and show immediately
       setGraphs((prev) => [...prev, newGraph]);
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
-      setHasChanges(true); // <-- Add this line
-
-      // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
+      setHasChanges(true);
+  
+      // Force a layout refresh with a delay
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
-      }, 200);
-
-      toast.success(SUCCESS_MESSAGES.GRAPH_ADDED);
+      }, 300);
+  
+      toast.success(SUCCESS_MESSAGES.GRAPH_ADDED, {
+        dismissible: true
+      });
     } catch (error) {
       console.error("Error adding graph:", error);
-      toast.error(ERROR_MESSAGES.ADD_GRAPH_ERROR);
+      toast.error(ERROR_MESSAGES.ADD_GRAPH_ERROR, {
+        dismissible: true
+      });
     }
   };
 
@@ -1244,7 +1258,7 @@ export default function TemplatesPage() {
 
                     <Button
                       onClick={handleSaveTemplate}
-                      disabled={!isFormValid || (showGraphs && graphs.length === 0)}
+                      disabled={!isFormValid || graphs.length === 0}
                       className="h-9 px-4 whitespace-nowrap ml-2"
                       size="sm"
                     >
@@ -1291,6 +1305,8 @@ export default function TemplatesPage() {
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
+                  hideLayoutControls={true}
+                  isEditMode={isEditMode}
                 />
               </div>
             )}
