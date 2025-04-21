@@ -763,14 +763,44 @@ export default function TemplatesPage() {
         : `USER_TEST_1_${templateData.name
             .toUpperCase()
             .replace(/\s+/g, "_")}_${Date.now()}`;
+            
+      // Make sure all graphs have valid layout positions
+      const graphsWithValidLayout = graphs.map((graph, index) => {
+        // If graph doesn't have layout or has invalid layout values, assign default values
+        if (!graph.layout || 
+            typeof graph.layout.x !== 'number' || 
+            typeof graph.layout.y !== 'number' || 
+            typeof graph.layout.w !== 'number' || 
+            typeof graph.layout.h !== 'number') {
+          
+          // Calculate default position based on index
+          const row = Math.floor(index / 3);
+          const col = index % 3;
+          
+          return {
+            ...graph,
+            layout: {
+              x: col * 4,
+              y: row * 6,
+              w: 4,
+              h: 6
+            }
+          };
+        }
+        return graph;
+      });
 
       // Format each graph according to the API structure
-      const apiFormattedGraphs = graphs.map((graph, index) => {
+      const apiFormattedGraphs = graphsWithValidLayout.map((graph, index) => {
+        // Ensure layout properties are numbers before multiplying
+        const x = Number(graph.layout.x) * 10;
+        const y = Number(graph.layout.y) * 10;
+        const w = Number(graph.layout.w) * 10;
+        const h = Number(graph.layout.h) * 10;
+        
         // Calculate positions based on layout
-        const topPos = `${graph.layout.y * 10}:${graph.layout.x * 10}`;
-        const bottomPos = `${(graph.layout.y + graph.layout.h) * 10}:${
-          (graph.layout.x + graph.layout.w) * 10
-        }`;
+        const topPos = `${y}:${x}`;
+        const bottomPos = `${y + h}:${x + w}`;
 
         return {
           graph_id: graph.id || `${newTemplateId}_G${index + 1}`,
@@ -961,18 +991,83 @@ export default function TemplatesPage() {
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
   
-      // Create API-compatible graph object with reliable layout
+      // Calculate optimal layout based on number of graphs
+      let layout = { x: 0, y: 0, w: 4, h: 4 }; // Default layout
+  
+      // Current graph count (not including the one we're adding)
+      const currentGraphCount = graphs.length;
+      
+      // Create layout based on where this graph would go in the sequence
+      switch (currentGraphCount) {
+        case 0: // First graph (1 total)
+          layout = { x: 0, y: 0, w: 12, h: 8 };
+          break;
+        case 1: // Second graph (2 total)
+          layout = { x: 0, y: 8, w: 12, h: 8 };
+          break;
+        case 2: // Third graph (3 total)
+          layout = { x: 0, y: 16, w: 12, h: 8 };
+          break;
+        case 3: // Fourth graph (4 total)
+          // Reposition for 2x2 grid
+          // First row, second column
+          layout = { x: 6, y: 0, w: 6, h: 8 };
+          // Update previous graphs for 2x2 layout
+          setGraphs(prev => prev.map((g, i) => {
+            if (i === 0) return { ...g, layout: { x: 0, y: 0, w: 6, h: 8 } };
+            if (i === 1) return { ...g, layout: { x: 0, y: 8, w: 6, h: 8 } };
+            if (i === 2) return { ...g, layout: { x: 6, y: 8, w: 6, h: 8 } };
+            return g;
+          }));
+          break;
+        case 4: // Fifth graph (5 total)
+          // First row, third column
+          layout = { x: 8, y: 0, w: 4, h: 6 };
+          // Update previous graphs for new layout
+          setGraphs(prev => prev.map((g, i) => {
+            if (i === 0) return { ...g, layout: { x: 0, y: 0, w: 4, h: 6 } };
+            if (i === 1) return { ...g, layout: { x: 4, y: 0, w: 4, h: 6 } };
+            if (i === 2) return { ...g, layout: { x: 0, y: 6, w: 6, h: 6 } };
+            if (i === 3) return { ...g, layout: { x: 6, y: 6, w: 6, h: 6 } };
+            return g;
+          }));
+          break;
+        case 5: // Sixth graph (6 total)
+          // 2x3 grid layout
+          layout = { x: 8, y: 6, w: 4, h: 6 };
+          break;
+        case 6: // Seventh graph (7 total)
+          // 7 graph layout - wide graph on bottom
+          layout = { x: 0, y: 12, w: 12, h: 6 };
+          break;
+        case 7: // Eighth graph (8 total)
+          // 4x2 grid for 8 graphs
+          layout = { x: 6, y: 12, w: 6, h: 6 };
+          // Update previous graphs
+          setGraphs(prev => prev.map((g, i) => {
+            if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 6, h: 6 } };
+            return g;
+          }));
+          break;
+        case 8: // Ninth graph (9 total)
+          // 3x3 grid for 9 graphs
+          layout = { x: 8, y: 12, w: 4, h: 6 };
+          // Update previous graphs for 3x3 layout
+          setGraphs(prev => prev.map((g, i) => {
+            if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 4, h: 6 } };
+            if (i === 7) return { ...g, layout: { x: 4, y: 12, w: 4, h: 6 } };
+            return g;
+          }));
+          break;
+      }
+  
+      // Create API-compatible graph object with calculated layout
       const newGraph: Graph = {
         ...graphData,
         id: `graph-${Date.now()}`,
         activeKPIs: newActiveKPIs,
         kpiColors: newKpiColors,
-        layout: {
-          x: 0,
-          y: 0,
-          w: 4, 
-          h: 4,  // Use consistent size for better layout
-        },
+        layout: layout,
       };
   
       // Update graphs and show immediately
@@ -1014,13 +1109,10 @@ export default function TemplatesPage() {
                 ...graphData,
                 activeKPIs: newActiveKPIs,
                 kpiColors: newKpiColors,
-                // Preserve existing layout
-                layout: graph.layout || {
-                  x: 0,
-                  y: 0,
-                  w: 4,
-                  h: 4,
-                },
+                // Preserve existing layout - this is important for layout persistence
+                layout: graph.layout && Object.keys(graph.layout).length === 4
+                  ? graph.layout // Use existing layout if valid
+                  : { x: 0, y: 0, w: 4, h: 4 }, // Fallback
               }
             : graph
         )
@@ -1028,7 +1120,7 @@ export default function TemplatesPage() {
 
       setIsAddGraphSheetOpen(false);
       setEditingGraph(null);
-      setHasChanges(true); // <-- Add this line
+      setHasChanges(true);
       toast.success("Graph updated successfully");
 
       // Force a layout refresh
@@ -1305,8 +1397,7 @@ export default function TemplatesPage() {
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
-                  hideLayoutControls={true}
-                  isEditMode={isEditMode}
+                  hideControls={true}
                 />
               </div>
             )}
