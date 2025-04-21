@@ -515,6 +515,7 @@ export default function TemplatesPage() {
         hideControls: true,
         onDeleteGraph: handleDeleteGraph,
         isLoading,
+        layout: graph.layout,
       };
     },
     [
@@ -777,6 +778,8 @@ export default function TemplatesPage() {
           const row = Math.floor(index / 3);
           const col = index % 3;
           
+          console.log(`Graph ${graph.name} has invalid layout. Assigning default layout.`);
+          
           return {
             ...graph,
             layout: {
@@ -787,6 +790,9 @@ export default function TemplatesPage() {
             }
           };
         }
+        
+        console.log(`Graph ${graph.name} layout: x=${graph.layout.x}, y=${graph.layout.y}, w=${graph.layout.w}, h=${graph.layout.h}`);
+        
         return graph;
       });
 
@@ -1398,6 +1404,28 @@ export default function TemplatesPage() {
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
                   hideControls={true}
+                  templateId={isEditMode ? searchParams.get("templateId") || "" : undefined}
+                  useDynamicLayout={true}
+                  onLayoutChange={(layout) => {
+                    // Update each graph's layout based on the new layout
+                    setGraphs(prev => 
+                      prev.map(graph => {
+                        const layoutItem = layout.find(item => item.i === graph.id);
+                        if (layoutItem) {
+                          return {
+                            ...graph,
+                            layout: {
+                              x: layoutItem.x,
+                              y: layoutItem.y,
+                              w: layoutItem.w, 
+                              h: layoutItem.h
+                            }
+                          };
+                        }
+                        return graph;
+                      })
+                    );
+                  }}
                 />
               </div>
             )}

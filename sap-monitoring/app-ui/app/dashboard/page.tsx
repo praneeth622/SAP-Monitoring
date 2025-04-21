@@ -143,10 +143,6 @@ declare module "@/components/charts/DynamicLayout" {
     templateId?: string;
     templateData?: any;
     useDynamicLayout?: boolean;
-    onDeleteGraph?: (id: string) => void;
-    onEditGraph?: (id: string) => void;
-    hideLayoutControls?: boolean;
-    isEditMode?: boolean;
   }
 }
 
