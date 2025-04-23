@@ -133,6 +133,14 @@ interface Kpi {
   criticality: string;
 }
 
+// Interface for the user access API response
+interface UserAccessItem {
+  kpi_id: string;
+  kpi_group: string;
+  mon_area: string;
+  system_name: string;
+}
+
 type AuthLevelType = "Monitoring Areas" | "KPI Group" | "KPIs";
 
 export default function ManageUserPage() {
@@ -175,6 +183,7 @@ export default function ManageUserPage() {
   const [editItem, setEditItem] = useState<UserSystem | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [configTitle, setConfigTitle] = useState("");
+  const [isUsersLoading, setIsUsersLoading] = useState(true);
 
   // Form validation
   const isSystemSelectEnabled = Boolean(userId);
@@ -239,6 +248,7 @@ export default function ManageUserPage() {
   const fetchAllUsers = async () => {
     try {
       setIsLoading(true);
+      setIsUsersLoading(true);
       const response = await axios.get(
         "https://shwsckbvbt.a.pinggy.link/api/um"
       );
@@ -247,21 +257,89 @@ export default function ManageUserPage() {
         // Store the raw users data first
         setUsers(response.data);
 
-        // Create UserSystem objects from the API data
-        // But don't use role as auth_level - set it to N/A
-        const userSystemData = response.data.map((user: User) => ({
-          id: `${user.user_id}-system`, // Temporary ID
-          user_id: user.user_id,
-          name: user.name,
-          email: user.mail_id,
-          auth_level: "N/A", // Set auth_level to N/A initially, NOT using the role
-          system: "N/A", // This would be filled with actual system data if available
-          configurations: {
-            monitoringAreas: [],
-            kpiGroups: [],
-            kpis: [],
-          },
-        }));
+        // Create temporary UserSystem objects
+        const userSystemData: UserSystem[] = [];
+
+        // Process each user
+        for (const user of response.data) {
+          try {
+            // Fetch access data for this user
+            const accessData = await fetchUserAccessData(user.user_id);
+
+            if (accessData && accessData.length > 0) {
+              // Extract unique systems and access levels
+              const uniqueSystems = new Set<string>();
+              const uniqueMonAreas = new Set<string>();
+              const uniqueKpiGroups = new Set<string>();
+              const uniqueKpis = new Set<string>();
+
+              // Process all access items
+              accessData.forEach((item) => {
+                uniqueSystems.add(item.system_name);
+                uniqueMonAreas.add(item.mon_area);
+                uniqueKpiGroups.add(item.kpi_group);
+                uniqueKpis.add(item.kpi_id);
+              });
+
+              // Determine auth levels from the data
+              const authLevels: string[] = [];
+              if (uniqueMonAreas.size > 0) authLevels.push("Monitoring Areas");
+              if (uniqueKpiGroups.size > 0) authLevels.push("KPI Group");
+              if (uniqueKpis.size > 0) authLevels.push("KPIs");
+
+              // Create a UserSystem entry for each system the user has access to
+              for (const system of uniqueSystems) {
+                userSystemData.push({
+                  id: `${user.user_id}-${system}`,
+                  user_id: user.user_id,
+                  name: user.name,
+                  email: user.mail_id,
+                  auth_level: authLevels.join(", "),
+                  system: system,
+                  configurations: {
+                    monitoringAreas: Array.from(uniqueMonAreas),
+                    kpiGroups: Array.from(uniqueKpiGroups),
+                    kpis: Array.from(uniqueKpis),
+                  },
+                });
+              }
+            } else {
+              // No access data found, create a default entry with N/A
+              userSystemData.push({
+                id: `${user.user_id}-system`,
+                user_id: user.user_id,
+                name: user.name,
+                email: user.mail_id,
+                auth_level: "N/A",
+                system: "N/A",
+                configurations: {
+                  monitoringAreas: [],
+                  kpiGroups: [],
+                  kpis: [],
+                },
+              });
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching access data for user ${user.user_id}:`,
+              error
+            );
+            // Add an entry even if there was an error
+            userSystemData.push({
+              id: `${user.user_id}-system`,
+              user_id: user.user_id,
+              name: user.name,
+              email: user.mail_id,
+              auth_level: "N/A",
+              system: "N/A",
+              configurations: {
+                monitoringAreas: [],
+                kpiGroups: [],
+                kpis: [],
+              },
+            });
+          }
+        }
 
         setUserSystems(userSystemData);
       }
@@ -273,6 +351,7 @@ export default function ManageUserPage() {
       });
     } finally {
       setIsLoading(false);
+      setIsUsersLoading(false);
     }
   };
 
@@ -298,6 +377,26 @@ export default function ManageUserPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Fetch user access data from the API
+  const fetchUserAccessData = async (userId: string) => {
+    try {
+      const response = await axios.get(
+        `https://shwsckbvbt.a.pinggy.link/api/ua?userId=${userId}`
+      );
+      if (response.status === 200) {
+        return response.data as UserAccessItem[];
+      }
+      return [];
+    } catch (error) {
+      console.error("Error fetching user access data:", error);
+      toast.error("Failed to fetch user access data", {
+        description: "Please try again or contact support",
+        dismissible: true,
+      });
+      return [];
     }
   };
 
@@ -924,22 +1023,21 @@ export default function ManageUserPage() {
       toast.info("No access assigned", {
         description: "This user doesn't have any access assigned yet.",
       });
+      // Instead of viewing, offer to edit the user
+      handleEdit(userSystem);
       return;
     }
 
-    // Set view mode and config title
     setConfigTitle(`View Access for ${userSystem.name}`);
     setIsConfigOpen(true);
     setIsViewMode(true);
-    setIsEditing(false); // Ensure we're not in edit mode
-    setEditingId(null); // Clear any editing ID
 
     // Populate name and system for the sidebar header
     setName(userSystem.name);
     setSystemId(userSystem.system);
 
     // Set selected auth levels from the item
-    setSelectedAuthLevels(userSystem.auth_level === "N/A" ? [] : userSystem.auth_level.split(", "));
+    setSelectedAuthLevels(userSystem.auth_level.split(", "));
 
     // Reset data collections
     setMonitoringAreas([]);
@@ -956,6 +1054,8 @@ export default function ManageUserPage() {
       );
 
       if (accessResponse.status === 200 && accessResponse.data) {
+        console.log("User access details:", accessResponse.data);
+
         // If API provides configuration details, use them
         // Otherwise use what we have stored locally
         if (accessResponse.data.configurations) {
@@ -1078,9 +1178,20 @@ export default function ManageUserPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {userSystems.length === 0 ? (
+                  {isUsersLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
+                      <TableCell colSpan={5} className="h-24 text-center">
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="h-8 w-8 mb-2 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                          <p className="text-muted-foreground">
+                            Loading users...
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : userSystems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <UserIcon className="h-8 w-8 text-muted-foreground mb-2" />
                           <p className="text-muted-foreground">
@@ -1122,9 +1233,14 @@ export default function ManageUserPage() {
                                         <Filter className="h-3.5 w-3.5 ml-1 flex-shrink-0" />
                                       </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-[220px] p-0" align="start">
+                                    <PopoverContent
+                                      className="w-[220px] p-0"
+                                      align="start"
+                                    >
                                       <div className="p-2">
-                                        <p className="text-sm font-medium mb-2">Select Systems</p>
+                                        <p className="text-sm font-medium mb-2">
+                                          Select Systems
+                                        </p>
                                         <div className="space-y-2 max-h-[200px] overflow-y-auto">
                                           {systems.map((system) => (
                                             <div
@@ -1133,9 +1249,14 @@ export default function ManageUserPage() {
                                             >
                                               <Checkbox
                                                 id={`system-${system.system_id}`}
-                                                checked={selectedSystems.includes(system.system_id)}
+                                                checked={selectedSystems.includes(
+                                                  system.system_id
+                                                )}
                                                 onCheckedChange={(checked) =>
-                                                  handleSystemChange(system.system_id, checked === true)
+                                                  handleSystemChange(
+                                                    system.system_id,
+                                                    checked === true
+                                                  )
                                                 }
                                                 disabled={!userId}
                                               />
@@ -1143,7 +1264,8 @@ export default function ManageUserPage() {
                                                 htmlFor={`system-${system.system_id}`}
                                                 className="text-sm cursor-pointer flex-1"
                                               >
-                                                {system.system_id} ({system.client})
+                                                {system.system_id} (
+                                                {system.client})
                                               </Label>
                                             </div>
                                           ))}
@@ -1174,44 +1296,72 @@ export default function ManageUserPage() {
                                         <Filter className="h-3.5 w-3.5 ml-1 flex-shrink-0" />
                                       </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-[220px] p-0" align="start">
+                                    <PopoverContent
+                                      className="w-[220px] p-0"
+                                      align="start"
+                                    >
                                       <div className="p-2">
-                                        <p className="text-sm font-medium mb-2">Access Levels</p>
+                                        <p className="text-sm font-medium mb-2">
+                                          Access Levels
+                                        </p>
                                         <div className="space-y-2">
-                                          {["Monitoring Areas", "KPI Group", "KPIs"].map((level) => (
-                                            <div key={level} className="flex items-center space-x-2">
+                                          {[
+                                            "Monitoring Areas",
+                                            "KPI Group",
+                                            "KPIs",
+                                          ].map((level) => (
+                                            <div
+                                              key={level}
+                                              className="flex items-center space-x-2"
+                                            >
                                               <Checkbox
-                                                id={`level-${level}-${editingId || "new"}`}
-                                                checked={selectedAuthLevels.includes(level)}
+                                                id={`level-${level}-${
+                                                  editingId || "new"
+                                                }`}
+                                                checked={selectedAuthLevels.includes(
+                                                  level
+                                                )}
                                                 onCheckedChange={(checked) => {
                                                   if (checked) {
                                                     // Add only if not already selected
-                                                    if (!selectedAuthLevels.includes(level)) {
+                                                    if (
+                                                      !selectedAuthLevels.includes(
+                                                        level
+                                                      )
+                                                    ) {
                                                       setSelectedAuthLevels([
                                                         ...selectedAuthLevels,
                                                         level,
                                                       ]);
 
                                                       // Show notification to guide users to configure access
-                                                      toast.info("Action required", {
-                                                        description: `Please configure ${level} access by clicking the Config button`,
-                                                        action: {
-                                                          label: "Configure",
-                                                          onClick: openConfigSidebar,
-                                                        },
-                                                        dismissible: true,
-                                                      });
+                                                      toast.info(
+                                                        "Action required",
+                                                        {
+                                                          description: `Please configure ${level} access by clicking the Config button`,
+                                                          action: {
+                                                            label: "Configure",
+                                                            onClick:
+                                                              openConfigSidebar,
+                                                          },
+                                                          dismissible: true,
+                                                        }
+                                                      );
                                                     }
                                                   } else {
                                                     setSelectedAuthLevels(
-                                                      selectedAuthLevels.filter((l) => l !== level)
+                                                      selectedAuthLevels.filter(
+                                                        (l) => l !== level
+                                                      )
                                                     );
                                                   }
                                                 }}
                                                 disabled={!systemId}
                                               />
                                               <Label
-                                                htmlFor={`level-${level}-${editingId || "new"}`}
+                                                htmlFor={`level-${level}-${
+                                                  editingId || "new"
+                                                }`}
                                                 className="text-sm cursor-pointer flex-1"
                                               >
                                                 {level}
@@ -1234,9 +1384,12 @@ export default function ManageUserPage() {
                                   >
                                     <Settings className="h-3.5 w-3.5 mr-1" />
                                     Config
-                                    {!isConfigured && selectedAuthLevels.length > 0 && (
-                                      <span className="ml-1 text-red-500">●</span>
-                                    )}
+                                    {!isConfigured &&
+                                      selectedAuthLevels.length > 0 && (
+                                        <span className="ml-1 text-red-500">
+                                          ●
+                                        </span>
+                                      )}
                                   </Button>
                                 )}
                               </div>
@@ -1402,9 +1555,14 @@ export default function ManageUserPage() {
                                   <Filter className="h-3.5 w-3.5 ml-1 flex-shrink-0" />
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-[220px] p-0" align="start">
+                              <PopoverContent
+                                className="w-[220px] p-0"
+                                align="start"
+                              >
                                 <div className="p-2">
-                                  <p className="text-sm font-medium mb-2">Select Systems</p>
+                                  <p className="text-sm font-medium mb-2">
+                                    Select Systems
+                                  </p>
                                   <div className="space-y-2 max-h-[200px] overflow-y-auto">
                                     {systems.map((system) => (
                                       <div
@@ -1413,9 +1571,14 @@ export default function ManageUserPage() {
                                       >
                                         <Checkbox
                                           id={`system-${system.system_id}`}
-                                          checked={selectedSystems.includes(system.system_id)}
+                                          checked={selectedSystems.includes(
+                                            system.system_id
+                                          )}
                                           onCheckedChange={(checked) =>
-                                            handleSystemChange(system.system_id, checked === true)
+                                            handleSystemChange(
+                                              system.system_id,
+                                              checked === true
+                                            )
                                           }
                                           disabled={!userId}
                                         />
@@ -1454,19 +1617,37 @@ export default function ManageUserPage() {
                                   <Filter className="h-3.5 w-3.5 ml-1 flex-shrink-0" />
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-[220px] p-0" align="start">
+                              <PopoverContent
+                                className="w-[220px] p-0"
+                                align="start"
+                              >
                                 <div className="p-2">
-                                  <p className="text-sm font-medium mb-2">Access Levels</p>
+                                  <p className="text-sm font-medium mb-2">
+                                    Access Levels
+                                  </p>
                                   <div className="space-y-2">
-                                    {["Monitoring Areas", "KPI Group", "KPIs"].map((level) => (
-                                      <div key={level} className="flex items-center space-x-2">
+                                    {[
+                                      "Monitoring Areas",
+                                      "KPI Group",
+                                      "KPIs",
+                                    ].map((level) => (
+                                      <div
+                                        key={level}
+                                        className="flex items-center space-x-2"
+                                      >
                                         <Checkbox
                                           id={`level-${level}`}
-                                          checked={selectedAuthLevels.includes(level)}
+                                          checked={selectedAuthLevels.includes(
+                                            level
+                                          )}
                                           onCheckedChange={(checked) => {
                                             if (checked) {
                                               // Add only if not already selected
-                                              if (!selectedAuthLevels.includes(level)) {
+                                              if (
+                                                !selectedAuthLevels.includes(
+                                                  level
+                                                )
+                                              ) {
                                                 setSelectedAuthLevels([
                                                   ...selectedAuthLevels,
                                                   level,
@@ -1516,9 +1697,10 @@ export default function ManageUserPage() {
                             >
                               <Settings className="h-3.5 w-3.5 mr-1" />
                               Config
-                              {!isConfigured && selectedAuthLevels.length > 0 && (
-                                <span className="ml-1 text-red-500">●</span>
-                              )}
+                              {!isConfigured &&
+                                selectedAuthLevels.length > 0 && (
+                                  <span className="ml-1 text-red-500">●</span>
+                                )}
                             </Button>
                           )}
                         </div>
@@ -1574,7 +1756,7 @@ export default function ManageUserPage() {
       {/* Updated Authorization Configuration Sheet */}
       <Sheet open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <SheetContent className="space-y-6 w-[500px] sm:max-w-[500px]">
-          <div className="pt-3 pb-2">
+          <div className=" pt-3 pb-2">
             <SheetHeader>
               <SheetTitle className="text-2xl font-bold">
                 {configTitle}
@@ -1583,6 +1765,7 @@ export default function ManageUserPage() {
                 {isViewMode ? "Viewing" : "Configuring"} access for {name} on
                 system {systemId}
               </p>
+              {/* Add this to verify data is loaded */}
               <p className="text-xs text-muted-foreground">
                 Monitoring Areas: {selectedMAs.size}, KPI Groups:{" "}
                 {selectedKPIGroups.size}, KPIs: {selectedKPIs.size}
@@ -1592,7 +1775,7 @@ export default function ManageUserPage() {
 
           <div className="flex-1 overflow-y-auto px-2">
             <div className="py-4 space-y-8">
-              {/* Monitoring Areas Section */}
+              {/* Monitoring Areas Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("Monitoring Areas") && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
@@ -1619,7 +1802,10 @@ export default function ManageUserPage() {
                           <Checkbox
                             id={`ma-${ma.mon_area_name}`}
                             checked={selectedMAs.has(ma.mon_area_name)}
-                            disabled={true} // Always disabled in view mode
+                            onCheckedChange={(checked) =>
+                              handleMAChange(ma.mon_area_name, checked === true)
+                            }
+                            disabled={isViewMode}
                           />
                           <div className="flex-1">
                             <Label
@@ -1640,12 +1826,14 @@ export default function ManageUserPage() {
                 </div>
               )}
 
-              {/* KPI Groups Section */}
+              {/* KPI Groups Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("KPI Group") && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
                     <h3 className="text-lg font-semibold">KPI Groups</h3>
-                    <Badge variant="outline">{selectedKPIGroups.size} selected</Badge>
+                    <Badge variant="outline">
+                      {selectedKPIGroups.size} selected
+                    </Badge>
                   </div>
 
                   {isLoadingKPIGroups ? (
@@ -1667,7 +1855,13 @@ export default function ManageUserPage() {
                           <Checkbox
                             id={`kg-${kg.kpi_grp_name}`}
                             checked={selectedKPIGroups.has(kg.kpi_grp_name)}
-                            disabled={true} // Always disabled in view mode
+                            onCheckedChange={(checked) =>
+                              handleKPIGroupChange(
+                                kg.kpi_grp_name,
+                                checked === true
+                              )
+                            }
+                            disabled={isViewMode}
                           />
                           <div className="flex-1">
                             <Label
@@ -1691,12 +1885,14 @@ export default function ManageUserPage() {
                 </div>
               )}
 
-              {/* KPIs Section */}
+              {/* KPIs Section - only show if selected in auth levels */}
               {selectedAuthLevels.includes("KPIs") && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center sticky top-0 bg-background py-2 z-10 border-b">
                     <h3 className="text-lg font-semibold">KPIs</h3>
-                    <Badge variant="outline">{selectedKPIs.size} selected</Badge>
+                    <Badge variant="outline">
+                      {selectedKPIs.size} selected
+                    </Badge>
                   </div>
 
                   {isLoadingKPIs ? (
@@ -1709,7 +1905,7 @@ export default function ManageUserPage() {
                       ))}
                     </div>
                   ) : kpis.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-secondary">
                       {kpis.map((kpi) => (
                         <div
                           key={kpi.kpi_name}
@@ -1718,7 +1914,10 @@ export default function ManageUserPage() {
                           <Checkbox
                             id={`kpi-${kpi.kpi_name}`}
                             checked={selectedKPIs.has(kpi.kpi_name)}
-                            disabled={true} // Always disabled in view mode
+                            onCheckedChange={(checked) =>
+                              handleKPIChange(kpi.kpi_name, checked === true)
+                            }
+                            disabled={isViewMode}
                           />
                           <div className="flex-1">
                             <Label
@@ -1747,8 +1946,11 @@ export default function ManageUserPage() {
           {/* Action buttons - now in a sticky footer */}
           <div className="flex justify-end space-x-2 p-4 border-t sticky bottom-0 bg-background">
             <Button variant="outline" onClick={() => setIsConfigOpen(false)}>
-              Close
+              {isViewMode ? "Close" : "Cancel"}
             </Button>
+            {!isViewMode && (
+              <Button onClick={handleSaveSelections}>Save Configuration</Button>
+            )}
           </div>
         </SheetContent>
       </Sheet>
