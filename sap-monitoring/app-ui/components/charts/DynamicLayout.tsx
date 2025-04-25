@@ -1237,7 +1237,8 @@ export function DynamicLayout({
                   ...prev,
                   [breakpoint]:
                     prev[breakpoint]?.map((item: Layout) => {
-                      const matchingLayout = layout.find((l) => l.i === item.i);
+                      // Add null check before using find method on layout
+                      const matchingLayout = layout && layout.find((l) => l.i === item.i);
                       if (matchingLayout) {
                         // Apply special positioning for small screens
                         if (breakpoint === "xs" || breakpoint === "xxs") {

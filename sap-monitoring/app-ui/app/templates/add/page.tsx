@@ -1375,7 +1375,7 @@ export default function TemplatesPage() {
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
       <main className="flex-1 overflow-y-auto">
-        <div className="container mx-auto px-8 py-6">
+        <div className="container mx-auto px-2 py-6">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
