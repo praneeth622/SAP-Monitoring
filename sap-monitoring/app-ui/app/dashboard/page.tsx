@@ -131,11 +131,31 @@ const chartThemes = {
   },
 };
 
+// Update DynamicLayout component props to include useDynamicLayout
+declare module "@/components/charts/DynamicLayout" {
+  interface DynamicLayoutProps {
+    charts: ChartConfig[];
+    activeKPIs: Set<string>;
+    kpiColors: Record<string, any>;
+    globalDateRange?: DateRange;
+    theme: ChartTheme;
+    resolution: string;
+    onLayoutChange?: (layout: any) => void;
+    templateId?: string;
+    templateData?: any;
+    useDynamicLayout?: boolean;
+    onDeleteGraph?: (id: string) => void;
+    onEditGraph?: (id: string) => void;
+    hideLayoutControls?: boolean;
+    isEditMode?: boolean;
+  }
+}
+
 const kpiColors = {
   revenue: {
     name: "Revenue",
     color: "#3B82F6",
-    icon: DollarSign,   
+    icon: DollarSign,
     lightBg: "bg-blue-50/80",
     darkBg: "dark:bg-blue-900/30",
     text: "text-blue-600",
@@ -164,7 +184,7 @@ const chartTitles = [
   "Market Analysis",
 ];
 
-// Helper function to normalize API template
+// Helper function to normalize API template with better layout handling
 const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
   // Extract values handling both array and direct values
   const id = Array.isArray(template.template_id)
@@ -196,14 +216,20 @@ const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
   // Extract systems
   const systems = template.systems?.map((system) => system.system_id) || [];
 
-  // Extract and transform graphs
+  // Extract and transform graphs with careful layout handling
   const graphs =
     template.graphs?.map((graph) => {
-      // Parse position data
+      // Parse position data with validation
       const topPos = graph.top_xy_pos?.split(":").map(Number) || [0, 0];
       const bottomPos = graph.bottom_xy_pos?.split(":").map(Number) || [0, 0];
-      const [topY, topX] = topPos;
-      const [bottomY, bottomX] = bottomPos;
+
+      // Ensure we have valid numbers for positions
+      const [topY, topX] = topPos.length === 2 ? topPos : [0, 0];
+      const [bottomY, bottomX] = bottomPos.length === 2 ? bottomPos : [0, 0];
+
+      // Validate and calculate width and height
+      const width = bottomX > topX ? bottomX - topX : 40; // Default to 4 grid units if invalid
+      const height = bottomY > topY ? bottomY - topY : 40; // Default to 4 grid units if invalid
 
       // Extract KPIs
       const primaryKpi = graph.primary_kpi_id;
@@ -216,10 +242,13 @@ const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
         position: {
           x: topX / 10,
           y: topY / 10,
-          w: (bottomX - topX) / 10,
-          h: (bottomY - topY) / 10,
+          w: width / 10,
+          h: height / 10,
         },
-        type: "line" as ChartType, // Default to line chart
+        type:
+          graph.graph_type?.toLowerCase() === "bar"
+            ? "bar"
+            : ("line" as ChartType),
         primaryKpi,
         secondaryKpis,
       };
@@ -328,8 +357,7 @@ const generateChartConfigs = (resolution = "auto") => {
   }));
 };
 
-// Update the generateChartsFromTemplate function to ensure it always returns an array
-
+// Update the generateChartsFromTemplate function to better handle dynamic layout
 const generateChartsFromTemplate = async (
   template: NormalizedTemplate,
   resolution = "auto",
@@ -375,6 +403,24 @@ const generateChartsFromTemplate = async (
   });
 
   try {
+    // Check if the graphs have saved layouts
+    const hasSavedLayouts = template.graphs.some(graph => {
+      // Validate that position data is meaningful
+      const hasValidPosition = graph.position && 
+        typeof graph.position.x === 'number' && 
+        typeof graph.position.y === 'number' && 
+        typeof graph.position.w === 'number' && 
+        typeof graph.position.h === 'number';
+      
+      // Check if the position values are non-zero (a further indication this is a real saved layout)
+      const hasNonZeroValues = hasValidPosition && 
+        (graph.position.w > 0 && graph.position.h > 0);
+        
+      return hasValidPosition && hasNonZeroValues;
+    });
+
+    console.log(`Template has saved layouts: ${hasSavedLayouts}`);
+
     // Process each graph to fetch real data
     const chartPromises = template.graphs.map(async (graph, index) => {
       // Clean up KPI names
@@ -385,9 +431,30 @@ const generateChartsFromTemplate = async (
       // Determine monitoring area - default to OS if not specified
       const monitoringArea = primaryKpi.includes("job") ? "JOBS" : "OS";
 
+      // Determine the layout for this chart
+      let position;
+      
+      if (hasSavedLayouts && graph.position && 
+          graph.position.w > 0 && graph.position.h > 0) {
+        // Use the saved layout from the template
+        position = {
+          x: graph.position.x,
+          y: graph.position.y,
+          w: graph.position.w,
+          h: graph.position.h,
+        };
+      } else {
+        // If there are no saved layouts, we'll let the dynamic layout handle it
+        // by not setting a position
+        position = undefined;
+      }
+
+      // Log position data for debugging
+      console.log(`Graph ${graph.id} position:`, position || "Using dynamic layout");
+
       // Fetch real data from API
       try {
-        const realData = await fetchTemplateChartData(
+        const chartData = await fetchTemplateChartData(
           primaryKpi,
           secondaryKpis,
           monitoringArea,
@@ -395,90 +462,41 @@ const generateChartsFromTemplate = async (
           resolution
         );
 
-        // If we got real data, use it, otherwise fall back to generated data
-        const chartData =
-          realData.length > 0 ? realData : generateDummyData(allKpis);
-
-        // Create KPI colors using the global palette
-        const chartKpiColors: Record<string, { color: string; name: string }> =
-          {};
-        const activeKPIs = new Set<string>();
-
-        allKpis.forEach((kpi) => {
-          activeKPIs.add(kpi);
-          chartKpiColors[kpi] = globalKpiColors[kpi] || {
-            color: theme.colors[allKpis.indexOf(kpi) % theme.colors.length],
-            name: kpi.charAt(0).toUpperCase() + kpi.slice(1),
-          };
-        });
-
-        // Position calculations - ensure chart has enough space
-        const position = graph.position || { x: 0, y: index * 4, w: 12, h: 4 };
-
-        // Ensure reasonable minimums for width and height
-        position.w = Math.max(4, position.w);
-        position.h = Math.max(3, position.h);
-
+        // Create chart config with saved layout
         return {
-          id: graph.id || `chart-${index}`,
-          title: graph.name || `Chart ${index + 1}`,
-          type: graph.type || ("line" as ChartType),
+          id: graph.id,
+          title: graph.name,
+          type: graph.type,
           data: chartData,
-          width: position.w * 100 || 400,
-          height: position.h * 100 || 300,
-          activeKPIs,
-          kpiColors: chartKpiColors,
-          layout: position,
+          activeKPIs: new Set(allKpis),
+          kpiColors: globalKpiColors,
+          layout: position, // This could be undefined, which is fine for dynamic layout
+          width: 400,
+          height: 300,
         };
       } catch (error) {
-        console.error(`Error generating chart ${index}:`, error);
-
-        // Fall back to dummy data
-        const dummyData = generateDummyData(allKpis);
-
-        // Create KPI colors using the global palette
-        const chartKpiColors: Record<string, { color: string; name: string }> =
-          {};
-        const activeKPIs = new Set<string>();
-
-        allKpis.forEach((kpi) => {
-          activeKPIs.add(kpi);
-          chartKpiColors[kpi] = globalKpiColors[kpi] || {
-            color: theme.colors[allKpis.indexOf(kpi) % theme.colors.length],
-            name: kpi.charAt(0).toUpperCase() + kpi.slice(1),
-          };
-        });
-
-        // Position calculations - ensure chart has enough space
-        const position = graph.position || { x: 0, y: index * 4, w: 12, h: 4 };
-
-        // Ensure reasonable minimums for width and height
-        position.w = Math.max(4, position.w);
-        position.h = Math.max(3, position.h);
-
+        console.error(`Error fetching data for graph ${graph.id}:`, error);
+        // Return a chart with dummy data if API call fails
         return {
-          id: graph.id || `chart-${index}`,
-          title: graph.name || `Chart ${index + 1}`,
-          type: graph.type || ("line" as ChartType),
-          data: dummyData,
-          width: position.w * 100 || 400,
-          height: position.h * 100 || 300,
-          activeKPIs,
-          kpiColors: chartKpiColors,
-          layout: position,
+          id: graph.id,
+          title: graph.name,
+          type: graph.type,
+          data: generateDummyData(allKpis),
+          activeKPIs: new Set(allKpis),
+          kpiColors: globalKpiColors,
+          layout: position, // This could be undefined, which is fine for dynamic layout
+          width: 400,
+          height: 300,
         };
       }
     });
 
-    // Wait for all chart data to be fetched/generated
-    const results = await Promise.all(chartPromises);
-
-    // Make sure we return at least an empty array if something went wrong
-    return Array.isArray(results) ? results : [];
+    const charts = await Promise.all(chartPromises);
+    console.log("Generated charts:", charts);
+    return charts;
   } catch (error) {
-    console.error("Error in generateChartsFromTemplate:", error);
-    // Return empty array instead of null in case of errors
-    return [];
+    console.error("Error generating charts from template:", error);
+    throw error;
   }
 };
 
@@ -663,6 +681,7 @@ export default function Dashboard() {
   // Add states for layout saving
   const [layoutChanged, setLayoutChanged] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentBreakpoint, setCurrentBreakpoint] = useState("lg");
 
   // Add timer-related states
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1022,6 +1041,7 @@ export default function Dashboard() {
     return `${seconds}s`;
   }, [timeRemaining]);
 
+
   // Move fetchTemplateById inside the component
   const fetchTemplateById = useCallback(
     async (templateId: string) => {
@@ -1173,6 +1193,7 @@ export default function Dashboard() {
     [resolution, globalDateRange]
   );
 
+
   const fetchTemplateForEditing = async (templateId: string) => {
     try {
       setIsLoading(true);
@@ -1237,6 +1258,81 @@ export default function Dashboard() {
     }
   };
 
+  // Add fetchTemplateById function before fetchTemplates
+  const fetchTemplateById = useCallback(async (templateId: string) => {
+    try {
+      setIsContentLoading(true);
+      setHasError(false);
+      setErrorMessage(null);
+
+      console.log(`Fetching template with ID: ${templateId}`);
+
+      const data = await retryFetch(async () => {
+        const response = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${templateId}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch template: ${response.statusText}`);
+        }
+
+        const responseData = await response.json();
+
+        if (!responseData || !responseData.length) {
+          throw new Error("Template not found");
+        }
+
+        return responseData;
+      });
+
+      // Normalize the template
+      const template = normalizeTemplate(data[0]);
+
+      // Create date range from the global date range
+      const dateRangeForAPI = {
+        from: globalDateRange?.from || new Date(new Date().setDate(new Date().getDate() - 7)),
+        to: globalDateRange?.to || new Date(),
+      };
+
+      // Generate charts from the template
+      console.log(`Generating charts for template "${template.name}" with resolution ${resolution}`);
+      const newCharts = await generateChartsFromTemplate(
+        template,
+        resolution,
+        dateRangeForAPI
+      );
+
+      // Update charts
+      if (Array.isArray(newCharts) && newCharts.length > 0) {
+        setCharts(newCharts);
+      } else {
+        console.warn("No charts returned from template, showing empty dashboard");
+        setCharts([]);
+      }
+
+      // Force a layout refresh
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 200);
+
+    } catch (error) {
+      console.error("Error fetching template by ID:", error);
+      setHasError(true);
+      setErrorMessage(
+        error instanceof Error
+          ? `Failed to load template: ${error.message}`
+          : "Failed to load template. Please try again."
+      );
+      toast.error("Failed to load template", {
+        description: error instanceof Error ? error.message : "Please try again",
+      });
+      
+      setCharts([]);
+    } finally {
+      setTimeout(() => setIsContentLoading(false), 300);
+    }
+  }, [resolution, globalDateRange, setCharts, setIsContentLoading, setHasError, setErrorMessage, generateChartsFromTemplate]);
+
   // Now your fetchTemplates function can use fetchTemplateById
   const fetchTemplates = useCallback(async () => {
     try {
@@ -1290,7 +1386,7 @@ export default function Dashboard() {
         console.log(`Found default template: "${defaultTemplate.name}"`);
         setSelectedApiTemplate(defaultTemplate.id);
 
-        // Now use the proper fetchTemplateById function
+        // Now use the properly defined fetchTemplateById function
         await fetchTemplateById(defaultTemplate.id);
       } else if (normalizedTemplates.length > 0) {
         // If no default, use the first template
@@ -1300,7 +1396,7 @@ export default function Dashboard() {
         );
         setSelectedApiTemplate(firstTemplate.id);
 
-        // Now use the proper fetchTemplateById function
+        // Now use the properly defined fetchTemplateById function
         await fetchTemplateById(firstTemplate.id);
       } else {
         console.log("No templates found");
@@ -1387,7 +1483,7 @@ export default function Dashboard() {
     };
   }, [fetchTemplates]);
 
-  // Update the handleApiTemplateChange function to ensure proper template loading
+  // Update the handleApiTemplateChange function to correctly preserve layouts
   const handleApiTemplateChange = useCallback(
     (templateId: string) => {
       // Don't change template if we're in the middle of a theme change
@@ -1399,24 +1495,16 @@ export default function Dashboard() {
         `Changing template from ${selectedApiTemplate} to ${templateId}`
       );
       setSelectedApiTemplate(templateId);
-
-      // Set loading state while fetching the new template
-      // Only affect content area, not header
       setIsContentLoading(true);
 
-      // Find the template in apiTemplates to get its resolution
-      const selectedTemplate = apiTemplates.find(t => t.id === templateId);
-      if (selectedTemplate) {
-        // Set the resolution from the template, defaulting to "auto" only if not specified
-        const templateResolution = selectedTemplate.resolution || "auto";
-        console.log("Setting resolution from template:", templateResolution);
-        setResolution(templateResolution);
-      }
-
-      // Fetch the template data
-      fetchTemplateById(templateId);
+      // Explicitly call fetchTemplateById to ensure loading the new template
+      fetchTemplateById(templateId).catch((error) => {
+        console.error("Error fetching template:", error);
+        toast.error("Failed to load template");
+        setIsContentLoading(false);
+      });
     },
-    [selectedApiTemplate, fetchTemplateById, apiTemplates]
+    [selectedApiTemplate, fetchTemplateById]
   );
 
   // Update handleResolutionChange to maintain current template and provide smoother transitions
@@ -1585,114 +1673,143 @@ export default function Dashboard() {
     return Object.keys(templateData).includes(value);
   };
 
-  const handleLayoutChange = useCallback((newLayout: any) => {
-    console.log("Layout changed:", newLayout);
-    setLayoutChanged(true);
-  }, []);
-
   const saveLayout = useCallback(async () => {
-    if (!selectedApiTemplate || !layoutChanged) return;
+    if (!selectedApiTemplate) {
+      console.warn("No template selected, cannot save layout");
+      return;
+    }
 
     try {
-      setIsSaving(true);
+      // Get current layout from charts
+      const currentLayout = charts.map((chart) => {
+        // Use default layout if chart.layout is undefined
+        const layout = chart.layout || {
+          x: 0,
+          y: 0,
+          w: 4,
+          h: 4,
+        };
 
-      // Find the current template
-      const currentTemplate = apiTemplates.find(
-        (t) => t.id === selectedApiTemplate
-      );
-      if (!currentTemplate) {
-        throw new Error("Selected template not found");
-      }
-
-      // Get the current layout from charts
-      const updatedGraphs = charts
-        .map((chart) => {
-          // Find the corresponding graph in the template
-          const templateGraph = currentTemplate.graphs.find(
-            (g) => g.id === chart.id
-          );
-          if (!templateGraph) return null;
-
-          // Convert the layout to API format (top_xy_pos and bottom_xy_pos)
-          const layout = chart.layout || { x: 0, y: 0, w: 12, h: 4 };
-
-          // Calculate the positions based on the layout
-          // Converting back from the 10x grid system used in the template
-          const topX = layout.x * 10;
-          const topY = layout.y * 10;
-          const bottomX = (layout.x + layout.w) * 10;
-          const bottomY = (layout.y + layout.h) * 10;
-
-          // Type assertion for templateGraph to handle optional properties
-          const graph = templateGraph as any;
-
-          return {
-            top_xy_pos: `${topY}:${topX}`,
-            bottom_xy_pos: `${bottomY}:${bottomX}`,
-            frequency: graph.frequency || "5m",
-            resolution: resolution || "1d",
-            graph_id: graph.id,
-            graph_name: graph.name,
-            primary_kpi_id: graph.primaryKpi,
-            secondary_kpis: graph.secondaryKpis.map((kpi: string) => ({
-              kpi_id: kpi,
-            })),
-            systems: graph.systems || [],
-          };
-        })
-        .filter(Boolean);
-
-      // Prepare the payload for the API
-      const payload = {
-        user_id: "USER_TEST_1", // Default user ID
-        template_id: currentTemplate.id,
-        template_name: currentTemplate.name,
-        template_desc: currentTemplate.description,
-        default: currentTemplate.isDefault,
-        favorite: currentTemplate.isFavorite,
-        frequency: currentTemplate.frequency || "5m",
-        systems: currentTemplate.systems.map((system) => ({
-          system_id: system,
-        })),
-        graphs: updatedGraphs,
-      };
-
-      console.log("Saving template with updated layout:", payload);
-
-      // Send the update to the API with retry logic
-      await retryFetch(async () => {
-        const response = await fetch(
-          `https://shwsckbvbt.a.pinggy.link/api/ut`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to save template: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        console.log("Template saved successfully:", result);
-        return result;
+        return {
+          graph_id: chart.id,
+          graph_name: chart.title,
+          top_xy_pos: `${layout.y * 10}:${layout.x * 10}`,
+          bottom_xy_pos: `${(layout.y + layout.h) * 10}:${
+            (layout.x + layout.w) * 10
+          }`,
+          primary_kpi_id: Array.isArray(chart.activeKPIs)
+            ? chart.activeKPIs[0] || ""
+            : Array.from(chart.activeKPIs || new Set())[0] || "",
+          secondary_kpis: Array.isArray(chart.activeKPIs)
+            ? chart.activeKPIs.slice(1).map((kpiId) => ({ kpi_id: kpiId }))
+            : Array.from(chart.activeKPIs || new Set())
+                .slice(1)
+                .map((kpiId) => ({ kpi_id: kpiId })),
+          frequency: "5m",
+          resolution: "1d",
+          systems: [],
+        };
       });
 
-      toast.success("Dashboard layout saved successfully");
+      const payload = {
+        template_id: selectedApiTemplate,
+        graphs: currentLayout,
+      };
+
+      const response = await fetch("/api/templates/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save layout");
+      }
+
+      const data = await response.json();
+      console.log("Layout saved successfully:", data);
       setLayoutChanged(false);
     } catch (error) {
       console.error("Error saving layout:", error);
-      toast.error("Failed to save layout", {
-        description:
-          error instanceof Error ? error.message : "Please try again",
-      });
-    } finally {
-      setIsSaving(false);
     }
-  }, [selectedApiTemplate, charts, apiTemplates, layoutChanged, resolution]);
+  }, [charts, selectedApiTemplate]);
+
+  // Modify the handleLayoutChange function
+  const handleLayoutChange = useCallback(
+    (newLayout: any) => {
+      console.log("Layout changed:", newLayout);
+      
+      // Skip layout updates during content loading
+      if (isContentLoading) {
+        console.log("Skipping layout update during content loading");
+        return;
+      }
+
+      // Update the charts with new layouts immediately
+      setCharts((prevCharts) => {
+        return prevCharts.map((chart) => {
+          const newLayoutItem = newLayout.find((l: any) => l.i === chart.id);
+          if (newLayoutItem) {
+            // Only log substantial changes to reduce noise
+            if (!chart.layout || 
+                chart.layout.x !== newLayoutItem.x || 
+                chart.layout.y !== newLayoutItem.y ||
+                chart.layout.w !== newLayoutItem.w ||
+                chart.layout.h !== newLayoutItem.h) {
+                
+              console.log(`Updating layout for chart ${chart.id}:`, {
+                x: newLayoutItem.x,
+                y: newLayoutItem.y,
+                w: newLayoutItem.w,
+                h: newLayoutItem.h,
+              });
+            }
+
+            return {
+              ...chart,
+              layout: {
+                x: newLayoutItem.x,
+                y: newLayoutItem.y,
+                w: newLayoutItem.w,
+                h: newLayoutItem.h,
+              },
+            };
+          }
+          return chart;
+        });
+      });
+
+      // Only mark layout as changed for meaningful updates
+      const isSignificantChange = newLayout.some((item: any) => {
+        const chart = charts.find(c => c.id === item.i);
+        if (!chart || !chart.layout) return true;
+        
+        return chart.layout.x !== item.x ||
+               chart.layout.y !== item.y ||
+               chart.layout.w !== item.w ||
+               chart.layout.h !== item.h;
+      });
+      
+      if (isSignificantChange) {
+        setLayoutChanged(true);
+        console.log("Layout has been modified by user");
+        
+        // Auto-save the layout after a delay
+        const saveTimeout = setTimeout(async () => {
+          try {
+            await saveLayout();
+          } catch (error) {
+            console.error("Error auto-saving layout:", error);
+          }
+        }, 1000);
+        
+        return () => clearTimeout(saveTimeout);
+      }
+    },
+    [charts, isContentLoading, saveLayout]
+  );
 
   // Modify handleThemeChange to prevent full reload and API calls
   const handleThemeChange = (selectedThemeName: string) => {
@@ -1792,8 +1909,8 @@ export default function Dashboard() {
   
   // Modify the render dashboard content function to use content-only loading
   const renderDashboardContent = () => {
-    return (
-      <DashboardContent 
+
+<!--       <DashboardContent 
         charts={charts}
         isContentLoading={isContentLoading}
         hasError={hasError}
@@ -1805,7 +1922,136 @@ export default function Dashboard() {
         selectedTheme={selectedTheme}
         resolution={resolution}
         handleLayoutChange={handleLayoutChange}
-      />
+      /> -->
+
+    if (isContentLoading) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] w-full">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            <div className="animate-pulse absolute inset-0 flex items-center justify-center text-xs text-primary font-medium">
+              Loading...
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
+          <div className="text-destructive mb-4">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="64"
+              height="64"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mx-auto mb-4"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
+          <p className="text-center text-muted-foreground mb-4">
+            {errorMessage || "Failed to load dashboard data."}
+          </p>
+          <Button
+            onClick={() => fetchTemplates()}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try Again
+          </Button>
+        </div>
+      );
+    }
+
+    if (charts.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
+          <div className="text-center max-w-lg">
+            <h3 className="text-lg font-medium mb-2">No charts available</h3>
+            <p className="text-muted-foreground mb-4">
+              There are no charts to display for this template. Try selecting a
+              different template or check your connection.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Check if these charts have saved layouts
+    const hasSavedLayouts = charts.some(chart => !!chart.layout);
+
+    return (
+      <div className="relative min-h-[70vh]">
+        <DynamicLayout
+          charts={charts}
+          activeKPIs={activeKPIs}
+          kpiColors={themedKpiColors}
+          globalDateRange={globalDateRange}
+          theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
+          resolution={resolution}
+          onLayoutChange={handleLayoutChange}
+          templateId={selectedApiTemplate}
+          templateData={{
+            template_id: selectedApiTemplate,
+            template_name:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)?.name ||
+              "",
+            template_desc:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.description || "",
+            default:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.isDefault || false,
+            favorite:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.isFavorite || false,
+            frequency:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)
+                ?.frequency || "5m",
+            systems:
+              apiTemplates.find((t) => t.id === selectedApiTemplate)?.systems ||
+              [],
+            graphs: charts.map((chart) => {
+              const templateGraph = apiTemplates
+                .find((t) => t.id === selectedApiTemplate)
+                ?.graphs.find((g) => g.id === chart.id);
+              return {
+                graph_id: chart.id,
+                graph_name: chart.title,
+                primary_kpi_id:
+                  Array.from(chart.activeKPIs || new Set<string>())[0] || "",
+                secondary_kpis: Array.from(
+                  chart.activeKPIs || new Set<string>()
+                )
+                  .slice(1)
+                  .map((kpi) => ({ kpi_id: kpi })),
+                frequency: "5m",
+                resolution: "1d",
+                systems: [],
+                top_xy_pos: chart.layout 
+                  ? `${chart.layout.y * 10}:${chart.layout.x * 10}` 
+                  : "0:0",
+                bottom_xy_pos: chart.layout 
+                  ? `${(chart.layout.y + chart.layout.h) * 10}:${(chart.layout.x + chart.layout.w) * 10}` 
+                  : "0:0",
+              };
+            }),
+          }}
+          useDynamicLayout={!hasSavedLayouts} // Tell DynamicLayout whether to use saved or dynamic layout
+        />
+      </div>
+
     );
   };
 
@@ -1876,7 +2122,9 @@ export default function Dashboard() {
                 <div className="flex items-center gap-4">
                   {/* Template selector */}
                   <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Template</label>
+                    <label className="text-xs text-muted-foreground mb-1">
+                      Template
+                    </label>
                     <Select
                       value={selectedApiTemplate}
                       onValueChange={handleApiTemplateChange}
@@ -1888,7 +2136,10 @@ export default function Dashboard() {
                       <SelectContent>
                         {/* First group: Favorite + Default templates */}
                         {apiTemplates
-                          .filter(template => template.isFavorite && template.isDefault)
+                          .filter(
+                            (template) =>
+                              template.isFavorite && template.isDefault
+                          )
                           .map((template) => (
                             <SelectItem
                               key={template.id}
@@ -1904,10 +2155,13 @@ export default function Dashboard() {
                               </div>
                             </SelectItem>
                           ))}
-                        
+
                         {/* Second group: Only Default templates (excluding those already shown) */}
                         {apiTemplates
-                          .filter(template => template.isDefault && !template.isFavorite)
+                          .filter(
+                            (template) =>
+                              template.isDefault && !template.isFavorite
+                          )
                           .map((template) => (
                             <SelectItem
                               key={template.id}
@@ -1922,10 +2176,13 @@ export default function Dashboard() {
                               </div>
                             </SelectItem>
                           ))}
-                        
+
                         {/* Third group: Only Favorite templates (excluding those already shown) */}
                         {apiTemplates
-                          .filter(template => template.isFavorite && !template.isDefault)
+                          .filter(
+                            (template) =>
+                              template.isFavorite && !template.isDefault
+                          )
                           .map((template) => (
                             <SelectItem
                               key={template.id}
@@ -1938,10 +2195,13 @@ export default function Dashboard() {
                               </div>
                             </SelectItem>
                           ))}
-                        
+
                         {/* Fourth group: Normal templates (neither default nor favorite) */}
                         {apiTemplates
-                          .filter(template => !template.isDefault && !template.isFavorite)
+                          .filter(
+                            (template) =>
+                              !template.isDefault && !template.isFavorite
+                          )
                           .map((template) => (
                             <SelectItem
                               key={template.id}
@@ -1959,19 +2219,38 @@ export default function Dashboard() {
 
                   {/* Theme selector */}
                   <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Theme</label>
+                    <label className="text-xs text-muted-foreground mb-1">
+                      Theme
+                    </label>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 flex items-center gap-2"
+                        >
                           <div className="relative w-5 h-5">
-                            <svg viewBox="0 0 100 100" className="w-full h-full">
-                              {theme.colors.map((color, index) => {
-                                const angle = (index * 72) - 90; // 72 degrees per segment (360/5)
-                                const nextAngle = ((index + 1) * 72) - 90;
-                                const x1 = 50 + 50 * Math.cos(angle * Math.PI / 180);
-                                const y1 = 50 + 50 * Math.sin(angle * Math.PI / 180);
-                                const x2 = 50 + 50 * Math.cos(nextAngle * Math.PI / 180);
-                                const y2 = 50 + 50 * Math.sin(nextAngle * Math.PI / 180);
+
+                            <svg
+                              viewBox="0 0 100 100"
+                              className="w-full h-full"
+                            >
+                              {chartThemes[
+                                selectedTheme as keyof typeof chartThemes
+                              ].colors.map((color, index) => {
+                                const angle = index * 72 - 90; // 72 degrees per segment (360/5)
+                                const nextAngle = (index + 1) * 72 - 90;
+                                const x1 =
+                                  50 + 50 * Math.cos((angle * Math.PI) / 180);
+                                const y1 =
+                                  50 + 50 * Math.sin((angle * Math.PI) / 180);
+                                const x2 =
+                                  50 +
+                                  50 * Math.cos((nextAngle * Math.PI) / 180);
+                                const y2 =
+                                  50 +
+                                  50 * Math.sin((nextAngle * Math.PI) / 180);
+
                                 return (
                                   <path
                                     key={index}
@@ -1982,7 +2261,15 @@ export default function Dashboard() {
                               })}
                             </svg>
                           </div>
-                          <span>{theme.name}</span>
+
+                          <span>
+                            {
+                              chartThemes[
+                                selectedTheme as keyof typeof chartThemes
+                              ].name
+                            }
+                          </span>
+
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[200px]">
@@ -1995,14 +2282,23 @@ export default function Dashboard() {
                             className="flex items-center gap-2"
                           >
                             <div className="relative w-5 h-5">
-                              <svg viewBox="0 0 100 100" className="w-full h-full">
+                              <svg
+                                viewBox="0 0 100 100"
+                                className="w-full h-full"
+                              >
                                 {theme.colors.map((color, index) => {
-                                  const angle = (index * 72) - 90; // 72 degrees per segment (360/5)
-                                  const nextAngle = ((index + 1) * 72) - 90;
-                                  const x1 = 50 + 50 * Math.cos(angle * Math.PI / 180);
-                                  const y1 = 50 + 50 * Math.sin(angle * Math.PI / 180);
-                                  const x2 = 50 + 50 * Math.cos(nextAngle * Math.PI / 180);
-                                  const y2 = 50 + 50 * Math.sin(nextAngle * Math.PI / 180);
+                                  const angle = index * 72 - 90; // 72 degrees per segment (360/5)
+                                  const nextAngle = (index + 1) * 72 - 90;
+                                  const x1 =
+                                    50 + 50 * Math.cos((angle * Math.PI) / 180);
+                                  const y1 =
+                                    50 + 50 * Math.sin((angle * Math.PI) / 180);
+                                  const x2 =
+                                    50 +
+                                    50 * Math.cos((nextAngle * Math.PI) / 180);
+                                  const y2 =
+                                    50 +
+                                    50 * Math.sin((nextAngle * Math.PI) / 180);
                                   return (
                                     <path
                                       key={index}
@@ -2022,8 +2318,13 @@ export default function Dashboard() {
 
                   {/* Resolution selector */}
                   <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Resolution</label>
-                    <Select value={resolution} onValueChange={handleResolutionChange}>
+                    <label className="text-xs text-muted-foreground mb-1">
+                      Resolution
+                    </label>
+                    <Select
+                      value={resolution}
+                      onValueChange={handleResolutionChange}
+                    >
                       <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3 w-3 text-muted-foreground" />
@@ -2046,7 +2347,9 @@ export default function Dashboard() {
 
                   {/* Date Range */}
                   <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Date Range</label>
+                    <label className="text-xs text-muted-foreground mb-1">
+                      Date Range
+                    </label>
                     <DateRangePicker
                       date={globalDateRange}
                       onDateChange={setGlobalDateRange}
@@ -2095,7 +2398,10 @@ export default function Dashboard() {
                                 />
                                 {autoRefreshInterval && (
                                   <div className="absolute inset-0 flex items-center justify-center">
-                                    <svg className="w-7 h-7" viewBox="0 0 100 100">
+                                    <svg
+                                      className="w-7 h-7"
+                                      viewBox="0 0 100 100"
+                                    >
                                       <circle
                                         className="text-primary/20 fill-none"
                                         cx="50"
@@ -2137,7 +2443,9 @@ export default function Dashboard() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <div className="px-2 py-1.5 flex items-center justify-between">
-                            <span className="text-xs font-medium">Auto-refresh</span>
+                            <span className="text-xs font-medium">
+                              Auto-refresh
+                            </span>
                             <Switch
                               checked={isAutoRefreshEnabled}
                               onCheckedChange={(checked) => {
@@ -2149,11 +2457,14 @@ export default function Dashboard() {
                                     );
                                     toast.success(
                                       `Auto-refresh enabled - will refresh every ${
-                                        option?.label || `${autoRefreshInterval}s`
+                                        option?.label ||
+                                        `${autoRefreshInterval}s`
                                       }`
                                     );
                                     if (!nextRefreshTime) {
-                                      handleSelectAutoRefresh(autoRefreshInterval);
+                                      handleSelectAutoRefresh(
+                                        autoRefreshInterval
+                                      );
                                     }
                                   } else {
                                     handleSelectAutoRefresh(300);
@@ -2178,7 +2489,9 @@ export default function Dashboard() {
                             <DropdownMenuItem
                               key={option.value}
                               className="flex items-center justify-between cursor-pointer text-xs"
-                              onClick={() => handleSelectAutoRefresh(option.value)}
+                              onClick={() =>
+                                handleSelectAutoRefresh(option.value)
+                              }
                             >
                               <span>{option.label}</span>
                               {autoRefreshInterval === option.value && (
@@ -2192,12 +2505,16 @@ export default function Dashboard() {
                   </div>
 
                   {/* Save button */}
-                  {layoutChanged && (
+                  {layoutChanged && selectedTemplate && (
                     <div className="flex flex-col">
-                      <label className="text-xs text-muted-foreground mb-1">Save</label>
+                      <label className="text-xs text-muted-foreground mb-1">
+                        Save Layout
+                      </label>
                       <Button
                         onClick={saveLayout}
-                        disabled={!layoutChanged || isSaving}
+                        disabled={
+                          !layoutChanged || isSaving || !selectedTemplate
+                        }
                         variant="outline"
                         size="sm"
                         className={cn(
@@ -2210,7 +2527,7 @@ export default function Dashboard() {
                         ) : (
                           <Save className="h-3.5 w-3.5" />
                         )}
-                        <span>{isSaving ? "Saving..." : "Save"}</span>
+                        <span>{isSaving ? "Saving..." : "Save Layout"}</span>
                       </Button>
                     </div>
                   )}

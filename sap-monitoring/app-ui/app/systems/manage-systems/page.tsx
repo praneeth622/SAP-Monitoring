@@ -1527,10 +1527,13 @@ const AddSystemSheet = ({
   </Sheet>
 );
 
-// Utility function for variant classes
+// Update the getVariantClasses function
 const getVariantClasses = (variant: "blue" | "green" | "red"): string => {
   switch (variant) {
     case "blue":
+      return "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
+    case "green":
+      return "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400";
     case "red":
       return "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400";
     default:

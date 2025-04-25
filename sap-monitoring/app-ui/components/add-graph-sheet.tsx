@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { app_globals } from "@/config/config";
 
 interface Template {
   id: string;
@@ -42,33 +43,21 @@ interface MonitoringArea {
 }
 
 interface KpiGroup {
-  system_name: string;
   kpi_grp_name: string;
-  kpi_grp_desc: string;
-  mon_area: string;
-  instance: boolean;
-  is_active: boolean;
-  sapfrequency: string;
-  sysfrequency: string;
-  created_at: string;
-  created_by: string;
-  modified_at: string;
-  modified_by: string;
+  kpi_grp_desc?: string;
 }
 
 interface Kpi {
-  system_name: string;
   kpi_name: string;
-  kpi_desc: string;
-  kpi_group: string;
+  kpi_desc?: string;
   parent: boolean;
-  unit: string;
-  drilldown: boolean;
-  filter: boolean;
-  g2y: number | null;
-  y2r: number | null;
-  direction: string;
-  criticality: string;
+}
+
+interface UserAccess {
+  kpi_id: string;
+  kpi_group: string;
+  mon_area: string;
+  system_name: string;
 }
 
 interface AddGraphSheetProps {
@@ -79,9 +68,13 @@ interface AddGraphSheetProps {
     name: string;
     type: "line" | "bar";
     monitoringArea: string;
+    monitoringAreaDesc?: string;
     kpiGroup: string;
+    kpiGroupDesc?: string;
     primaryKpi: string;
+    primaryKpiDesc?: string;
     correlationKpis: string[];
+    correlationKpisDesc?: string[];
     layout: {
       x: number;
       y: number;
@@ -95,9 +88,13 @@ interface AddGraphSheetProps {
     name: string;
     type: "line" | "bar";
     monitoringArea: string;
+    monitoringAreaDesc?: string;
     kpiGroup: string;
+    kpiGroupDesc?: string;
     primaryKpi: string;
+    primaryKpiDesc?: string;
     correlationKpis: string[];
+    correlationKpisDesc?: string[];
     layout: {
       x: number;
       y: number;
@@ -136,6 +133,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
 }) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
+  const [userAccess, setUserAccess] = useState<UserAccess[]>([]);
 
   // API data states
   const [monitoringAreas, setMonitoringAreas] = useState<MonitoringArea[]>([]);
@@ -189,13 +187,39 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
 
   const [showValidationErrors, setShowValidationErrors] = useState(false);
 
+  // Fetch user access data
+  useEffect(() => {
+    const fetchUserAccess = async () => {
+      try {
+        const response = await axios.get(
+          `${baseUrl}/api/ua?userId=${app_globals.default_user_id}`
+        );
+        setUserAccess(response.data || []);
+      } catch (error) {
+        console.error("Error fetching user access:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch user access data",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchUserAccess();
+  }, []);
+
   // Step 1: Fetch monitoring areas on component mount
   useEffect(() => {
     const fetchMonitoringAreas = async () => {
       try {
         setIsLoading(true);
         const response = await axios.get(`${baseUrl}/api/ma`);
-        setMonitoringAreas(response.data || []);
+        // Filter monitoring areas based on user access
+        const uniqueMonitoringAreas = [...new Set(userAccess.map(ua => ua.mon_area))];
+        const filteredAreas = (response.data || []).filter((area: MonitoringArea) => 
+          uniqueMonitoringAreas.includes(area.mon_area_name)
+        );
+        setMonitoringAreas(filteredAreas);
       } catch (error) {
         toast({
           title: "Error",
@@ -208,9 +232,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     };
 
     fetchMonitoringAreas();
-  }, [baseUrl, toast]);
+  }, [userAccess]);
 
-  // Step 2: Fetch KPI groups when monitoring area changes
+  // Step 2: Fetch KPI groups when monitoring area is selected
   useEffect(() => {
     const fetchKpiGroups = async () => {
       if (!formData.monitoringArea) {
@@ -223,7 +247,16 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         const response = await axios.get(
           `${baseUrl}/api/kpigrp?mon_area=${formData.monitoringArea}`
         );
-        setKpiGroups(response.data || []);
+        // Filter KPI groups based on user access
+        const uniqueKpiGroups = [...new Set(
+          userAccess
+            .filter(ua => ua.mon_area === formData.monitoringArea)
+            .map(ua => ua.kpi_group)
+        )];
+        const filteredGroups = (response.data || []).filter((group: KpiGroup) => 
+          uniqueKpiGroups.includes(group.kpi_grp_name)
+        );
+        setKpiGroups(filteredGroups);
       } catch (error) {
         toast({
           title: "Error",
@@ -236,9 +269,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     };
 
     fetchKpiGroups();
-  }, [formData.monitoringArea, baseUrl, toast]);
+  }, [formData.monitoringArea, userAccess]);
 
-  // Step 3: Fetch KPIs when KPI group changes
+  // Step 3: Fetch KPIs when KPI group is selected
   useEffect(() => {
     const fetchKpis = async () => {
       if (!formData.kpiGroup) {
@@ -251,7 +284,21 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         const response = await axios.get(
           `${baseUrl}/api/kpi?kpi_grp=${formData.kpiGroup}`
         );
-        setKpis(response.data || []);
+        
+        // Get all KPIs the user has access to for this monitoring area and KPI group
+        const userAccessKpis = userAccess
+          .filter(ua => 
+            ua.mon_area === formData.monitoringArea && 
+            ua.kpi_group === formData.kpiGroup
+          )
+          .map(ua => ua.kpi_id);
+
+        // Only show KPIs that are in the user's access list
+        const filteredKpis = (response.data || []).filter((kpi: Kpi) => 
+          userAccessKpis.includes(kpi.kpi_name)
+        );
+
+        setKpis(filteredKpis);
       } catch (error) {
         toast({
           title: "Error",
@@ -264,7 +311,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     };
 
     fetchKpis();
-  }, [formData.kpiGroup, baseUrl, toast]);
+  }, [formData.kpiGroup, formData.monitoringArea, userAccess]);
 
   // Fetch data for correlation KPIs when needed
   const fetchCorrelationKpiGroups = async (monitoringArea: string) => {
@@ -274,9 +321,18 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       const response = await axios.get(
         `${baseUrl}/api/kpigrp?mon_area=${monitoringArea}`
       );
+      // Filter KPI groups based on user access
+      const uniqueKpiGroups = [...new Set(
+        userAccess
+          .filter(ua => ua.mon_area === monitoringArea)
+          .map(ua => ua.kpi_group)
+      )];
+      const filteredGroups = (response.data || []).filter((group: KpiGroup) => 
+        uniqueKpiGroups.includes(group.kpi_grp_name)
+      );
       setCorrelationKpiGroups((prev) => ({
         ...prev,
-        [monitoringArea]: response.data || [],
+        [monitoringArea]: filteredGroups,
       }));
     } catch (error) {
       toast({
@@ -294,9 +350,23 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       const response = await axios.get(
         `${baseUrl}/api/kpi?kpi_grp=${kpiGroup}`
       );
+      
+      // Get all KPIs the user has access to for this monitoring area and KPI group
+      const userAccessKpis = userAccess
+        .filter(ua => 
+          ua.mon_area === formData.monitoringArea && 
+          ua.kpi_group === kpiGroup
+        )
+        .map(ua => ua.kpi_id);
+
+      // Only show KPIs that are in the user's access list
+      const filteredKpis = (response.data || []).filter((kpi: Kpi) => 
+        userAccessKpis.includes(kpi.kpi_name)
+      );
+
       setCorrelationKpis((prev) => ({
         ...prev,
-        [kpiGroup]: response.data || [],
+        [kpiGroup]: filteredKpis,
       }));
     } catch (error) {
       toast({
@@ -326,35 +396,25 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  // Update the isKpiSelected function to check for duplicates across all selections
   const isKpiSelected = (kpiName: string, monitoringArea: string, kpiGroup: string) => {
-    // Check if this KPI is selected as primary KPI with same monitoring area and KPI group
-    if (formData.monitoringArea === monitoringArea && 
-        formData.kpiGroup === kpiGroup && 
-        formData.kpi === kpiName) {
+    // Check if this KPI is selected as primary KPI
+    if (formData.kpi === kpiName) {
       return true;
     }
 
-    // Check if this KPI is selected in any correlation KPI with same monitoring area and KPI group
+    // Check if this KPI is selected in any correlation KPI
     return formData.correlationKpis.some(
-      (corrKpi) => 
-        corrKpi.monitoringArea === monitoringArea && 
-        corrKpi.kpiGroup === kpiGroup && 
-        corrKpi.kpi === kpiName
+      (corrKpi) => corrKpi.kpi === kpiName
     );
   };
 
-  const canAddMoreCorrelationKpis = () => {
-    if (formData.correlationKpis.length === 0) return true;
-    
-    const lastCorrelationKpi = formData.correlationKpis[formData.correlationKpis.length - 1];
-    return lastCorrelationKpi.monitoringArea && lastCorrelationKpi.kpiGroup && lastCorrelationKpi.kpi;
-  };
-
+  // Update the handleKPIChange function to prevent duplicates
   const handleKPIChange = (value: string) => {
     if (isKpiSelected(value, formData.monitoringArea, formData.kpiGroup)) {
       toast({
         title: "Error",
-        description: "This KPI is already selected for this monitoring area and KPI group",
+        description: "This KPI is already selected either as primary KPI or in correlation KPIs",
         variant: "destructive",
       });
       return;
@@ -367,6 +427,13 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  const canAddMoreCorrelationKpis = () => {
+    if (formData.correlationKpis.length === 0) return true;
+
+    const lastCorrelationKpi = formData.correlationKpis[formData.correlationKpis.length - 1];
+    return lastCorrelationKpi.monitoringArea && lastCorrelationKpi.kpiGroup && lastCorrelationKpi.kpi;
+  };
+
   const addCorrelationKpi = () => {
     // Check if already has maximum allowed correlation KPIs (4)
     if (formData.correlationKpis.length >= 4) {
@@ -377,7 +444,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       });
       return;
     }
-    
+
     setFormData((prev) => ({
       ...prev,
       correlationKpis: [
@@ -392,6 +459,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  // Update the handleCorrelationKpiChange function to prevent duplicates
   const handleCorrelationKpiChange = async (
     index: number,
     field: keyof CorrelationKpiField,
@@ -399,7 +467,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   ) => {
     setFormData((prev) => {
       const newCorrelationKpis = [...prev.correlationKpis];
-      
+
       // Reset dependent fields when parent field changes
       if (field === "monitoringArea") {
         newCorrelationKpis[index] = {
@@ -419,11 +487,11 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         // Fetch KPIs for this KPI group
         fetchCorrelationKpis(value);
       } else if (field === "kpi") {
-        // Check for duplicate KPIs only if monitoring area and KPI group are the same
+        // Check for duplicate KPIs across all selections
         if (isKpiSelected(value, newCorrelationKpis[index].monitoringArea, newCorrelationKpis[index].kpiGroup)) {
           toast({
             title: "Error",
-            description: "This KPI is already selected for this monitoring area and KPI group",
+            description: "This KPI is already selected either as primary KPI or in correlation KPIs",
             variant: "destructive",
           });
           return prev;
@@ -453,7 +521,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
-  // Update the handleSubmit function to prevent duplicate submissions
+  // Update the handleSubmit function to include description fields
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -496,20 +564,45 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       return;
     }
 
+    // Get descriptions for monitoring area, KPI group, and primary KPI
+    const monitoringAreaObj = monitoringAreas.find(
+      area => area.mon_area_name === formData.monitoringArea
+    );
+    const kpiGroupObj = kpiGroups.find(
+      group => group.kpi_grp_name === formData.kpiGroup
+    );
+    const kpiObj = kpis.find(k => k.kpi_name === formData.kpi);
+
+    // Get descriptions for correlation KPIs
+    const correlationKpisDesc = formData.correlationKpis
+      .filter(kpi => kpi.kpi)
+      .map(kpi => {
+        // Find the KPI in the correlationKpis object
+        const kpiList = correlationKpis[kpi.kpiGroup] || [];
+        const kpiObj = kpiList.find(k => k.kpi_name === kpi.kpi);
+        return kpiObj?.kpi_desc || "";
+      });
+
     // For edit mode, we only need to validate that the name is provided
     if (editingGraph) {
-      // Create the graph data with updated fields
+      // Create the graph data with updated fields and descriptions
       const graphData = {
         name: formData.graphName,
         type: formData.graphType as "line" | "bar",
         monitoringArea: formData.monitoringArea,
+        monitoringAreaDesc: monitoringAreaObj?.mon_area_desc || editingGraph.monitoringAreaDesc || "",
         kpiGroup: formData.kpiGroup,
+        kpiGroupDesc: kpiGroupObj?.kpi_grp_desc || editingGraph.kpiGroupDesc || "",
         primaryKpi: formData.kpi,
+        primaryKpiDesc: kpiObj?.kpi_desc || editingGraph.primaryKpiDesc || "",
         correlationKpis: formData.correlationKpis
           .filter((kpi) => kpi.kpi)
           .map((kpi) => kpi.kpi),
+        correlationKpisDesc: correlationKpisDesc,
         layout: editingGraph.layout || { x: 0, y: 0, w: 4, h: 4 },
         id: editingGraph.id,
+        activeKPIs: editingGraph.activeKPIs || new Set(),
+        kpiColors: editingGraph.kpiColors || {},
       };
 
       // Pass the data back to the parent component
@@ -525,17 +618,21 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       });
       return;
     }
-    
-    // Create the graph data to pass back to the parent component
+
+    // Create the graph data to pass back to the parent component with descriptions
     const graphData = {
       name: formData.graphName,
       type: formData.graphType as "line" | "bar",
       monitoringArea: formData.monitoringArea,
+      monitoringAreaDesc: monitoringAreaObj?.mon_area_desc || "",
       kpiGroup: formData.kpiGroup,
+      kpiGroupDesc: kpiGroupObj?.kpi_grp_desc || "",
       primaryKpi: formData.kpi,
+      primaryKpiDesc: kpiObj?.kpi_desc || "",
       correlationKpis: formData.correlationKpis
         .filter((kpi) => kpi.kpi)
         .map((kpi) => kpi.kpi),
+      correlationKpisDesc: correlationKpisDesc,
       layout: { x: 0, y: 0, w: 4, h: 4 },
     };
 
@@ -587,12 +684,12 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       const loadEditData = async () => {
         try {
           setIsLoading(true);
-          
+
           // Step 1: Fetch monitoring areas first
           const monAreasResponse = await axios.get(`${baseUrl}/api/ma`);
           const monAreas = monAreasResponse.data || [];
           setMonitoringAreas(monAreas);
-          
+
           // Step 2: Fetch KPI groups for the editing graph's monitoring area
           if (editingGraph.monitoringArea) {
             const kpiGroupsResponse = await axios.get(
@@ -600,47 +697,62 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             );
             const groups = kpiGroupsResponse.data || [];
             setKpiGroups(groups);
-            
+
             // Step 3: Fetch KPIs for the editing graph's KPI group
             if (editingGraph.kpiGroup) {
               const kpiResponse = await axios.get(
                 `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
               );
-              setKpis(kpiResponse.data || []);
+              const kpis = kpiResponse.data || [];
+              setKpis(kpis);
             }
           }
-          
+
           // Step 4: Load data for correlation KPIs
           if (editingGraph.correlationKpis && editingGraph.correlationKpis.length > 0) {
-            // First, ensure we have the KPI groups for the main monitoring area
-            const kpiGroupsResponse = await axios.get(
-              `${baseUrl}/api/kpigrp?mon_area=${editingGraph.monitoringArea}`
-            );
-            setCorrelationKpiGroups(prev => ({
-              ...prev,
-              [editingGraph.monitoringArea]: kpiGroupsResponse.data || []
+            // Initialize correlation KPIs with proper structure
+            const correlationKpis = editingGraph.correlationKpis.map((kpi, index) => ({
+              id: `corr-${Date.now()}-${index}`,
+              monitoringArea: editingGraph.monitoringArea,
+              kpiGroup: editingGraph.kpiGroup,
+              kpi: kpi
             }));
-            
-            // Then ensure we have the KPIs for the main KPI group
-            const kpiResponse = await axios.get(
-              `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
-            );
-            setCorrelationKpis(prev => ({
+
+            // Update form data with correlation KPIs
+            setFormData(prev => ({
               ...prev,
-              [editingGraph.kpiGroup]: kpiResponse.data || []
+              correlationKpis
             }));
-            
-            // For any correlation KPIs with different monitoring areas or KPI groups
-            for (const corrKpi of formData.correlationKpis) {
+
+            // Fetch KPI groups and KPIs for correlation KPIs
+            for (const corrKpi of correlationKpis) {
               if (corrKpi.monitoringArea) {
                 await fetchCorrelationKpiGroups(corrKpi.monitoringArea);
-                
                 if (corrKpi.kpiGroup) {
                   await fetchCorrelationKpis(corrKpi.kpiGroup);
                 }
               }
             }
           }
+
+          // Update form data with editing graph values and descriptions
+          setFormData(prev => ({
+            ...prev,
+            monitoringArea: editingGraph.monitoringArea,
+            kpiGroup: editingGraph.kpiGroup,
+            kpi: editingGraph.primaryKpi,
+            graphType: editingGraph.type,
+            graphName: editingGraph.name
+          }));
+
+          // Log the descriptions we're working with
+          console.log("Editing graph with descriptions:", {
+            monitoringAreaDesc: editingGraph.monitoringAreaDesc,
+            kpiGroupDesc: editingGraph.kpiGroupDesc,
+            primaryKpiDesc: editingGraph.primaryKpiDesc,
+            correlationKpisDesc: editingGraph.correlationKpisDesc
+          });
+
         } catch (error) {
           console.error("Error loading data for edit graph:", error);
           toast({
@@ -652,7 +764,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           setIsLoading(false);
         }
       };
-      
+
       loadEditData();
     }
   }, [editingGraph, baseUrl]);
@@ -756,21 +868,25 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                   })() : "Select KPI"}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
-                {kpis.map((kpi) => (
-                  <Tooltip key={kpi.kpi_name}>
-                    <TooltipTrigger asChild>
-                      <SelectItem value={kpi.kpi_name}>
-                        {kpi.kpi_name} - {kpi.kpi_desc}
-                      </SelectItem>
-                    </TooltipTrigger>
-                    {kpi.kpi_desc && (
-                      <TooltipContent>
-                        <p>{kpi.kpi_desc}</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                ))}
+
+                {kpis
+                  // Filter out KPIs that are already selected in correlation KPIs
+                  .filter(kpi => !formData.correlationKpis.some(corrKpi => corrKpi.kpi === kpi.kpi_name))
+                  .map((kpi) => (
+                    <Tooltip key={kpi.kpi_desc}>
+                      <TooltipTrigger asChild>
+                        <SelectItem value={kpi.kpi_name}>
+                          {kpi.kpi_desc}
+                        </SelectItem>
+                      </TooltipTrigger>
+                      {kpi.kpi_desc && (
+                        <TooltipContent>
+                          <p>{kpi.kpi_desc}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  ))}
+
               </SelectContent>
             </Select>
             {showValidationErrors && !formData.kpi && (
@@ -971,6 +1087,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                         </SelectTrigger>
                         <SelectContent>
                           {(correlationKpis[corrKpi.kpiGroup] || [])
+                            // Filter out KPIs that are already selected anywhere
                             .filter(kpi => !isKpiSelected(kpi.kpi_name, corrKpi.monitoringArea, corrKpi.kpiGroup))
                             .map((kpi) => (
                               <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
@@ -1002,7 +1119,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 size="sm"
                 onClick={addCorrelationKpi}
                 disabled={
-                  formData.correlationKpis.length >= 4 || 
+                  formData.correlationKpis.length >= 4 ||
                   !formData.kpiGroup ||
                   !canAddMoreCorrelationKpis()
                 }

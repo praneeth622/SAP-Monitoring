@@ -1100,7 +1100,7 @@ const ChartContainer = memo(
       const chart = chartRef.current;
 
       const onBrushSelected = (params: any) => {
-        console.log("Brush selected:", params);
+        // console.log("Brush selected:", params);
         setIsSelecting(false);
         setSelectedTool(null);
       };
@@ -1121,7 +1121,7 @@ const ChartContainer = memo(
 
         // Handle brush events
         const handleBrushSelected = (params: any) => {
-          console.log("Brush selected event triggered:", params);
+          // console.log("Brush selected event triggered:", params);
 
           // Don't automatically clear selection, let user manually clear
           if (!params.areas || params.areas.length === 0) {
