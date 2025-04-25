@@ -16,14 +16,17 @@ import {
   Lasso,
   Trash2,
   Download,
-  Image as ImageIcon, // Rename to avoid conflict with HTML Image element
+  Image as ImageIcon,
   File,
   FileSpreadsheet,
   FileJson,
   ChevronLeft,
   ChevronRight,
   BarChart3,
-  Edit, // Add this import
+  Edit,
+  Box,
+  X,
+  RotateCcw,
 } from "lucide-react";
 import ChartContainer from "./ChartContainer";
 import { DataPoint, ChartType } from "@/types";
@@ -40,6 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
+import styles from "./TemplateChartStyles.module.css";
 
 // Add onEditGraph to the props interface
 interface DraggableChartProps {
@@ -64,6 +68,7 @@ interface DraggableChartProps {
   onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
   isLoading?: boolean; // Add this line
+  isTemplatePage?: boolean; // Add this new prop for templates page detection
 }
 
 // Then update the component parameters with default values
@@ -84,6 +89,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   onEditGraph, // Add this new prop
   resolution = "auto",
   isLoading = false, // Add this with default
+  isTemplatePage = false, // Default to false
 }) => {
   const [chartType, setChartType] = useState<ChartType>(type);
   const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(() => {
@@ -107,12 +113,14 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     HTMLDivElement & {
       zoomIn: () => void;
       zoomOut: () => void;
+      resetZoom: () => void;
       boxSelect: () => void;
       lassoSelect: () => void;
       clearSelection: () => void;
       download: (format: "png" | "svg" | "pdf" | "csv" | "json") => void;
       dispatchAction?: (action: any) => void;
       isValid?: () => boolean;
+      toggleFullscreen: () => void;
     }
   >(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -333,6 +341,16 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     // Zooming doesn't change the selected tool
   }, []);
 
+  const handleResetZoom = useCallback(() => {
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
+    try {
+      chartRef.current.resetZoom();
+    } catch (error) {
+      console.error("Error resetting zoom:", error);
+    }
+    // Resetting zoom doesn't change the selected tool
+  }, []);
+
   const handleBoxSelect = useCallback(() => {
     if (!chartRef.current || !chartRef.current.isValid?.()) return;
     try {
@@ -397,22 +415,30 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
         className={cn(
           "relative group touch-none",
           isFullscreen &&
-            "fixed inset-0 z-50 flex items-center justify-center p-8"
+            "fixed inset-0 z-50 flex items-center justify-center p-8",
+          isTemplatePage && styles.templateChart,
+          !isTemplatePage && styles.resizePrevention,
+          styles.globalStyles
         )}
       >
         <div
           ref={containerRef}
           className={cn(
             "relative w-full h-full transition-all duration-300",
-            isFullscreen && "w-[90vw] h-[85vh] max-w-[1600px] max-h-[900px]"
+            isFullscreen && "w-[90vw] h-[85vh] max-w-[1600px] max-h-[900px]",
+            isTemplatePage && styles.templateChart
           )}
+          style={isTemplatePage ? { resize: 'none' } : undefined}
         >
           <Card
             ref={cardRef}
             className={cn(
               "w-full h-full overflow-hidden bg-card/90 backdrop-blur-sm border-border/40 shadow-xl hover:shadow-2xl transition-all duration-300",
-              isFullscreen && "rounded-xl flex flex-col shadow-2xl"
+              isFullscreen && "rounded-xl flex flex-col shadow-2xl",
+              isTemplatePage && styles.templateChart,
+              styles.chartControls
             )}
+            style={isTemplatePage ? { resize: 'none' } : undefined}
           >
             {isTransitioning && (
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -429,9 +455,9 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
 
             <div className="flex h-5 items-center justify-between border-b border-border bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <div className="flex items-center gap-2">
-                {!isFullscreen && (
+                {!isFullscreen && !isTemplatePage && (
                   <div
-                    className="p-0.5 rounded-lg cursor-grab hover:bg-accent/40 transition-all duration-300"
+                    className="p-0.5 rounded-lg cursor-grab hover:bg-accent/40 transition-all duration-300 chart-drag-handle"
                     {...attributes}
                     {...listeners}
                   >
@@ -449,9 +475,10 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                 )}
                 <h3
                   className={cn(
-                    "font-medium truncate",
+                    "font-medium truncate chart-title",
                     isFullscreen ? "text-sm" : "text-xs"
                   )}
+                  style={{ userSelect: 'none' }}
                 >
                   {title}
                 </h3>
@@ -569,6 +596,16 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                             title="Zoom Out"
                           >
                             <ZoomOut className="h-2.5 w-2.5" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4"
+                            onClick={handleResetZoom}
+                            title="Reset Zoom"
+                          >
+                            <RotateCcw className="h-2.5 w-2.5" />
                           </Button>
 
                           <div className="h-4 w-[1px] bg-border" />
@@ -764,8 +801,8 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
 
             {/* KPI Parameters */}
             {kpiColors && Object.keys(kpiColors).length > 0 && (
-              <div className="absolute bottom-0 left-0 right-0 bg-muted/10 border-t border-border/20">
-                <div className="flex items-center justify-evenly px-2 py-1">
+              <div className="absolute bottom-0 left-0 right-0 bg-muted/10 border-t border-border/20" style={{ userSelect: 'none' }}>
+                <div className="flex items-center justify-evenly px-2 py-1" style={{ userSelect: 'none' }}>
                   {Object.entries(kpiColors).map(([kpiId, kpi]) => {
                     if (!kpi || !kpi.color) return null;
                     
@@ -800,6 +837,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                             isFullscreen ? "max-w-32" : maxWidthClass,
                             "text-foreground/70"
                           )}
+                          style={{ userSelect: 'none' }}
                         >
                           {kpi.name}
                         </span>

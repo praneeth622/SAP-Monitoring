@@ -57,6 +57,8 @@ interface Graph {
   };
   activeKPIs: Set<string> | string[];
   kpiColors: Record<string, { color: string; name: string }>;
+  timeInterval?: string; // Add this field
+  resolution?: string;   // Add this field
 }
 
 interface DataPoint {
@@ -1189,6 +1191,7 @@ export default function TemplatesPage() {
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
+
   
       // Calculate optimal layout based on number of graphs
       let layout = { x: 0, y: 0, w: 4, h: 4 }; // Default layout
@@ -1261,12 +1264,19 @@ export default function TemplatesPage() {
       }
   
       // Create API-compatible graph object with calculated layout
+
       const newGraph: Graph = {
         ...graphData,
         id: `graph-${Date.now()}`,
         activeKPIs: newActiveKPIs,
         kpiColors: newKpiColors,
+
+        // Use the selected timeInterval and resolution from the form
+        timeInterval: graphData.timeInterval || templateData.timeRange,
+        resolution: graphData.resolution || templateData.resolution,
+
         layout: layout,
+
       };
   
       // Update graphs and show immediately
@@ -1276,7 +1286,9 @@ export default function TemplatesPage() {
       setHasChanges(true);
 
 
+
       // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
+
 
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
@@ -1296,10 +1308,10 @@ export default function TemplatesPage() {
   // Modify the handleUpdateGraph function to update descriptions
   const handleUpdateGraph = (graphId: string, graphData: any) => {
     try {
-      // Create or update KPI colors and active KPIs as before
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
+
 
 
       // Find the existing graph to preserve properties not included in graphData
@@ -1347,7 +1359,6 @@ export default function TemplatesPage() {
       setHasChanges(true);
       toast.success("Graph updated successfully");
 
-      // Force a layout refresh
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 200);
@@ -1633,7 +1644,11 @@ export default function TemplatesPage() {
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
+
+                  isTemplatePage={true}
+
                   hideControls={true}
+
                 />
               </div>
             )}

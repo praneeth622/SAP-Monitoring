@@ -8,10 +8,14 @@ import _ from "lodash";
 import { DateRange } from "react-day-picker";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+
+import styles from "./TemplateChartStyles.module.css";
+
 import { Button } from "@/components/ui/button";
 import { Loader2, Save, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
+
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -44,10 +48,14 @@ interface DynamicLayoutProps {
   onDeleteGraph?: (id: string) => void;
   onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
+
+  isTemplatePage?: boolean; // Add this prop for templates page detection
+
   onSaveLayout?: (layouts: Record<string, Layout[]>) => Promise<void>; // Add this new prop for saving layouts
   templateId?: string; // Add templateId to identify which template to update
   templateData?: any; // Add templateData to access template information
   useDynamicLayout?: boolean; // Add useDynamicLayout parameter with default false
+
 }
 
 export function DynamicLayout({
@@ -61,10 +69,14 @@ export function DynamicLayout({
   onDeleteGraph,
   onEditGraph, // Add this new prop
   resolution = "auto", // Default to auto
+
+  isTemplatePage = false, // Default to false
+
   onSaveLayout, // Add this new prop
   templateId, // Add templateId parameter
   templateData, // Add templateData parameter
   useDynamicLayout = false, // Add useDynamicLayout parameter with default false
+
 }: DynamicLayoutProps) {
   // Define a proper type for layouts - a Record with breakpoint strings as keys and Layout arrays as values
   const [layouts, setLayouts] = useState<Record<string, Layout[]>>({});
@@ -1050,7 +1062,91 @@ export function DynamicLayout({
             bottom_xy_pos: `${bottomY}:${bottomX}`,
           };
         }
-      });
+
+      }, 100); // 100ms debounce
+    };
+    
+    // Function to handle layouts for specific chart counts
+    const handleSpecificChartLayouts = (availableHeight: number, calculatedRowHeight: number) => {
+      // Ensure layout updates properly after resize
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      
+      // For the special case of 8 graphs, ensure proper layout
+      if (charts.length === 8) {
+        resizeTimeoutRef.current = setTimeout(() => {
+          // Create a custom layout for 8 graphs - always using 3x3x2 layout
+          const chartHeight = Math.max(4, Math.round(availableHeight / 135));
+          
+          const customLayout = charts.map((chart, i) => {
+            if (i < 3) {
+              // First row (3 charts)
+              return {
+                i: chart.id,
+                x: (i % 3) * 4,
+                y: 0,
+                w: 4,
+                h: chartHeight,
+                minW: 2,
+                minH: 3
+              };
+            } else if (i < 6) {
+              // Second row (3 charts)
+              return {
+                i: chart.id,
+                x: ((i - 3) % 3) * 4,
+                y: chartHeight,
+                w: 4,
+                h: chartHeight,
+                minW: 2,
+                minH: 3
+              };
+            } else {
+              // Bottom row (2 charts)
+              return {
+                i: chart.id,
+                x: ((i - 6) % 2) * 6,
+                y: chartHeight * 2,
+                w: 6,
+                h: chartHeight,
+                minW: 2,
+                minH: 3
+              };
+            }
+          });
+          
+          // Update the layouts with our custom layout
+          setLayouts(prev => ({
+            ...prev,
+            [currentBreakpoint]: customLayout
+          }));
+          
+          // Trigger a single resize event after layout update
+          setTimeout(() => window.dispatchEvent(new Event("resize")), 150);
+        }, 150);
+      } 
+      // Handle 3 graph case as before
+      else if (charts.length === 3) {
+        resizeTimeoutRef.current = setTimeout(() => {
+          const layout = calculateOptimalLayout();
+          setLayouts(prev => ({
+            ...prev,
+            [currentBreakpoint]: layout,
+          }));
+          
+          // Trigger a single resize event after layout update
+          setTimeout(() => window.dispatchEvent(new Event("resize")), 100);
+        }, 100);
+      }
+    };
+
+    // Initial update
+    debouncedUpdateViewportDimensions();
+    
+    // Add resize listener with the debounced handler
+    window.addEventListener("resize", debouncedUpdateViewportDimensions);
+
 
       // Update the positions ref
       chartPositionsRef.current = chartPositions;
@@ -1087,9 +1183,39 @@ export function DynamicLayout({
     templateId
   ]);
 
+  useEffect(() => {
+    // Add global event handlers to disable text selection during resize/drag
+    const disableSelection = (e: Event) => {
+      document.body.classList.add('resizing-in-progress');
+    };
+    
+    const enableSelection = (e: Event) => {
+      // Use a small delay to ensure resize is fully complete
+      setTimeout(() => {
+        document.body.classList.remove('resizing-in-progress');
+      }, 100);
+    };
+    
+    // Use an event listener on the document to catch the start and end of resize events
+    document.addEventListener('mousedown', (e) => {
+      // Check if the click is on a resize handle
+      if ((e.target as HTMLElement)?.classList?.contains('react-resizable-handle')) {
+        disableSelection(e);
+      }
+    });
+    
+    document.addEventListener('mouseup', enableSelection);
+    
+    return () => {
+      document.removeEventListener('mousedown', disableSelection);
+      document.removeEventListener('mouseup', enableSelection);
+    };
+  }, []);
+
   if (!mounted) return null;
 
   // When in fullscreen mode, render just the fullscreen chart
+
   if (fullscreenChartId) {
     const fullscreenChart = charts.find((chart) => chart.id === fullscreenChartId);
     if (fullscreenChart) {
@@ -1126,6 +1252,7 @@ export function DynamicLayout({
                   isLoading={fullscreenChart.isLoading}
                 />
               </div>
+
             </div>
           </motion.div>
         </div>
@@ -1151,18 +1278,27 @@ export function DynamicLayout({
         )}
 
         <ResponsiveGridLayout
-          className="layout"
+          className={cn(
+            "layout", 
+            isTemplatePage && styles.templatesPage,
+            !isTemplatePage && styles.resizePrevention
+          )}
           layouts={layouts}
           breakpoints={{ lg: 1200, md: 992, sm: 768, xs: 576, xxs: 320 }}
           cols={{ lg: 12, md: 9, sm: 6, xs: 3, xxs: 2 }}
           rowHeight={rowHeight}
           margin={[6, 6]}
           containerPadding={[4, 4]}
-          onLayoutChange={handleLayoutChange}
+          onLayoutChange={!isTemplatePage ? handleLayoutChange : undefined}
           onBreakpointChange={(breakpoint) => {
             setCurrentBreakpoint(breakpoint);
             // Force a resize to recalculate optimal layout
             window.dispatchEvent(new Event("resize"));
+
+            
+            // Skip custom layout manipulation if in template page
+            if (isTemplatePage) return;
+            
 
             // Special handling for 3 and 8 graphs to ensure proper layout on breakpoint change
             if (charts.length === 8) {
@@ -1260,21 +1396,34 @@ export function DynamicLayout({
               }, 100);
             }
           }}
-          onResize={() => {
+          onResize={!isTemplatePage ? (layout, oldItem, newItem, placeholder, e, element) => {
+            // Add resizing class to the element
+            element.classList.add('resizing');
+            
             // Force charts to rerender after resize events
             if (resizeTimeoutRef.current) {
               clearTimeout(resizeTimeoutRef.current);
             }
             resizeTimeoutRef.current = setTimeout(() => {
               window.dispatchEvent(new Event("resize"));
+              
+              // Remove resizing class after a delay
+              setTimeout(() => {
+                if (element && element.classList) {
+                  element.classList.remove('resizing');
+                }
+              }, 100);
             }, 50);
-          }}
+
+          } : undefined}
+          // Ensure we use the full height with vertical compaction
+
           verticalCompact={true}
           compactType="vertical"
           useCSSTransforms={true}
-          isResizable={true}
-          isDraggable={true}
-          draggableHandle=".cursor-grab"
+          isResizable={!isTemplatePage}
+          isDraggable={!isTemplatePage}
+          draggableHandle=".chart-drag-handle"
           preventCollision={false}
           measureBeforeMount={false}
           autoSize={true}
@@ -1295,8 +1444,10 @@ export function DynamicLayout({
                   "bg-card rounded-lg shadow-sm border border-border overflow-hidden",
                   fullscreenChartId &&
                     chart.id !== fullscreenChartId &&
-                    "opacity-0"
+                    "opacity-0",
+                  isTemplatePage && styles.templateChart
                 )}
+                style={isTemplatePage ? { resize: 'none' } : undefined}
               >
                 <DraggableChart
                   id={chart.id}
@@ -1315,8 +1466,11 @@ export function DynamicLayout({
                   isFullscreenMode={chart.id === fullscreenChartId}
                   hideControls={chart.hideControls || hideControls}
                   onDeleteGraph={chart.onDeleteGraph || onDeleteGraph}
-                  onEditGraph={onEditGraph}
-                  isLoading={chart.isLoading}
+
+                  onEditGraph={onEditGraph} // Add this prop
+                  isLoading={chart.isLoading} // Add this line
+                  isTemplatePage={isTemplatePage} // Add the isTemplatePage prop
+
                 />
               </div>
             );

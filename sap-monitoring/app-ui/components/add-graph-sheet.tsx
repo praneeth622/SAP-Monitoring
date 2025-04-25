@@ -862,10 +862,13 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             >
               <SelectTrigger className={`${showValidationErrors && !formData.kpi ? "border-destructive focus:ring-destructive" : ""}`}>
                 <SelectValue placeholder="Select KPI">
-                  {formData.kpi ? kpis.find(k => k.kpi_name === formData.kpi)?.kpi_desc || "Select KPI" : "Select KPI"}
+                  {formData.kpi ? (() => {
+                    const selectedKpi = kpis.find(k => k.kpi_name === formData.kpi);
+                    return selectedKpi ? `${selectedKpi.kpi_name} - ${selectedKpi.kpi_desc}` : formData.kpi;
+                  })() : "Select KPI"}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+
                 {kpis
                   // Filter out KPIs that are already selected in correlation KPIs
                   .filter(kpi => !formData.correlationKpis.some(corrKpi => corrKpi.kpi === kpi.kpi_name))
@@ -883,6 +886,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                       )}
                     </Tooltip>
                   ))}
+
               </SelectContent>
             </Select>
             {showValidationErrors && !formData.kpi && (
@@ -935,32 +939,60 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Time Interval
               </label>
-              <input
-                type="text"
-                name="timeInterval"
+              <Select
                 value={formData.timeInterval}
-                readOnly
-                disabled
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background/80 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200 cursor-not-allowed opacity-70"
-              />
+                onValueChange={(value) => {
+                  setFormData((prev) => ({ ...prev, timeInterval: value }));
+                  setShowValidationErrors(false);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select time interval" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["auto", "last 1 hour", "today", "yesterday", "last 7 days", "last 30 days", "last 90 days", "custom"].map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground mt-1">
-                Set at template level
+                Individual graph time interval
               </p>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Resolution
               </label>
-              <input
-                type="text"
-                name="resolution"
+              <Select
                 value={formData.resolution}
-                readOnly
-                disabled
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background/80 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200 cursor-not-allowed opacity-70"
-              />
+                onValueChange={(value) => {
+                  setFormData((prev) => ({ ...prev, resolution: value }));
+                  setShowValidationErrors(false);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select resolution" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    { value: "auto", label: "Auto" },
+                    { value: "1m", label: "1 Minute" },
+                    { value: "5m", label: "5 Minutes" },
+                    { value: "15m", label: "15 Minutes" },
+                    { value: "1h", label: "1 Hour" },
+                    { value: "1d", label: "1 Day" }
+                  ].map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground mt-1">
-                Set at template level
+                Individual graph resolution
               </p>
             </div>
           </div>
@@ -995,7 +1027,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                         <SelectContent>
                           {monitoringAreas.map((ma) => (
                             <SelectItem key={ma.mon_area_name} value={ma.mon_area_name}>
-                              <span className="text-xs">{ma.mon_area_name}</span>
+                              <span className="text-xs">{ma.mon_area_name} - {ma.mon_area_desc}</span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1019,13 +1051,13 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                       >
                         <SelectTrigger className={`${showValidationErrors && !corrKpi.kpiGroup ? "border-destructive focus:ring-destructive" : ""}`}>
                           <SelectValue placeholder="KPI Group">
-                            {corrKpi.kpiGroup || "KPI Group"}
+                            {corrKpi.kpiGroup ? (correlationKpiGroups[corrKpi.monitoringArea]?.find(g => g.kpi_grp_name === corrKpi.kpiGroup)?.kpi_grp_desc || corrKpi.kpiGroup) : "KPI Group"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {(correlationKpiGroups[corrKpi.monitoringArea] || []).map((group) => (
                             <SelectItem key={group.kpi_grp_name} value={group.kpi_grp_name}>
-                              {group.kpi_grp_name}
+                              {group.kpi_grp_name} - {group.kpi_grp_desc}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1045,7 +1077,12 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                       >
                         <SelectTrigger className={`${showValidationErrors && !corrKpi.kpi ? "border-destructive focus:ring-destructive" : ""}`}>
                           <SelectValue placeholder="Select KPI">
-                            {corrKpi.kpi ? correlationKpis[corrKpi.kpiGroup]?.find(k => k.kpi_name === corrKpi.kpi)?.kpi_desc || "Select KPI" : "Select KPI"}
+                            {corrKpi.kpi && correlationKpis[corrKpi.kpiGroup] 
+                              ? (() => {
+                                  const selectedKpi = correlationKpis[corrKpi.kpiGroup].find(k => k.kpi_name === corrKpi.kpi);
+                                  return selectedKpi ? `${selectedKpi.kpi_name} - ${selectedKpi.kpi_desc}` : corrKpi.kpi;
+                                })() 
+                              : "Select KPI"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -1053,18 +1090,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                             // Filter out KPIs that are already selected anywhere
                             .filter(kpi => !isKpiSelected(kpi.kpi_name, corrKpi.monitoringArea, corrKpi.kpiGroup))
                             .map((kpi) => (
-                              <Tooltip key={kpi.kpi_desc}>
-                                <TooltipTrigger asChild>
-                                  <SelectItem value={kpi.kpi_name}>
-                                    {kpi.kpi_desc}
-                                  </SelectItem>
-                                </TooltipTrigger>
-                                {kpi.kpi_desc && (
-                                  <TooltipContent>
-                                    <p>{kpi.kpi_desc}</p>
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
+                              <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
+                                {kpi.kpi_name} - {kpi.kpi_desc}
+                              </SelectItem>
                             ))}
                         </SelectContent>
                       </Select>
