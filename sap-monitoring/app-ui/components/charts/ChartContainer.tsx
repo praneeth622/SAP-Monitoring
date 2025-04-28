@@ -208,6 +208,7 @@ const ChartContainer = memo(
       };
     }, [initChart]);
 
+    // Enhanced updateChart function to decrease font size of graph name
     const updateChart = useCallback(() => {
       if (!chartRef.current || !filteredData || filteredData.length === 0) {
         console.warn("No data to display or chart not initialized");
@@ -312,64 +313,27 @@ const ChartContainer = memo(
               };
         }) as echarts.SeriesOption[];
 
-        // Configure proper x-axis formatting based on resolution
-        const getAxisLabelFormatter = () => {
-          // Different formatting based on resolution and zoom level
-          return (value: string) => {
-            const date = new Date(value);
-            const now = new Date();
-            const timeDiff = now.getTime() - date.getTime();
-            const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
-
-            // Get the current zoom level from the chart
-            const chart = chartRef.current;
-            if (!chart) return value;
-
-
-            const option = chart.getOption();
-            const dataZoom = Array.isArray(option.dataZoom)
-              ? option.dataZoom[0]
-              : undefined;
-            if (!dataZoom) return value;
-
-            const zoomLevel = (dataZoom.end - dataZoom.start) / 100;
-
-
-            // Determine the appropriate format based on zoom level
-            if (zoomLevel <= 0.1) {
-              // Very zoomed in - show time
-              return `${date.getHours().toString().padStart(2, "0")}:${date
-                .getMinutes()
-                .toString()
-                .padStart(2, "0")}`;
-            } else if (zoomLevel <= 0.3) {
-              // Moderately zoomed in - show day and time
-              return `${date.getDate()}d ${date
-                .getHours()
-                .toString()
-                .padStart(2, "0")}h`;
-            } else if (zoomLevel <= 0.6) {
-              // Partially zoomed - show day
-              return `${date.getMonth() + 1}/${date.getDate()}`;
-            } else {
-              // Zoomed out - show month and short year
-              return `${date.getMonth() + 1}/${date
-                .getFullYear()
-                .toString()
-                .slice(-2)}`;
-            }
-          };
-        };
-
         const option: echarts.EChartsOption = {
           animation: true,
           animationDuration: 300,
           animationEasing: "cubicInOut",
+          // Add title with smaller font size
+          title: {
+            text: title,
+            textStyle: {
+              fontSize: 11, // Decreased font size for graph name
+              fontWeight: 'normal',
+              color: '#666'
+            },
+            left: 'center',
+            top: 0,
+            padding: [0, 0, 5, 0]
+          },
           grid: {
             left: "10px",
             right: "10px",
             bottom: "35px",
-            top: "20px",
+            top: "25px", // Increased a bit to accommodate the title
             containLabel: true,
           },
           tooltip: {
@@ -458,7 +422,7 @@ const ChartContainer = memo(
             type: "category",
             data: dates,
             axisLabel: {
-              formatter: getAxisLabelFormatter(),
+              formatter: (value: string) => value,
               margin: 8,
               fontSize: 10,
               color: "#666",
@@ -503,7 +467,7 @@ const ChartContainer = memo(
         if (chartRef.current && !chartRef.current.isDisposed?.()) {
           // Force immediate update with smooth transitions for color changes
           chartRef.current.setOption(option, {
-            replaceMerge: ["series"],
+            replaceMerge: ["series", "title"],
             lazyUpdate: false,
           });
         }
@@ -518,9 +482,10 @@ const ChartContainer = memo(
       theme,
       externalOptions,
       resolution,
+      title, // Added title dependency
     ]);
 
-    // Add a specific effect to only update colors when theme changes
+    // Enhanced theme application in ChartContainer
     useEffect(() => {
       if (!mounted || !chartRef.current) return;
 
@@ -528,6 +493,8 @@ const ChartContainer = memo(
         // If the chart needs a theme update but is already initialized,
         // we can use a targeted update rather than full redraw
         if (chartRef.current && theme?.colors) {
+          console.log("Applying theme to chart:", theme.name, theme.colors);
+          
           // Get current option without triggering a redraw
           const existingOption = chartRef.current.getOption();
 
@@ -589,6 +556,13 @@ const ChartContainer = memo(
                   notMerge: false,
                 }
               );
+              
+              // Force a resize after theme change to ensure proper rendering
+              setTimeout(() => {
+                if (chartRef.current && !chartRef.current.isDisposed?.()) {
+                  chartRef.current.resize();
+                }
+              }, 50);
             }
           }
         }
@@ -597,7 +571,6 @@ const ChartContainer = memo(
       }
     }, [theme, kpiColors, mounted]);
 
-    // Original effect for other data changes
     useEffect(() => {
       if (!mounted || !chartRef.current) return;
 

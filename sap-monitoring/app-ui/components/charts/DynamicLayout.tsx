@@ -16,7 +16,6 @@ import { Loader2, Save, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 
-
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 interface ChartConfig {
@@ -117,49 +116,6 @@ export function DynamicLayout({
   const prevDimensionsRef = useRef({ height: 0, rowHeight: 0 });
   const dimensionsDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Mount effect
-  useEffect(() => {
-    setMounted(true);
-    return () => {
-      if (initTimeoutRef.current) {
-        clearTimeout(initTimeoutRef.current);
-      }
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Handle fullscreen toggle from child charts
-  const handleFullscreenChange = useCallback(
-    (chartId: string, isFullscreen: boolean) => {
-      setFullscreenChartId(isFullscreen ? chartId : null);
-    },
-    []
-  );
-
-  // Add theme change detection
-  useEffect(() => {
-    if (prevThemeRef.current !== theme) {
-      prevThemeRef.current = theme;
-      // Force a resize to ensure charts update properly
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      resizeTimeoutRef.current = setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-      }, 50);
-    }
-  }, [theme]);
-
-  // Add a flag to track if we've already initialized with saved layouts
-  const [initializedWithSavedLayouts, setInitializedWithSavedLayouts] =
-    useState(false);
-
-  // Add state for protection against overriding saved layouts
-  const [savedLayoutsLocked, setSavedLayoutsLocked] = useState(false);
-  const savedLayoutsRef = useRef(false);
-
   // Utilities for localStorage - MOVED UP before being used
   const getLocalStorageLayoutKey = useCallback((templateId: string | undefined) => {
     if (!templateId) return null;
@@ -203,6 +159,60 @@ export function DynamicLayout({
       return null;
     }
   }, [getLocalStorageLayoutKey]);
+
+  // Mount effect
+  useEffect(() => {
+    setMounted(true);
+    return () => {
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Handle fullscreen toggle from child charts
+  const handleFullscreenChange = useCallback(
+    (chartId: string, isFullscreen: boolean) => {
+      setFullscreenChartId(isFullscreen ? chartId : null);
+    },
+    []
+  );
+
+  // Enhanced theme change detection in DynamicLayout component
+  useEffect(() => {
+    if (prevThemeRef.current !== theme) {
+      console.log("Theme changed in DynamicLayout:", 
+        prevThemeRef.current?.name, "->", theme?.name);
+      
+      prevThemeRef.current = theme;
+      
+      // Force a resize to ensure charts update properly with new theme
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      
+      // Use a sequence of resize events for more reliable updates
+      resizeTimeoutRef.current = setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        
+        // Second resize after a delay to ensure all charts are updated
+        setTimeout(() => {
+          window.dispatchEvent(new Event("resize"));
+        }, 100);
+      }, 50);
+    }
+  }, [theme]);
+
+  // Add a flag to track if we've already initialized with saved layouts
+  const [initializedWithSavedLayouts, setInitializedWithSavedLayouts] =
+    useState(false);
+
+  // Add state for protection against overriding saved layouts
+  const [savedLayoutsLocked, setSavedLayoutsLocked] = useState(false);
+  const savedLayoutsRef = useRef(false);
 
   // Define the saveLayoutToAPI function before it's used
   const saveLayoutToAPI = useCallback(async () => {
@@ -1062,92 +1072,7 @@ export function DynamicLayout({
             bottom_xy_pos: `${bottomY}:${bottomX}`,
           };
         }
-
-      }, 100); // 100ms debounce
-    };
-    
-    // Function to handle layouts for specific chart counts
-    const handleSpecificChartLayouts = (availableHeight: number, calculatedRowHeight: number) => {
-      // Ensure layout updates properly after resize
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      
-      // For the special case of 8 graphs, ensure proper layout
-      if (charts.length === 8) {
-        resizeTimeoutRef.current = setTimeout(() => {
-          // Create a custom layout for 8 graphs - always using 3x3x2 layout
-          const chartHeight = Math.max(4, Math.round(availableHeight / 135));
-          
-          const customLayout = charts.map((chart, i) => {
-            if (i < 3) {
-              // First row (3 charts)
-              return {
-                i: chart.id,
-                x: (i % 3) * 4,
-                y: 0,
-                w: 4,
-                h: chartHeight,
-                minW: 2,
-                minH: 3
-              };
-            } else if (i < 6) {
-              // Second row (3 charts)
-              return {
-                i: chart.id,
-                x: ((i - 3) % 3) * 4,
-                y: chartHeight,
-                w: 4,
-                h: chartHeight,
-                minW: 2,
-                minH: 3
-              };
-            } else {
-              // Bottom row (2 charts)
-              return {
-                i: chart.id,
-                x: ((i - 6) % 2) * 6,
-                y: chartHeight * 2,
-                w: 6,
-                h: chartHeight,
-                minW: 2,
-                minH: 3
-              };
-            }
-          });
-          
-          // Update the layouts with our custom layout
-          setLayouts(prev => ({
-            ...prev,
-            [currentBreakpoint]: customLayout
-          }));
-          
-          // Trigger a single resize event after layout update
-          setTimeout(() => window.dispatchEvent(new Event("resize")), 150);
-        }, 150);
-      } 
-      // Handle 3 graph case as before
-      else if (charts.length === 3) {
-        resizeTimeoutRef.current = setTimeout(() => {
-          const layout = calculateOptimalLayout();
-          setLayouts(prev => ({
-            ...prev,
-            [currentBreakpoint]: layout,
-          }));
-          
-          // Trigger a single resize event after layout update
-          setTimeout(() => window.dispatchEvent(new Event("resize")), 100);
-        }, 100);
-      }
-    };
-
-    // Initial update
-    debouncedUpdateViewportDimensions();
-    
-    // Add resize listener with the debounced handler
-    window.addEventListener("resize", debouncedUpdateViewportDimensions);
-
-
+      });
       // Update the positions ref
       chartPositionsRef.current = chartPositions;
       

@@ -25,9 +25,11 @@ export default function RootLayout({
           <ThemeToggleProvider>
             <FontProvider>  
               <div className="bg-background min-h-screen">
-                <div className="flex">
+                <div className="flex relative">
                   <Sidebar />
-                  <div className="flex flex-col w-full">{children}</div>
+                  <div className="flex flex-col w-full min-h-screen pl-16">
+                    {children}
+                  </div>
                 </div>
               </div>
             </FontProvider>

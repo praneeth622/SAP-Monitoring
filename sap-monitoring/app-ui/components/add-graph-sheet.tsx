@@ -360,9 +360,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         .map(ua => ua.kpi_id);
 
       // Only show KPIs that are in the user's access list
-      const filteredKpis = (response.data || []).filter((kpi: Kpi) => 
-        userAccessKpis.includes(kpi.kpi_name)
-      );
+      const filteredKpis = (response.data || []).filter((kpi: Kpi) =>
+          userAccessKpis.includes(kpi.kpi_name)
+        );
 
       setCorrelationKpis((prev) => ({
         ...prev,
@@ -868,7 +868,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                   })() : "Select KPI"}
                 </SelectValue>
               </SelectTrigger>
-
+              <SelectContent>
                 {kpis
                   // Filter out KPIs that are already selected in correlation KPIs
                   .filter(kpi => !formData.correlationKpis.some(corrKpi => corrKpi.kpi === kpi.kpi_name))
@@ -886,7 +886,6 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                       )}
                     </Tooltip>
                   ))}
-
               </SelectContent>
             </Select>
             {showValidationErrors && !formData.kpi && (

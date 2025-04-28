@@ -179,11 +179,23 @@ function NavItem({
 
 export function Sidebar() {
   const isMobile = useMediaQuery("(max-width: 768px)");
-  // Change the initial state to true (collapsed)
+  // Store both the collapsed state and the hover state
   const [isCollapsed, setIsCollapsed] = React.useState(true);
+  const [isHovering, setIsHovering] = React.useState(false);
   const router = useRouter();
   const [activeItem, setActiveItem] = React.useState("Dashboard");
   const [activeSubItem, setActiveSubItem] = React.useState<string>("");
+
+  // Hover handlers
+  const handleMouseEnter = () => {
+    if (isCollapsed) {
+      setIsHovering(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+  };
 
   // Update the handleItemClick function
   const handleItemClick = (label: string) => {
@@ -199,21 +211,6 @@ export function Sidebar() {
       case "Manage Systems":
         router.push("/systems/manage-systems");
         break;
-case "System Topology":
-router.push("/system-topology");
-break;
-case "System Topology":
-        router.push("/system-topology");
-        break;
-      case "System Topology":
-        router.push("/system-topology");
-        break;
-      case "System Topology":
-        router.push("/system-topology");
-        break;
-      case "System Topology":
-        router.push("/system-topology");
-        break;
       case "System Topology":
         router.push("/system-topology");
         break;
@@ -223,7 +220,7 @@ case "System Topology":
       case "Manage User":
         router.push("/user-management/manage-users");
         break;
-case "Alert Monitering": // Fix the typo and add routing
+      case "Alert Monitering": // Fix the typo and add routing
         router.push("/alerts");
         break;
       case "Incidents":
@@ -248,38 +245,50 @@ case "Alert Monitering": // Fix the typo and add routing
   React.useEffect(() => {
     if (isMobile) {
       setIsCollapsed(true);
+      setIsHovering(false);
     }
   }, [isMobile]);
 
   const handleExpand = () => {
-    setIsCollapsed(false);
+    setIsHovering(true);
   };
+
+  // Determine the effective width class based on collapsed and hover states
+  const widthClass = isCollapsed
+    ? isHovering
+      ? "w-64 absolute h-screen z-50"
+      : "w-16"
+    : "w-64";
 
   return (
     <div
       className={cn(
         "flex h-screen border-r sticky top-0 bg-background transition-all duration-300",
-        isCollapsed ? "w-16" : "w-64",
-        "z-50 shadow-md" // Add shadow for better depth
+        widthClass,
+        "shadow-md" // Add shadow for better depth
       )}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <div className="flex w-full flex-col overflow-hidden">
         {/* Update header styles */}
         <div
           className={cn(
             "p-4 flex items-center border-b",
-            isCollapsed ? "justify-center" : "justify-between"
+            isCollapsed && !isHovering ? "justify-center" : "justify-between"
           )}
         >
           <div
             className={cn(
               "flex items-center",
-              isCollapsed ? "justify-center w-full pr-6" : "gap-2" // Add padding-right when collapsed
+              isCollapsed && !isHovering
+                ? "justify-center w-full pr-6"
+                : "gap-2" // Add padding-right when collapsed
             )}
           >
             {/* Updated Logo section with images */}
             <div className="relative flex items-center">
-              {isCollapsed ? (
+              {isCollapsed && !isHovering ? (
                 // Small logo for collapsed sidebar
                 <div className="w-6 h-6">
                   <Image
@@ -308,11 +317,11 @@ case "Alert Monitering": // Fix the typo and add routing
             size="sm"
             className={cn(
               "rounded-full p-2 hover:bg-accent/50",
-              isCollapsed && "absolute right-1 top-4" // Positioned absolutely when collapsed
+              isCollapsed && !isHovering && "absolute right-1 top-4" // Positioned absolutely when collapsed
             )}
             onClick={() => setIsCollapsed(!isCollapsed)}
           >
-            {isCollapsed ? (
+            {isCollapsed && !isHovering ? (
               <TbLayoutSidebarRightCollapse className="h-5 w-5" />
             ) : (
               <TbLayoutSidebarLeftCollapse className="h-5 w-5" />
@@ -324,7 +333,7 @@ case "Alert Monitering": // Fix the typo and add routing
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 custom-scrollbar">
           <nav className="space-y-6">
             <div className="space-y-1">
-              {!isCollapsed && (
+              {!(isCollapsed && !isHovering) && (
                 <div className="text-xs uppercase font-medium text-muted-foreground mb-2 px-2">
                   Overview
                 </div>
@@ -332,7 +341,7 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={House}
                 label="Dashboard"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "Dashboard"}
                 onClick={() => handleItemClick("Dashboard")}
@@ -340,7 +349,7 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={LayoutTemplate}
                 label="Templates"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "Templates"}
                 onClick={() => handleItemClick("Templates")}
@@ -348,14 +357,14 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={ChartNetwork}
                 label="System Topology"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "System Topology"}
                 onClick={() => handleItemClick("System Topology")}
               />
             </div>
             <div className="space-y-1 py-2">
-              {!isCollapsed && (
+              {!(isCollapsed && !isHovering) && (
                 <div className="text-sm text-muted-foreground font-medium mb-2">
                   System Administration
                 </div>
@@ -363,8 +372,8 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={MonitorCog}
                 label="Manage Systems"
-                isCollapsible={!isCollapsed}
-                isCollapsed={isCollapsed}
+                isCollapsible={!(isCollapsed && !isHovering)}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "Manage Systems"}
                 onClick={() => handleItemClick("Manage Systems")}
@@ -376,8 +385,6 @@ case "Alert Monitering": // Fix the typo and add routing
                         path: "/systems/extraction-config",
                         label: "Extarction Config",
                       },
-                      // { path: "/kpi-config", label: "KPI Config" },
-                      // { path: "/master-filters", label: "Master Filters Config" },
                     ].map((item, index) => (
                       <Button
                         key={index}
@@ -399,7 +406,7 @@ case "Alert Monitering": // Fix the typo and add routing
               </NavItem>
             </div>
             <div className="space-y- py-2">
-              {!isCollapsed && (
+              {!(isCollapsed && !isHovering) && (
                 <div className="text-sm text-muted-foreground font-medium">
                   Alerts
                 </div>
@@ -407,7 +414,7 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={Siren}
                 label="Alert Monitering"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "Alert Monitering"}
                 onClick={() => handleItemClick("Alert Monitering")}
@@ -415,35 +422,12 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={Tickets}
                 label="Incidents"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "Incidents"}
                 onClick={() => handleItemClick("Incidents")}
               />
             </div>
-            {/* <div className="space-y- py-2">
-              {!isCollapsed && (
-                <div className="text-sm text-muted-foreground font-medium">
-                  Account
-                </div>
-              )}
-              <NavItem
-                icon={UserCircle}
-                label="Profile"
-                isCollapsed={isCollapsed}
-                onExpand={handleExpand}
-                isActive={activeItem === "Profile"}
-                onClick={() => {
-                  setIsCollapsed(false);
-                  const dropdown = document.getElementById(
-                    "profile-dropdown-trigger"
-                  );
-                  if (dropdown) {
-                    dropdown.click();
-                  }
-                }}
-              />
-            </div> */}
             <DropdownMenu>
               <DropdownMenuTrigger id="profile-dropdown-trigger" className="hidden">
                 <span />
@@ -482,7 +466,7 @@ case "Alert Monitering": // Fix the typo and add routing
               </DropdownMenuContent>
             </DropdownMenu>
             <div className="space-y- py-2">
-              {!isCollapsed && (
+              {!(isCollapsed && !isHovering) && (
                 <div className="text-sm text-muted-foreground font-medium">
                   User Management
                 </div>
@@ -490,7 +474,7 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={Users2}
                 label="Manage User"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "Manage User"}
                 onClick={() => handleItemClick("Manage User")}
@@ -498,7 +482,7 @@ case "Alert Monitering": // Fix the typo and add routing
               <NavItem
                 icon={Tickets}
                 label="User Access"
-                isCollapsed={isCollapsed}
+                isCollapsed={isCollapsed && !isHovering}
                 onExpand={handleExpand}
                 isActive={activeItem === "User Access"}
                 onClick={() => handleItemClick("User Access")}
@@ -510,14 +494,14 @@ case "Alert Monitering": // Fix the typo and add routing
         {/* Update footer section */}
         <div className="border-t p-3 mt-auto bg-card/50">
           <div className="space-y-1">
-            {isCollapsed ? (
+            {isCollapsed && !isHovering ? (
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       className="w-full justify-center"
-                      onClick={() => setIsCollapsed(false)}
+                      onClick={() => setIsHovering(true)}
                     >
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="/avatars/user.png" alt="User" />
@@ -568,7 +552,6 @@ case "Alert Monitering": // Fix the typo and add routing
                     >
                       <Bell className="mr-2 h-4 w-4" />
                       <span>Notifications</span>
-                      {/* Optional: Add notification badge */}
                       <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
                         3
                       </span>

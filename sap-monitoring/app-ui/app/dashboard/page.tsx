@@ -1259,79 +1259,79 @@ export default function Dashboard() {
   };
 
   // Add fetchTemplateById function before fetchTemplates
-  const fetchTemplateById = useCallback(async (templateId: string) => {
-    try {
-      setIsContentLoading(true);
-      setHasError(false);
-      setErrorMessage(null);
+  // const fetchTemplateById = useCallback(async (templateId: string) => {
+  //   try {
+  //     setIsContentLoading(true);
+  //     setHasError(false);
+  //     setErrorMessage(null);
 
-      console.log(`Fetching template with ID: ${templateId}`);
+  //     console.log(`Fetching template with ID: ${templateId}`);
 
-      const data = await retryFetch(async () => {
-        const response = await fetch(
-          `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${templateId}`
-        );
+  //     const data = await retryFetch(async () => {
+  //       const response = await fetch(
+  //         `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${templateId}`
+  //       );
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch template: ${response.statusText}`);
-        }
+  //       if (!response.ok) {
+  //         throw new Error(`Failed to fetch template: ${response.statusText}`);
+  //       }
 
-        const responseData = await response.json();
+  //       const responseData = await response.json();
 
-        if (!responseData || !responseData.length) {
-          throw new Error("Template not found");
-        }
+  //       if (!responseData || !responseData.length) {
+  //         throw new Error("Template not found");
+  //       }
 
-        return responseData;
-      });
+  //       return responseData;
+  //     });
 
-      // Normalize the template
-      const template = normalizeTemplate(data[0]);
+  //     // Normalize the template
+  //     const template = normalizeTemplate(data[0]);
 
-      // Create date range from the global date range
-      const dateRangeForAPI = {
-        from: globalDateRange?.from || new Date(new Date().setDate(new Date().getDate() - 7)),
-        to: globalDateRange?.to || new Date(),
-      };
+  //     // Create date range from the global date range
+  //     const dateRangeForAPI = {
+  //       from: globalDateRange?.from || new Date(new Date().setDate(new Date().getDate() - 7)),
+  //       to: globalDateRange?.to || new Date(),
+  //     };
 
-      // Generate charts from the template
-      console.log(`Generating charts for template "${template.name}" with resolution ${resolution}`);
-      const newCharts = await generateChartsFromTemplate(
-        template,
-        resolution,
-        dateRangeForAPI
-      );
+  //     // Generate charts from the template
+  //     console.log(`Generating charts for template "${template.name}" with resolution ${resolution}`);
+  //     const newCharts = await generateChartsFromTemplate(
+  //       template,
+  //       resolution,
+  //       dateRangeForAPI
+  //     );
 
-      // Update charts
-      if (Array.isArray(newCharts) && newCharts.length > 0) {
-        setCharts(newCharts);
-      } else {
-        console.warn("No charts returned from template, showing empty dashboard");
-        setCharts([]);
-      }
+  //     // Update charts
+  //     if (Array.isArray(newCharts) && newCharts.length > 0) {
+  //       setCharts(newCharts);
+  //     } else {
+  //       console.warn("No charts returned from template, showing empty dashboard");
+  //       setCharts([]);
+  //     }
 
-      // Force a layout refresh
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-      }, 200);
+  //     // Force a layout refresh
+  //     setTimeout(() => {
+  //       window.dispatchEvent(new Event("resize"));
+  //     }, 200);
 
-    } catch (error) {
-      console.error("Error fetching template by ID:", error);
-      setHasError(true);
-      setErrorMessage(
-        error instanceof Error
-          ? `Failed to load template: ${error.message}`
-          : "Failed to load template. Please try again."
-      );
-      toast.error("Failed to load template", {
-        description: error instanceof Error ? error.message : "Please try again",
-      });
+  //   } catch (error) {
+  //     console.error("Error fetching template by ID:", error);
+  //     setHasError(true);
+  //     setErrorMessage(
+  //       error instanceof Error
+  //         ? `Failed to load template: ${error.message}`
+  //         : "Failed to load template. Please try again."
+  //     );
+  //     toast.error("Failed to load template", {
+  //       description: error instanceof Error ? error.message : "Please try again",
+  //     });
       
-      setCharts([]);
-    } finally {
-      setTimeout(() => setIsContentLoading(false), 300);
-    }
-  }, [resolution, globalDateRange, setCharts, setIsContentLoading, setHasError, setErrorMessage, generateChartsFromTemplate]);
+  //     setCharts([]);
+  //   } finally {
+  //     setTimeout(() => setIsContentLoading(false), 300);
+  //   }
+  // }, [resolution, globalDateRange, setCharts, setIsContentLoading, setHasError, setErrorMessage, generateChartsFromTemplate]);
 
   // Now your fetchTemplates function can use fetchTemplateById
   const fetchTemplates = useCallback(async () => {
@@ -1483,7 +1483,7 @@ export default function Dashboard() {
     };
   }, [fetchTemplates]);
 
-  // Update the handleApiTemplateChange function to correctly preserve layouts
+  // Enhanced handleApiTemplateChange function to properly preserve theme between templates
   const handleApiTemplateChange = useCallback(
     (templateId: string) => {
       // Don't change template if we're in the middle of a theme change
@@ -1497,14 +1497,57 @@ export default function Dashboard() {
       setSelectedApiTemplate(templateId);
       setIsContentLoading(true);
 
+      // Store current theme selection for later application
+      const currentTheme = selectedTheme;
+      const themeColors = chartThemes[currentTheme as keyof typeof chartThemes]?.colors || [];
+
       // Explicitly call fetchTemplateById to ensure loading the new template
-      fetchTemplateById(templateId).catch((error) => {
-        console.error("Error fetching template:", error);
-        toast.error("Failed to load template");
-        setIsContentLoading(false);
-      });
+      fetchTemplateById(templateId)
+        .then(() => {
+          // After template loads, ensure the theme is properly applied to new charts
+          if (currentTheme) {
+            // Use a small delay to ensure the charts are loaded first
+            setTimeout(() => {
+              // Re-apply the current theme to the new template's charts
+              setCharts((prevCharts) => {
+                const themeObj = chartThemes[currentTheme as keyof typeof chartThemes];
+                
+                if (!themeObj) return prevCharts;
+                
+                return prevCharts.map((chart) => {
+                  // Create updated kpiColors with the current theme's colors
+                  const updatedKpiColors = { ...chart.kpiColors };
+                  
+                  if (chart.kpiColors) {
+                    Object.keys(chart.kpiColors).forEach((kpi, index) => {
+                      if (updatedKpiColors[kpi] && typeof updatedKpiColors[kpi] === 'object') {
+                        updatedKpiColors[kpi] = {
+                          ...updatedKpiColors[kpi],
+                          color: themeObj.colors[index % themeObj.colors.length]
+                        };
+                      }
+                    });
+                  }
+                  
+                  return {
+                    ...chart,
+                    kpiColors: updatedKpiColors
+                  };
+                });
+              });
+              
+              // Force charts to redraw with the new theme
+              window.dispatchEvent(new Event("resize"));
+            }, 200);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching template:", error);
+          toast.error("Failed to load template");
+          setIsContentLoading(false);
+        });
     },
-    [selectedApiTemplate, fetchTemplateById]
+    [selectedApiTemplate, fetchTemplateById, selectedTheme, chartThemes]
   );
 
   // Update handleResolutionChange to maintain current template and provide smoother transitions
@@ -1820,74 +1863,70 @@ export default function Dashboard() {
     // Get the theme object directly from chartThemes
     const themeObj = chartThemes[selectedThemeName as keyof typeof chartThemes] || chartThemes.default;
     
-    console.log("Changing theme to:", selectedThemeName, themeObj); // Add logging
+    console.log("Changing theme to:", selectedThemeName, themeObj);
     
-    // Set the theme context
-    setTheme({
-      name: selectedThemeName,
-      colors: themeObj.colors // Use colors from the theme object
-    });
-    
-    // Show a subtle loading indicator only for the chart area
-    setIsContentLoading(true);
-    
-    // Update the KPI colors with the new theme colors
-    setThemedKpiColors((prevColors) => {
-      const updatedColors = { ...prevColors };
-      Object.entries(updatedColors).forEach(([kpiId, kpiInfo], index) => {
-        if (kpiInfo && typeof kpiInfo === "object") {
-          updatedColors[kpiId as keyof typeof kpiColors] = {
-            ...kpiInfo,
-            color: themeObj.colors[index % themeObj.colors.length],
-          };
-        }
-      });
-      return updatedColors;
-    });
-    
-    // Update charts with the new theme colors
-    setCharts((prevCharts) => {
-      return prevCharts.map((chart) => {
-        // Create a copy of the kpiColors to modify
-        const updatedKpiColors = { ...chart.kpiColors };
-        
-        // Update each KPI color using the new theme
-        if (updatedKpiColors) {
-          Object.keys(updatedKpiColors).forEach((kpi, index) => {
-            if (updatedKpiColors[kpi] && typeof updatedKpiColors[kpi] === "object") {
-              updatedKpiColors[kpi] = {
-                ...updatedKpiColors[kpi],
-                color: themeObj.colors[index % themeObj.colors.length],
-              };
-            }
-          });
-        }
-        
-        // Return updated chart with new colors
-        return {
-          ...chart,
-          kpiColors: updatedKpiColors,
+    // Update the KPI colors with the new theme colors without causing re-renders
+    const updatedKpiColors = { ...themedKpiColors };
+    Object.entries(updatedKpiColors).forEach(([kpiId, kpiInfo], index) => {
+      if (kpiInfo && typeof kpiInfo === "object") {
+        updatedKpiColors[kpiId as keyof typeof kpiColors] = {
+          ...kpiInfo,
+          color: themeObj.colors[index % themeObj.colors.length],
         };
-      });
+      }
     });
     
-    // Update the selectedTheme state
-    setSelectedTheme(selectedThemeName);
+    // Update charts with new colors without causing full re-renders
+    const updatedCharts = charts.map((chart) => {
+      // Create a shallow copy of chart properties
+      const updatedChart = { ...chart };
+      
+      // Only make a new copy of kpiColors if it exists
+      if (chart.kpiColors) {
+        const chartKpiColors = { ...chart.kpiColors };
+        
+        // Update each KPI color in place
+        Object.keys(chartKpiColors).forEach((kpi, index) => {
+          if (chartKpiColors[kpi] && typeof chartKpiColors[kpi] === "object") {
+            chartKpiColors[kpi] = {
+              ...chartKpiColors[kpi],
+              color: themeObj.colors[index % themeObj.colors.length],
+            };
+          }
+        });
+        
+        // Assign updated colors to chart copy
+        updatedChart.kpiColors = chartKpiColors;
+      }
+      
+      return updatedChart;
+    });
     
-    // Show success notification
-    toast.success(`Theme changed to ${selectedThemeName}`, { duration: 1500 });
-    
-    // End loading state after a short delay
-    setTimeout(() => {
-      setIsContentLoading(false);
+    // Use requestAnimationFrame to batch updates in the next render cycle
+    requestAnimationFrame(() => {
+      // Apply all state updates in a batch to minimize renders
+      setThemedKpiColors(updatedKpiColors);
+      setCharts(updatedCharts);
+      setSelectedTheme(selectedThemeName);
+      
+      // End theme change mode to allow other operations
       setIsChangingTheme(false);
       isChangingThemeRef.current = false;
       
-      // Force a window resize to ensure charts render with new colors
-      window.dispatchEvent(new Event("resize"));
-    }, 300);
+      // Use a short timeout to trigger a resize event for chart re-rendering
+      // This ensures the charts pick up the new colors without a full reload
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        
+        // Show success notification
+        toast.success(`Theme changed to ${themeObj.name}`, { 
+          duration: 1500,
+          position: "bottom-right"
+        });
+      }, 50);
+    });
   };
-  
+
   // Helper function to get colors for each theme
   const getThemeColors = (themeName: string) => {
     switch (themeName) {
@@ -1910,19 +1949,19 @@ export default function Dashboard() {
   // Modify the render dashboard content function to use content-only loading
   const renderDashboardContent = () => {
 
-<!--       <DashboardContent 
-        charts={charts}
-        isContentLoading={isContentLoading}
-        hasError={hasError}
-        errorMessage={errorMessage}
-        fetchTemplates={fetchTemplates}
-        activeKPIs={activeKPIs}
-        themedKpiColors={themedKpiColors}
-        globalDateRange={globalDateRange}
-        selectedTheme={selectedTheme}
-        resolution={resolution}
-        handleLayoutChange={handleLayoutChange}
-      /> -->
+    //  <DashboardContent 
+    //     charts={charts}
+    //     isContentLoading={isContentLoading}
+    //     hasError={hasError}
+    //     errorMessage={errorMessage}
+    //     fetchTemplates={fetchTemplates}
+    //     activeKPIs={activeKPIs}
+    //     themedKpiColors={themedKpiColors}
+    //     globalDateRange={globalDateRange}
+    //     selectedTheme={selectedTheme}
+    //     resolution={resolution}
+    //     handleLayoutChange={handleLayoutChange}
+    //  />
 
     if (isContentLoading) {
       return (
