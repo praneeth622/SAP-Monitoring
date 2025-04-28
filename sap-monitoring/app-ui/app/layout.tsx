@@ -2,7 +2,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ThemeToggleProvider } from "@/contexts/ThemeToggleContext";
 import { FontProvider } from "@/contexts/FontContext";
 import "./globals.css";
-import { Sidebar } from "@/components/sidebar";
+import { Sidebar, SidebarProvider } from "@/components/sidebar";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 import { fontSans } from "@/lib/fonts";
@@ -23,15 +23,17 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <ThemeToggleProvider>
-            <FontProvider>  
-              <div className="bg-background min-h-screen">
-                <div className="flex relative">
-                  <Sidebar />
-                  <div className="flex flex-col w-full min-h-screen pl-16">
-                    {children}
+            <FontProvider>
+              <SidebarProvider>
+                <div className="bg-background min-h-screen">
+                  <div className="flex relative">
+                    <Sidebar />
+                    <div className="flex flex-col w-full min-h-screen transition-all duration-300" id="main-content-wrapper">
+                      {children}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </SidebarProvider>
             </FontProvider>
           </ThemeToggleProvider>
         </ThemeProvider>
