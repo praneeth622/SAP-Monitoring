@@ -19,7 +19,7 @@ import {
   generateDummyData,
   generateMultipleDataSets,
 } from "@/utils/data";
-import React, {  useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useCallback, useRef, useState, createContext, useContext } from "react";
 import { useTheme as useThemeContext } from "@/contexts/ThemeContext";
 import { useTheme as useNextTheme } from "next-themes";
 import { DynamicLayout } from "@/components/charts/DynamicLayout";
@@ -61,6 +61,25 @@ import {
 import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { useSearchParams } from "next/navigation";
+
+// Helper function to safely access localStorage
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.warn('Error accessing localStorage:', error);
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      console.warn('Error writing to localStorage:', error);
+    }
+  }
+};
 
 // Add API template interface
 interface ApiTemplate {
@@ -148,6 +167,7 @@ declare module "@/components/charts/DynamicLayout" {
     onEditGraph?: (id: string) => void;
     hideLayoutControls?: boolean;
     isEditMode?: boolean;
+    onLayoutReset?: (newLayout: any) => Promise<void>;
   }
 }
 
@@ -380,80 +400,40 @@ const generateChartsFromTemplate = async (
   // Create a consistent color palette for KPIs across all charts
   const theme = chartThemes.default;
   const globalKpiColors: Record<string, { color: string; name: string }> = {};
-  const allTemplateKpis = new Set<string>();
 
-  // First pass - collect all unique KPIs in the template
-  template.graphs.forEach((graph) => {
-    if (graph.primaryKpi) {
-      allTemplateKpis.add(graph.primaryKpi.toLowerCase());
-    }
-    if (graph.secondaryKpis) {
-      graph.secondaryKpis.forEach((kpi) =>
-        allTemplateKpis.add(kpi.toLowerCase())
-      );
-    }
-  });
+  // Process each graph to fetch real data
+  const chartPromises = template.graphs.map(async (graph, index) => {
+    // Clean up KPI names and ensure we only include selected KPIs
+    const primaryKpi = graph.primaryKpi.toLowerCase();
+    const secondaryKpis = graph.secondaryKpis.map((kpi) => kpi.toLowerCase());
+    const selectedKpis = [primaryKpi, ...secondaryKpis];
 
-  // Assign colors to all KPIs
-  Array.from(allTemplateKpis).forEach((kpi, index) => {
+    // Create KPI colors only for selected KPIs
+    selectedKpis.forEach((kpi, colorIndex) => {
+      if (!globalKpiColors[kpi]) {
     globalKpiColors[kpi] = {
-      color: theme.colors[index % theme.colors.length],
+          color: theme.colors[colorIndex % theme.colors.length],
       name: kpi.charAt(0).toUpperCase() + kpi.slice(1), // Capitalize first letter
     };
-  });
-
-  try {
-    // Check if the graphs have saved layouts
-    const hasSavedLayouts = template.graphs.some(graph => {
-      // Validate that position data is meaningful
-      const hasValidPosition = graph.position && 
-        typeof graph.position.x === 'number' && 
-        typeof graph.position.y === 'number' && 
-        typeof graph.position.w === 'number' && 
-        typeof graph.position.h === 'number';
-      
-      // Check if the position values are non-zero (a further indication this is a real saved layout)
-      const hasNonZeroValues = hasValidPosition && 
-        (graph.position.w > 0 && graph.position.h > 0);
-        
-      return hasValidPosition && hasNonZeroValues;
+      }
     });
-
-    console.log(`Template has saved layouts: ${hasSavedLayouts}`);
-
-    // Process each graph to fetch real data
-    const chartPromises = template.graphs.map(async (graph, index) => {
-      // Clean up KPI names
-      const primaryKpi = graph.primaryKpi.toLowerCase();
-      const secondaryKpis = graph.secondaryKpis.map((kpi) => kpi.toLowerCase());
-      const allKpis = [primaryKpi, ...secondaryKpis];
 
       // Determine monitoring area - default to OS if not specified
       const monitoringArea = primaryKpi.includes("job") ? "JOBS" : "OS";
 
       // Determine the layout for this chart
       let position;
-      
-      if (hasSavedLayouts && graph.position && 
-          graph.position.w > 0 && graph.position.h > 0) {
-        // Use the saved layout from the template
+    if (graph.position && graph.position.w > 0 && graph.position.h > 0) {
         position = {
           x: graph.position.x,
           y: graph.position.y,
           w: graph.position.w,
           h: graph.position.h,
         };
-      } else {
-        // If there are no saved layouts, we'll let the dynamic layout handle it
-        // by not setting a position
-        position = undefined;
       }
 
-      // Log position data for debugging
-      console.log(`Graph ${graph.id} position:`, position || "Using dynamic layout");
-
-      // Fetch real data from API
       try {
+      // Fetch real data from API
         const chartData = await fetchTemplateChartData(
           primaryKpi,
           secondaryKpis,
@@ -462,35 +442,51 @@ const generateChartsFromTemplate = async (
           resolution
         );
 
-        // Create chart config with saved layout
+      // Create chart config with only selected KPIs
+      const chartKpiColors: Record<string, { color: string; name: string }> = {};
+      selectedKpis.forEach(kpi => {
+        if (globalKpiColors[kpi]) {
+          chartKpiColors[kpi] = globalKpiColors[kpi];
+        }
+      });
+
         return {
           id: graph.id,
           title: graph.name,
           type: graph.type,
           data: chartData,
-          activeKPIs: new Set(allKpis),
-          kpiColors: globalKpiColors,
-          layout: position, // This could be undefined, which is fine for dynamic layout
+        activeKPIs: new Set(selectedKpis), // Only include selected KPIs
+        kpiColors: chartKpiColors, // Only include colors for selected KPIs
+        layout: position,
           width: 400,
           height: 300,
         };
       } catch (error) {
         console.error(`Error fetching data for graph ${graph.id}:`, error);
-        // Return a chart with dummy data if API call fails
+      
+      // Even for dummy data, maintain only selected KPIs
+      const chartKpiColors: Record<string, { color: string; name: string }> = {};
+      selectedKpis.forEach(kpi => {
+        if (globalKpiColors[kpi]) {
+          chartKpiColors[kpi] = globalKpiColors[kpi];
+        }
+      });
+
         return {
           id: graph.id,
           title: graph.name,
           type: graph.type,
-          data: generateDummyData(allKpis),
-          activeKPIs: new Set(allKpis),
-          kpiColors: globalKpiColors,
-          layout: position, // This could be undefined, which is fine for dynamic layout
+        data: generateDummyData(selectedKpis), // Generate dummy data only for selected KPIs
+        activeKPIs: new Set(selectedKpis),
+        kpiColors: chartKpiColors,
+        layout: position,
           width: 400,
           height: 300,
         };
       }
     });
 
+  try {
     const charts = await Promise.all(chartPromises);
     console.log("Generated charts:", charts);
     return charts;
@@ -543,9 +539,6 @@ const retryFetch = async <T,>(
   // If we've exhausted all retries, throw the last error
   throw lastError;
 };
-
-// Create a Theme Context that will allow updating the chart theme separately
-import { createContext, useContext, useState } from 'react';
 
 // Create a separate component for the dashboard content to prevent header from re-rendering
 const DashboardContent = React.memo(({
@@ -647,6 +640,54 @@ const DashboardContent = React.memo(({
         theme={chartThemes[selectedTheme as keyof typeof chartThemes]} // Ensure this resolves to a valid theme object
         resolution={resolution}
         onLayoutChange={handleLayoutChange}
+        templateId={selectedApiTemplate}
+        templateData={{
+          template_id: selectedApiTemplate,
+          template_name:
+            apiTemplates.find((t) => t.id === selectedApiTemplate)?.name ||
+            "",
+          template_desc:
+            apiTemplates.find((t) => t.id === selectedApiTemplate)
+              ?.description || "",
+          default:
+            apiTemplates.find((t) => t.id === selectedApiTemplate)
+              ?.isDefault || false,
+          favorite:
+            apiTemplates.find((t) => t.id === selectedApiTemplate)
+              ?.isFavorite || false,
+          frequency:
+            apiTemplates.find((t) => t.id === selectedApiTemplate)
+              ?.frequency || "5m",
+          systems:
+            apiTemplates.find((t) => t.id === selectedApiTemplate)?.systems ||
+            [],
+          graphs: charts.map((chart) => {
+            const templateGraph = apiTemplates
+              .find((t) => t.id === selectedApiTemplate)
+              ?.graphs.find((g) => g.id === chart.id);
+            return {
+              graph_id: chart.id,
+              graph_name: chart.title,
+              primary_kpi_id:
+                Array.from(chart.activeKPIs || new Set<string>())[0] || "",
+              secondary_kpis: Array.from(
+                chart.activeKPIs || new Set<string>()
+              )
+                .slice(1)
+                .map((kpi) => ({ kpi_id: kpi })),
+              frequency: "5m",
+              resolution: "1d",
+              systems: [],
+              top_xy_pos: chart.layout 
+                ? `${chart.layout.y * 10}:${chart.layout.x * 10}` 
+                : "0:0",
+              bottom_xy_pos: chart.layout 
+                ? `${(chart.layout.y + chart.layout.h) * 10}:${(chart.layout.x + chart.layout.w) * 10}` 
+                : "0:0",
+            };
+          }),
+        }}
+        useDynamicLayout={!hasSavedLayouts} // Tell DynamicLayout whether to use saved or dynamic layout
       />
     </div>
   );
@@ -1258,82 +1299,7 @@ export default function Dashboard() {
     }
   };
 
-  // Add fetchTemplateById function before fetchTemplates
-  // const fetchTemplateById = useCallback(async (templateId: string) => {
-  //   try {
-  //     setIsContentLoading(true);
-  //     setHasError(false);
-  //     setErrorMessage(null);
-
-  //     console.log(`Fetching template with ID: ${templateId}`);
-
-  //     const data = await retryFetch(async () => {
-  //       const response = await fetch(
-  //         `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${templateId}`
-  //       );
-
-  //       if (!response.ok) {
-  //         throw new Error(`Failed to fetch template: ${response.statusText}`);
-  //       }
-
-  //       const responseData = await response.json();
-
-  //       if (!responseData || !responseData.length) {
-  //         throw new Error("Template not found");
-  //       }
-
-  //       return responseData;
-  //     });
-
-  //     // Normalize the template
-  //     const template = normalizeTemplate(data[0]);
-
-  //     // Create date range from the global date range
-  //     const dateRangeForAPI = {
-  //       from: globalDateRange?.from || new Date(new Date().setDate(new Date().getDate() - 7)),
-  //       to: globalDateRange?.to || new Date(),
-  //     };
-
-  //     // Generate charts from the template
-  //     console.log(`Generating charts for template "${template.name}" with resolution ${resolution}`);
-  //     const newCharts = await generateChartsFromTemplate(
-  //       template,
-  //       resolution,
-  //       dateRangeForAPI
-  //     );
-
-  //     // Update charts
-  //     if (Array.isArray(newCharts) && newCharts.length > 0) {
-  //       setCharts(newCharts);
-  //     } else {
-  //       console.warn("No charts returned from template, showing empty dashboard");
-  //       setCharts([]);
-  //     }
-
-  //     // Force a layout refresh
-  //     setTimeout(() => {
-  //       window.dispatchEvent(new Event("resize"));
-  //     }, 200);
-
-  //   } catch (error) {
-  //     console.error("Error fetching template by ID:", error);
-  //     setHasError(true);
-  //     setErrorMessage(
-  //       error instanceof Error
-  //         ? `Failed to load template: ${error.message}`
-  //         : "Failed to load template. Please try again."
-  //     );
-  //     toast.error("Failed to load template", {
-  //       description: error instanceof Error ? error.message : "Please try again",
-  //     });
-      
-  //     setCharts([]);
-  //   } finally {
-  //     setTimeout(() => setIsContentLoading(false), 300);
-  //   }
-  // }, [resolution, globalDateRange, setCharts, setIsContentLoading, setHasError, setErrorMessage, generateChartsFromTemplate]);
-
-  // Now your fetchTemplates function can use fetchTemplateById
+  // Update fetchTemplates to use safeLocalStorage
   const fetchTemplates = useCallback(async () => {
     try {
       // Only set content loading to true, keep header interactive
@@ -1379,25 +1345,45 @@ export default function Dashboard() {
 
       setApiTemplates(normalizedTemplates);
 
-      // Find default template if available
-      const defaultTemplate = normalizedTemplates.find((t) => t.isDefault);
+      // Try to get the last selected template from localStorage
+      const lastSelectedTemplate = safeLocalStorage.getItem('last-selected-template');
+      
+      // Determine which template to load
+      let templateToLoad: string | undefined;
+      
+      if (lastSelectedTemplate) {
+        // Check if the stored template still exists in the fetched templates
+        const templateExists = normalizedTemplates.some(t => t.id === lastSelectedTemplate);
+        if (templateExists) {
+          templateToLoad = lastSelectedTemplate;
+          console.log(`Loading last selected template from localStorage: ${templateToLoad}`);
+        }
+      }
+      
+      // If no valid template from localStorage, fall back to default or first template
+      if (!templateToLoad) {
+        // Find default template if available
+        const defaultTemplate = normalizedTemplates.find((t) => t.isDefault);
 
-      if (defaultTemplate) {
-        console.log(`Found default template: "${defaultTemplate.name}"`);
-        setSelectedApiTemplate(defaultTemplate.id);
+        if (defaultTemplate) {
+          console.log(`No last template or not found, using default template: "${defaultTemplate.name}"`);
+          templateToLoad = defaultTemplate.id;
+        } else if (normalizedTemplates.length > 0) {
+          // If no default, use the first template
+          const firstTemplate = normalizedTemplates[0];
+          console.log(
+            `No default template found, using first template: "${firstTemplate.name}"`
+          );
+          templateToLoad = firstTemplate.id;
+        }
+      }
 
+      if (templateToLoad) {
+        setSelectedApiTemplate(templateToLoad);
+        // Save the selected template to localStorage
+        safeLocalStorage.setItem('last-selected-template', templateToLoad);
         // Now use the properly defined fetchTemplateById function
-        await fetchTemplateById(defaultTemplate.id);
-      } else if (normalizedTemplates.length > 0) {
-        // If no default, use the first template
-        const firstTemplate = normalizedTemplates[0];
-        console.log(
-          `No default template found, using first template: "${firstTemplate.name}"`
-        );
-        setSelectedApiTemplate(firstTemplate.id);
-
-        // Now use the properly defined fetchTemplateById function
-        await fetchTemplateById(firstTemplate.id);
+        await fetchTemplateById(templateToLoad);
       } else {
         console.log("No templates found");
         setHasError(true);
@@ -1431,6 +1417,75 @@ export default function Dashboard() {
       setTimeout(() => setIsContentLoading(false), 300);
     }
   }, [fetchTemplateById]);
+
+  // Update handleApiTemplateChange to use safeLocalStorage
+  const handleApiTemplateChange = useCallback(
+    (templateId: string) => {
+      // Don't change template if we're in the middle of a theme change
+      if (isChangingThemeRef.current) return;
+      
+      if (templateId === selectedApiTemplate) return;
+
+      console.log(
+        `Changing template from ${selectedApiTemplate} to ${templateId}`
+      );
+      setSelectedApiTemplate(templateId);
+      setIsContentLoading(true);
+      
+      // Save the selected template to localStorage
+      safeLocalStorage.setItem('last-selected-template', templateId);
+
+      // Store current theme selection for later application
+      const currentTheme = selectedTheme;
+      const themeColors = chartThemes[currentTheme as keyof typeof chartThemes]?.colors || [];
+
+      // Explicitly call fetchTemplateById to ensure loading the new template
+      fetchTemplateById(templateId)
+        .then(() => {
+          // After template loads, ensure the theme is properly applied to new charts
+          if (currentTheme) {
+            // Use a small delay to ensure the charts are loaded first
+            setTimeout(() => {
+              // Re-apply the current theme to the new template's charts
+              setCharts((prevCharts: ChartConfig[]) => {
+                const themeObj = chartThemes[currentTheme as keyof typeof chartThemes];
+                
+                if (!themeObj) return prevCharts;
+                
+                return prevCharts.map((chart) => {
+                  // Only update colors for KPIs that are actually active in this chart
+                  const updatedKpiColors = { ...chart.kpiColors };
+                  const activeKpiArray = Array.from(chart.activeKPIs || new Set<string>());
+                  
+                  activeKpiArray.forEach((kpi, index) => {
+                      if (updatedKpiColors[kpi] && typeof updatedKpiColors[kpi] === 'object') {
+                        updatedKpiColors[kpi] = {
+                          ...updatedKpiColors[kpi],
+                          color: themeObj.colors[index % themeObj.colors.length]
+                        };
+                      }
+                    });
+                  
+                  return {
+                    ...chart,
+                    kpiColors: updatedKpiColors
+                  };
+                });
+              });
+              
+              // Force charts to redraw with the new theme
+              window.dispatchEvent(new Event("resize"));
+            }, 200);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching template:", error);
+          toast.error("Failed to load template");
+          setIsContentLoading(false);
+        });
+    },
+    [selectedApiTemplate, fetchTemplateById, selectedTheme, chartThemes]
+  );
 
   // Initialize dashboard with templates
   useEffect(() => {
@@ -1483,73 +1538,6 @@ export default function Dashboard() {
     };
   }, [fetchTemplates]);
 
-  // Enhanced handleApiTemplateChange function to properly preserve theme between templates
-  const handleApiTemplateChange = useCallback(
-    (templateId: string) => {
-      // Don't change template if we're in the middle of a theme change
-      if (isChangingThemeRef.current) return;
-      
-      if (templateId === selectedApiTemplate) return;
-
-      console.log(
-        `Changing template from ${selectedApiTemplate} to ${templateId}`
-      );
-      setSelectedApiTemplate(templateId);
-      setIsContentLoading(true);
-
-      // Store current theme selection for later application
-      const currentTheme = selectedTheme;
-      const themeColors = chartThemes[currentTheme as keyof typeof chartThemes]?.colors || [];
-
-      // Explicitly call fetchTemplateById to ensure loading the new template
-      fetchTemplateById(templateId)
-        .then(() => {
-          // After template loads, ensure the theme is properly applied to new charts
-          if (currentTheme) {
-            // Use a small delay to ensure the charts are loaded first
-            setTimeout(() => {
-              // Re-apply the current theme to the new template's charts
-              setCharts((prevCharts) => {
-                const themeObj = chartThemes[currentTheme as keyof typeof chartThemes];
-                
-                if (!themeObj) return prevCharts;
-                
-                return prevCharts.map((chart) => {
-                  // Create updated kpiColors with the current theme's colors
-                  const updatedKpiColors = { ...chart.kpiColors };
-                  
-                  if (chart.kpiColors) {
-                    Object.keys(chart.kpiColors).forEach((kpi, index) => {
-                      if (updatedKpiColors[kpi] && typeof updatedKpiColors[kpi] === 'object') {
-                        updatedKpiColors[kpi] = {
-                          ...updatedKpiColors[kpi],
-                          color: themeObj.colors[index % themeObj.colors.length]
-                        };
-                      }
-                    });
-                  }
-                  
-                  return {
-                    ...chart,
-                    kpiColors: updatedKpiColors
-                  };
-                });
-              });
-              
-              // Force charts to redraw with the new theme
-              window.dispatchEvent(new Event("resize"));
-            }, 200);
-          }
-        })
-        .catch((error) => {
-          console.error("Error fetching template:", error);
-          toast.error("Failed to load template");
-          setIsContentLoading(false);
-        });
-    },
-    [selectedApiTemplate, fetchTemplateById, selectedTheme, chartThemes]
-  );
-
   // Update handleResolutionChange to maintain current template and provide smoother transitions
   const handleResolutionChange = useCallback(
     (newResolution: string) => {
@@ -1569,6 +1557,18 @@ export default function Dashboard() {
       // Use a shorter timeout for faster response
       setTimeout(async () => {
         try {
+          // Clear any cached data for existing charts to force fresh data fetch with new resolution
+          if (typeof window !== 'undefined') {
+            // This is a client-side only operation
+            if (window.clearChartCaches) {
+              window.clearChartCaches();
+            } else {
+              console.log("Forcing data refresh for resolution change");
+              // Add timestamp to force refetch
+              window.forceRefreshTimestamp = Date.now();
+            }
+          }
+          
           // Store the current template ID to maintain it after resolution change
           const currentTemplateId = selectedApiTemplate;
           
@@ -1927,7 +1927,7 @@ export default function Dashboard() {
     });
   };
 
-  // Helper function to get colors for each theme
+  // Find the actual getThemeColors function and add the useEffect right after it
   const getThemeColors = (themeName: string) => {
     switch (themeName) {
       case 'blue':
@@ -1945,7 +1945,31 @@ export default function Dashboard() {
         return ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
     }
   };
-  
+
+  // Add a useEffect for scroll detection to enhance the sticky header
+  useEffect(() => {
+    const handleScroll = () => {
+      const header = document.querySelector('.sticky-header-wrapper > div');
+      if (!header) return;
+      
+      if (window.scrollY > 10) {
+        header.classList.add('shadow-lg');
+        header.classList.add('bg-card/95');
+      } else {
+        header.classList.remove('shadow-lg');
+        header.classList.remove('bg-card/95');
+      }
+    };
+
+    // Add scroll event listener
+    window.addEventListener('scroll', handleScroll);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
   // Modify the render dashboard content function to use content-only loading
   const renderDashboardContent = () => {
 
@@ -2147,11 +2171,11 @@ export default function Dashboard() {
       <main className={`flex-1 overflow-y-auto transition-all duration-300`}>
         <div className="container mx-auto px-6 py-6 max-w-[1600px]">
           {/* Dashboard header with title and save button */}
-          <div className="flex flex-col mb-4">
+          <div className="flex flex-col mb-4 sticky-header-wrapper">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex justify-between items-center bg-card/80 rounded-lg px-4 py-3 mb-4 shadow-sm border border-border/30"
+              className="flex justify-between items-center bg-card/80 backdrop-blur-lg rounded-lg px-4 py-3 mb-4 shadow-sm border border-border/30 sticky top-0 z-50 transition-shadow duration-300 ease-in-out"
             >
               <div className="flex items-center gap-6">
                 <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight whitespace-nowrap">

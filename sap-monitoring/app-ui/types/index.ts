@@ -50,18 +50,16 @@ export interface Graph {
 export interface ChartConfig {
   id: string;
   data: DataPoint[];
-  type: ChartType;
+  type: "line" | "bar";
   title: string;
   width: number;
   height: number;
   activeKPIs?: Set<string> | string[];
   kpiColors?: Record<string, { color: string; name: string; icon?: any }>;
-  layout?: {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  };
+  layout?: { x: number; y: number; w: number; h: number };
+  hideControls?: boolean;
+  onDeleteGraph?: (id: string) => void;
+  isLoading?: boolean;
 }
 
 export type TemplateKey = 'default' | 'single' | 'dual' | 'triple' | 'quad' | 'five' | 'six' | 'seven' | 'eight';

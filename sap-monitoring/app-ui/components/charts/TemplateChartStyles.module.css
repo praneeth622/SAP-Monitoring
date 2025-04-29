@@ -219,3 +219,116 @@
   -moz-user-select: none !important;
   -ms-user-select: none !important;
 }
+
+/* Update chart title styles for better readability */
+.chartTitle {
+  font-weight: 600;
+  color: #4B5563;
+  opacity: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  transition: all 0.2s ease;
+  text-align: center;
+  width: 100%;
+  padding: 0 8px;
+  min-height: 50px;
+  text-shadow: 0 0 1px rgba(0,0,0,0.05);
+}
+
+/* Update chart header styles */
+.chartControls .chart-title {
+  font-weight: 600 !important;
+  color: #4B5563 !important;
+  opacity: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  line-height: 1.3;
+  transition: all 0.2s ease;
+  text-align: center;
+  padding: 0 8px;
+  min-height: 24px;
+  text-shadow: 0 0 1px rgba(0,0,0,0.05);
+}
+
+/* Ensure chart titles are not selectable during resize */
+.resizePrevention :global(.react-grid-item) .chart-title {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  font-weight: 600 !important;
+  color: #4B5563 !important;
+  opacity: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+  min-height: 24px;
+  text-shadow: 0 0 1px rgba(0,0,0,0.05);
+}
+
+/* Add hover effect for better visibility */
+.chartControls .chart-title:hover {
+  opacity: 1;
+  color: #374151 !important;
+}
+
+/* Update the header background for better contrast */
+.chartControls .chart-header {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 3px 6px;
+  min-height: 24px;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Add container styles for better title fitting */
+.chartContainer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Add responsive title container */
+.titleContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  overflow: hidden;
+  padding: 0 4px;
+}
+
+/* Add styles for different chart sizes */
+.smallChart .chart-title {
+  min-height: 24px;
+  font-size: 11px;
+}
+
+.mediumChart .chart-title {
+  min-height: 24px;
+  font-size: 12px;
+}
+
+.largeChart .chart-title {
+  min-height: 24px;
+  font-size: 13px;
+}
+
+/* Fullscreen mode styles */
+.fullscreen-chart .chart-title {
+  font-size: 14px !important;
+  min-height: 28px !important;
+  padding: 0 10px !important;
+}

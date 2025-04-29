@@ -20,6 +20,7 @@ import {
 import { saveAs } from "file-saver";
 import { Button } from "../ui/button";
 import { jsPDF } from "jspdf";
+import { format, differenceInDays, differenceInHours, differenceInMinutes, isValid } from "date-fns";
 
 interface ChartContainerProps {
   data: DataPoint[];
@@ -38,6 +39,50 @@ interface ChartContainerProps {
   height?: string;
   resolution?: string;
 }
+
+const getDateFormatter = (dates: string[]) => {
+  if (dates.length < 2) return (date: string) => date;
+
+  try {
+    const start = new Date(dates[0]);
+    const end = new Date(dates[dates.length - 1]);
+
+    if (!isValid(start) || !isValid(end)) return (date: string) => date;
+
+    const diffDays = differenceInDays(end, start);
+    const diffHours = differenceInHours(end, start);
+    const diffMinutes = differenceInMinutes(end, start);
+
+    return (date: string) => {
+      try {
+        const dateObj = new Date(date);
+        if (!isValid(dateObj)) return date;
+
+        if (diffDays > 365) {
+          return format(dateObj, 'MMM yyyy');
+        } else if (diffDays > 30) {
+          return format(dateObj, 'dd MMM');
+        } else if (diffDays > 7) {
+          return format(dateObj, 'MMM dd');
+        } else if (diffDays > 1) {
+          return format(dateObj, 'EEE HH:mm');
+        } else if (diffHours > 24) {
+          return format(dateObj, 'HH:mm');
+        } else if (diffMinutes > 60) {
+          return format(dateObj, 'HH:mm');
+        } else {
+          return format(dateObj, 'HH:mm:ss');
+        }
+      } catch (error) {
+        console.warn('Error formatting date:', date, error);
+        return date;
+      }
+    };
+  } catch (error) {
+    console.warn('Error setting up date formatter:', error);
+    return (date: string) => date;
+  }
+};
 
 const ChartContainer = memo(
   React.forwardRef<
@@ -317,24 +362,29 @@ const ChartContainer = memo(
           animation: true,
           animationDuration: 300,
           animationEasing: "cubicInOut",
-          // Add title with smaller font size
-          title: {
-            text: title,
+          // Only show title if it's not empty
+          title: title ? {
+            text: title.replace(/\./g, ''),
             textStyle: {
-              fontSize: 11, // Decreased font size for graph name
+              fontSize: 8,
               fontWeight: 'normal',
-              color: '#666'
+              color: '#666',
+              overflow: 'break',
+              width: '100%',
+              lineHeight: 12
             },
             left: 'center',
-            top: 0,
-            padding: [0, 0, 5, 0]
-          },
+            top: 2,
+            padding: [0, 0, 2, 0],
+            textAlign: 'center',
+            triggerEvent: true
+          } : undefined,
           grid: {
-            left: "10px",
-            right: "10px",
-            bottom: "35px",
-            top: "25px", // Increased a bit to accommodate the title
-            containLabel: true,
+            left: "20px",
+            right: "20px",
+            bottom: "60px",
+            top: title ? "18px" : "10px",
+            containLabel: true
           },
           tooltip: {
             trigger: "axis",
@@ -393,22 +443,65 @@ const ChartContainer = memo(
               xAxisIndex: [0],
               start: 0,
               end: 100,
-              height: 12,
-              bottom: 8,
+              height: 16,
+              bottom: 30,
               borderColor: "transparent",
               backgroundColor: "rgba(0,0,0,0.05)",
               fillerColor: "rgba(0,0,0,0.1)",
               handleStyle: {
                 color: theme?.colors?.[0] || "#666",
                 borderColor: "transparent",
+                opacity: 0.8,
+                shadowBlur: 2,
+                shadowColor: 'rgba(0,0,0,0.2)',
+                borderRadius: 2
               },
-              handleLabel: {
-                show: false,
+              selectedDataBackground: {
+                lineStyle: {
+                  color: theme?.colors?.[0] || "#666",
+                  opacity: 0.3,
+                },
+                areaStyle: {
+                  color: theme?.colors?.[0] || "#666",
+                  opacity: 0.1,
+                },
               },
-              moveHandleSize: 0,
+              emphasis: {
+                handleStyle: {
+                  opacity: 1,
+                  shadowBlur: 4,
+                  borderRadius: 2
+                },
+                handleLabel: {
+                  show: true,
+                },
+              },
+              handleIcon: 'path://M 4 8 L 4 -8 L -4 -8 L -4 8 Z',
+              handleSize: '80%',
+              moveHandleSize: 3,
               zoomLock: false,
               throttle: 100,
-              zoomOnMouseWheel: true,
+              textStyle: {
+                color: "#666",
+                fontSize: 10,
+              },
+              labelFormatter: (value: number) => {
+                try {
+                  const index = Math.floor((value / 100) * (dates.length - 1));
+                  if (index < 0 || index >= dates.length) return '';
+                  
+                  const dateStr = dates[index];
+                  if (!dateStr) return '';
+
+                  const date = new Date(dateStr);
+                  if (!isValid(date)) return dateStr;
+
+                  return format(date, 'MMM dd HH:mm');
+                } catch (error) {
+                  console.warn('Error formatting zoom label:', error);
+                  return '';
+                }
+              },
             },
             {
               type: "inside",
@@ -416,26 +509,51 @@ const ChartContainer = memo(
               start: 0,
               end: 100,
               zoomOnMouseWheel: true,
+              moveOnMouseMove: true,
             },
           ],
           xAxis: {
             type: "category",
             data: dates,
             axisLabel: {
-              formatter: (value: string) => value,
-              margin: 8,
+              formatter: (value: string) => {
+                try {
+                  const date = new Date(value);
+                  if (!isValid(date)) return value;
+                  
+                  const formatter = getDateFormatter(dates);
+                  return formatter(value);
+                } catch (error) {
+                  console.warn('Error formatting axis label:', error);
+                  return value;
+                }
+              },
+              interval: 'auto',
+              showMaxLabel: true,
+              hideOverlap: true,
+              margin: 14,
               fontSize: 10,
               color: "#666",
-              rotate: filteredData.length > 100 ? 45 : 0,
+              rotate: 0,
             },
-            axisLine: {
+            axisTick: {
+              alignWithLabel: true,
+              length: 3,
               lineStyle: {
                 color: "#666",
               },
             },
-            axisTick: {
+            axisLine: {
+              lineStyle: {
+                color: "#666",
+                width: 1,
+              },
+              onZero: false,
+            },
+            splitLine: {
               show: false,
             },
+            boundaryGap: true,
           },
           yAxis: {
             type: "value",
@@ -443,18 +561,26 @@ const ChartContainer = memo(
               formatter: (value: number) => value.toString(),
               fontSize: 10,
               color: "#666",
-              margin: 8,
+              margin: 4,
+              align: 'right'
             },
             axisLine: {
               lineStyle: {
-                color: "#666",
-              },
+                color: "#666"
+              }
             },
             splitLine: {
               lineStyle: {
-                color: "rgba(0, 0, 0, 0.05)",
-              },
+                color: "rgba(0, 0, 0, 0.05)"
+              }
             },
+            axisTick: {
+              show: true,
+              length: 3,
+              lineStyle: {
+                color: "#666"
+              }
+            }
           },
           series,
         };

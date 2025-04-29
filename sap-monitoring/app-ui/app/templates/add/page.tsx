@@ -19,9 +19,10 @@ import {
 import { DynamicLayout } from "@/components/charts/DynamicLayout";
 import { generateDummyData, fetchTemplateChartData } from "@/utils/data";
 import { toast } from "sonner";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, useParams } from "next/navigation";
 import debounce from "lodash/debounce";
 import { app_globals } from "@/config/config";
+import { Layout } from "react-grid-layout";
 
 interface Template {
   id: string;
@@ -59,6 +60,14 @@ interface Graph {
   kpiColors: Record<string, { color: string; name: string }>;
   timeInterval?: string; // Add this field
   resolution?: string;   // Add this field
+  
+  // Legacy API properties - added to fix linter errors
+  primary_kpi_ma?: string; // Monitoring area in legacy format
+  primary_kpi_kpigrp?: string; // KPI group in legacy format
+  primary_kpi_id?: string; // Primary KPI in legacy format
+  secondary_kpis?: Array<{ kpi_id: string, [key: string]: any }>; // Secondary KPIs in legacy format
+  top_xy_pos?: string; // Position in legacy format (x:y)
+  bottom_xy_pos?: string; // Position in legacy format (x:y)
 }
 
 interface DataPoint {
@@ -303,40 +312,29 @@ export default function TemplatesPage() {
 
   // Add a function to handle editing a graph
   const handleEditGraph = (graphId: string) => {
-
-    // Check if the graph was just added (has a temporary ID)
-    const isNewlyAddedGraph = graphId.startsWith('graph-') && !isEditMode && hasChanges;
-
-    if (isNewlyAddedGraph) {
-      // Show a friendly toast message instead of letting the error occur
-      toast.warning("Please save the template first before editing this newly added graph.");
-      return;
-    }
-
-    // Otherwise, proceed with normal edit flow
-    const graphToEdit = graphs.find(graph => graph.id === graphId);
-
+    const graphToEdit = graphs.find((graph) => graph.id === graphId);
+    
     if (graphToEdit) {
       console.log("Editing graph:", graphToEdit);
 
       // Create a properly formatted editing graph object
-      const formattedEditingGraph = {
+      const formattedEditingGraph: Graph = {
         id: graphToEdit.id,
         name: graphToEdit.name,
         type: graphToEdit.type,
-        monitoringArea: graphToEdit.monitoringArea || graphToEdit.primary_kpi_ma, // Handle both formats
-        kpiGroup: graphToEdit.kpiGroup || graphToEdit.primary_kpi_kpigrp, // Handle both formats
-        primaryKpi: graphToEdit.primaryKpi || graphToEdit.primary_kpi_id, // Handle both formats
-        correlationKpis: graphToEdit.correlationKpis ||
-          (graphToEdit.secondary_kpis?.map(sk => sk.kpi_id) || []), // Map secondary KPIs
-        layout: graphToEdit.layout || {
-          x: parseInt(graphToEdit.top_xy_pos?.split(':')[0] || '0') / 10,
-          y: parseInt(graphToEdit.top_xy_pos?.split(':')[1] || '0') / 10,
+        monitoringArea: graphToEdit.monitoringArea ?? graphToEdit.primary_kpi_ma ?? '', // Handle both formats with default
+        kpiGroup: graphToEdit.kpiGroup ?? graphToEdit.primary_kpi_kpigrp ?? '', // Handle both formats with default
+        primaryKpi: graphToEdit.primaryKpi ?? graphToEdit.primary_kpi_id ?? '', // Handle both formats with default
+        correlationKpis: graphToEdit.correlationKpis ??
+          (graphToEdit.secondary_kpis?.map(sk => sk.kpi_id) ?? []), // Map secondary KPIs
+        layout: graphToEdit.layout ?? {
+          x: parseInt(graphToEdit.top_xy_pos?.split(':')[0] ?? '0') / 10,
+          y: parseInt(graphToEdit.top_xy_pos?.split(':')[1] ?? '0') / 10,
           w: 4,
           h: 2
         },
-        activeKPIs: graphToEdit.activeKPIs || new Set(),
-        kpiColors: graphToEdit.kpiColors || {}
+        activeKPIs: graphToEdit.activeKPIs ?? new Set(),
+        kpiColors: graphToEdit.kpiColors ?? {}
       };
 
       // Set the editing graph
@@ -473,8 +471,24 @@ export default function TemplatesPage() {
     (graphId: string) => {
       // Ask for confirmation
       if (confirm("Are you sure you want to delete this graph?")) {
+        // Set a marker to indicate we're about to delete a graph
+        // This will be read by the DynamicLayout component to prevent double layout reset
+        if (templateId) {
+          localStorage.setItem('graph-deletion-in-progress', templateId || 'new-template');
+        }
+        
+        // Update state to remove the graph
         setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
-        setHasChanges(true); // <-- Add this line
+        setHasChanges(true);
+        
+        // Mark template for layout reset - this ensures proper layout adjustment
+        localStorage.setItem('template-graph-change', JSON.stringify({
+          templateId: templateId || 'new-template',
+          needsReset: true,
+          action: 'delete',
+          timestamp: new Date().toISOString()
+        }));
+        
         toast.success("Graph deleted successfully");
 
         // If we deleted the last graph, hide the graphs section
@@ -482,13 +496,18 @@ export default function TemplatesPage() {
           setShowGraphs(false);
         }
 
-        // Force a layout refresh
+        // Force a layout refresh with delay - this allows state updates to finish first
         setTimeout(() => {
           window.dispatchEvent(new Event("resize"));
+          
+          // Clean up the deletion marker after a delay
+          setTimeout(() => {
+            localStorage.removeItem('graph-deletion-in-progress');
+          }, 300);
         }, 200);
       }
     },
-    [graphs.length]
+    [graphs.length, templateId]
   );
 
   // Function to render charts with optimized data loading
@@ -1192,7 +1211,17 @@ export default function TemplatesPage() {
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
 
-  
+      // Set template-graph-change flag for dynamic layout on initial view
+      // Use a temporary ID or 'new-template' for templates that don't have an ID yet
+      const templateId = params.id || `new-template-${Date.now()}`;
+      localStorage.setItem('template-graph-change', JSON.stringify({
+        templateId,
+        graphCount: graphs.length + 1,
+        timestamp: new Date().toISOString(),
+        needsReset: true,
+        action: 'add'
+      }));
+
       // Calculate optimal layout based on number of graphs
       let layout = { x: 0, y: 0, w: 4, h: 4 }; // Default layout
   
@@ -1264,7 +1293,6 @@ export default function TemplatesPage() {
       }
   
       // Create API-compatible graph object with calculated layout
-
       const newGraph: Graph = {
         ...graphData,
         id: `graph-${Date.now()}`,
@@ -1276,7 +1304,6 @@ export default function TemplatesPage() {
         resolution: graphData.resolution || templateData.resolution,
 
         layout: layout,
-
       };
   
       // Update graphs and show immediately
@@ -1367,6 +1394,55 @@ export default function TemplatesPage() {
       toast.error("Failed to update graph");
     }
   };
+
+  const handleLayoutReset = useCallback(async (newLayout: Layout[]) => {
+    console.log("Layout reset requested from DynamicLayout");
+    
+    // Map the layout to the graphs
+    const updatedGraphs = graphs.map((graph, index) => {
+      // Find the corresponding layout
+      const layout = newLayout.find(l => l.i === graph.id);
+      
+      if (layout) {
+        return {
+          ...graph,
+          layout: {
+            x: layout.x,
+            y: layout.y,
+            w: layout.w,
+            h: layout.h
+          }
+        };
+      }
+      
+      return graph;
+    });
+    
+    setGraphs(updatedGraphs);
+    setHasChanges(true);
+    
+    // Set a flag to indicate layout has been optimized
+    localStorage.setItem('template-layout-optimized', 'true');
+    
+    return Promise.resolve();
+  }, [graphs]);
+
+  // On component mount, check if we need to trigger a layout reset
+  const params = useParams();
+  
+  useEffect(() => {
+    if (graphs.length > 0 && !localStorage.getItem('template-layout-optimized')) {
+      // Set the flag for layout reset on first render with graphs
+      const templateId = params.id ? String(params.id) : `new-template-${Date.now()}`;
+      localStorage.setItem('template-graph-change', JSON.stringify({
+        templateId,
+        graphCount: graphs.length,
+        timestamp: new Date().toISOString(),
+        needsReset: true,
+        action: 'initialize'
+      }));
+    }
+  }, [graphs.length, params]);
 
   const pageTitle = isEditMode ? "Edit Template" : "Create Template";
 
@@ -1644,11 +1720,9 @@ export default function TemplatesPage() {
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}
                   onEditGraph={handleEditGraph}
-
+                  onLayoutReset={handleLayoutReset}
                   isTemplatePage={true}
-
                   hideControls={true}
-
                 />
               </div>
             )}

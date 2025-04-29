@@ -401,6 +401,52 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     [data, title]
   );
 
+  // Add state for dynamic font size
+  const [titleFontSize, setTitleFontSize] = useState(7);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // Add effect to calculate and update font size based on container width
+  useEffect(() => {
+    const updateFontSize = () => {
+      if (!titleRef.current || !containerRef.current) return;
+      
+      const containerWidth = containerRef.current.offsetWidth;
+      const titleWidth = titleRef.current.scrollWidth;
+      const containerHeight = containerRef.current.offsetHeight;
+      
+      // Increase base font size and scaling factors
+      let newFontSize = Math.min(
+        Math.max(11, containerWidth * 0.04), // Increased base size and width scaling
+        containerHeight * 0.06  // Increased height scaling
+      );
+      
+      // Adjust if title is too long, but maintain minimum readable size
+      if (titleWidth > containerWidth * 0.9) {
+        const scaleFactor = (containerWidth * 0.9) / titleWidth;
+        newFontSize = Math.max(11, newFontSize * scaleFactor); // Never go below 11px
+      }
+      
+      // Ensure font size stays within readable bounds
+      newFontSize = Math.max(11, Math.min(newFontSize, isFullscreen ? 14 : 13));
+      
+      setTitleFontSize(Math.floor(newFontSize));
+    };
+
+    // Create resize observer
+    const resizeObserver = new ResizeObserver(updateFontSize);
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Initial calculation
+    updateFontSize();
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isFullscreen]);
+
   return (
     <>
       {isFullscreen && (
@@ -453,7 +499,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               </div>
             )}
 
-            <div className="flex h-5 items-center justify-between border-b border-border bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-6 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
               <div className="flex items-center gap-2">
                 {!isFullscreen && !isTemplatePage && (
                   <div
@@ -474,13 +520,30 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                   </div>
                 )}
                 <h3
+                  ref={titleRef}
                   className={cn(
-                    "font-medium truncate chart-title",
-                    isFullscreen ? "text-sm" : "text-xs"
+                    "font-medium chart-title text-muted-foreground",
+                    "transition-all duration-200",
+                    isFullscreen ? "py-1.5" : "py-1"
                   )}
-                  style={{ userSelect: 'none' }}
+                  style={{ 
+                    userSelect: 'none',
+                    fontSize: `${titleFontSize}px`,
+                    width: '100%',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    lineHeight: '1.3',
+                    padding: '0 8px',
+                    textAlign: 'center',
+                    fontWeight: 630,
+                    letterSpacing: '-0.01em',
+                    color: '#4B5563', // Darker color for better readability
+                    textShadow: '0 0 1px rgba(0,0,0,0.05)' // Subtle text shadow for better contrast
+                  }}
+                  title={title.replace(/\./g, '')} // Show full title on hover
                 >
-                  {title}
+                  {title.replace(/\./g, '')}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -786,7 +849,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                 ref={chartRef as any}
                 data={data}
                 type={chartType}
-                title={title}
+                title=""
                 activeKPIs={localActiveKPIs}
                 kpiColors={kpiColors}
                 dateRange={effectiveDateRange}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -313,6 +313,133 @@ export default function Mainscreen() {
       setLoading(false);
     }
   };
+
+  const handleGraphChange = useCallback(async (template: Template) => {
+    try {
+      const templateId = Array.isArray(template.template_id) 
+        ? template.template_id[0] 
+        : template.template_id;
+      
+      const graphCount = template.graphs?.length || 0;
+
+      // Save the graph change info to localStorage for dashboard sync
+      localStorage.setItem('template-graph-change', JSON.stringify({
+        templateId,
+        graphCount,
+        timestamp: new Date().toISOString(),
+        needsReset: true
+      }));
+
+      // Notify the server about the graph change
+      await fetch(`${baseUrl}/api/ut/notify-graph-change`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId,
+          graphCount,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (error) {
+      console.error('Error notifying graph change:', error);
+    }
+  }, [baseUrl]);
+
+  const onDeleteGraph = useCallback(async (template: Template, graphId: string) => {
+    try {
+      // Get the normalized template ID
+      const templateId = Array.isArray(template.template_id) 
+        ? template.template_id[0] 
+        : template.template_id;
+
+      // Filter out the deleted graph
+      const updatedTemplate = {
+        ...template,
+        graphs: template.graphs?.filter(g => g.graph_id !== graphId) || []
+      };
+
+      // Update the template on the server
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTemplate)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete graph');
+      }
+
+      // Update local state
+      setTemplates(prevTemplates => 
+        prevTemplates.map(t => {
+          const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
+          if (tId === templateId) {
+            return updatedTemplate;
+          }
+          return t;
+        })
+      );
+
+      // Notify about the graph change
+      await handleGraphChange(updatedTemplate);
+
+      toast.success('Graph deleted successfully');
+    } catch (error) {
+      console.error('Error deleting graph:', error);
+      toast.error('Failed to delete graph');
+    }
+  }, [baseUrl, handleGraphChange, setTemplates]);
+
+  const onAddGraph = useCallback(async (template: Template, newGraph: Graph) => {
+    try {
+      // Get the normalized template ID
+      const templateId = Array.isArray(template.template_id) 
+        ? template.template_id[0] 
+        : template.template_id;
+
+      // Add the new graph to the template
+      const updatedTemplate = {
+        ...template,
+        graphs: [...(template.graphs || []), newGraph]
+      };
+
+      // Update the template on the server
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTemplate)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add graph');
+      }
+
+      // Update local state
+      setTemplates(prevTemplates => 
+        prevTemplates.map(t => {
+          const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
+          if (tId === templateId) {
+            return updatedTemplate;
+          }
+          return t;
+        })
+      );
+
+      // Notify about the graph change
+      await handleGraphChange(updatedTemplate);
+
+      toast.success('Graph added successfully');
+    } catch (error) {
+      console.error('Error adding graph:', error);
+      toast.error('Failed to add graph');
+    }
+  }, [baseUrl, handleGraphChange, setTemplates]);
 
   const filteredTemplates = templates.filter((template) => {
     const name = Array.isArray(template.template_name)
