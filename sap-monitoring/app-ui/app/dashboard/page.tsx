@@ -778,6 +778,66 @@ export default function Dashboard() {
     nextRefreshTimeRef.current = nextRefreshTime;
   }, [nextRefreshTime]);
 
+  // Add function to check for saved layouts and handle graph changes
+  const hasSavedLayouts = useCallback(() => {
+    if (!selectedApiTemplate) return false;
+    
+    try {
+      // Check if we have layout info in localStorage
+      const layoutKey = `template-layout-${selectedApiTemplate}`;
+      const savedLayout = localStorage.getItem(layoutKey);
+      
+      // Check if this template already had its layout processed after a graph change
+      const processedKey = `graph-change-processed-${selectedApiTemplate}`;
+      const lastProcessed = localStorage.getItem(processedKey);
+      
+      // Check if there's a pending graph change for this template
+      const graphChangeInfo = localStorage.getItem('template-graph-change');
+      if (graphChangeInfo) {
+        try {
+          const { templateId, needsReset, action, changeId } = JSON.parse(graphChangeInfo);
+          
+          // If this is a graph change for the current template and we haven't processed it yet
+          if (templateId === selectedApiTemplate && needsReset) {
+            console.log(`Detected graph ${action} in template ${templateId}, handling layout reset once`);
+            
+            // Check if we've already processed this exact change
+            if (lastProcessed && changeId) {
+              try {
+                const processedData = JSON.parse(lastProcessed);
+                if (processedData.changeId === changeId) {
+                  console.log("Already processed this exact change, using saved layout");
+                  return !!savedLayout;
+                }
+              } catch (e) {
+                // If parsing fails, proceed with the change
+              }
+            }
+            
+            // Immediately clear the change notification to prevent other components from processing it
+            localStorage.removeItem('template-graph-change');
+            
+            // Mark this template as processed for this session to prevent continuous resets
+            localStorage.setItem(processedKey, JSON.stringify({
+              timestamp: new Date().toISOString(),
+              changeId
+            }));
+            
+            // The DynamicLayout will use resetToDynamicLayout for the initial render
+            return false;
+          }
+        } catch (error) {
+          console.error("Error parsing graph change info:", error);
+        }
+      }
+      
+      return !!savedLayout;
+    } catch (error) {
+      console.error("Error checking for saved layouts:", error);
+      return false;
+    }
+  }, [selectedApiTemplate]);
+
   // Auto-refresh options in seconds
   const autoRefreshOptions = [
     { label: "1 minute", value: 60 },
@@ -1535,8 +1595,14 @@ export default function Dashboard() {
     // Cleanup function to handle unmounting
     return () => {
       isMounted = false;
+      
+      // Add cleanup for processed markers to prevent memory leaks
+      if (selectedApiTemplate) {
+        const processedKey = `graph-change-processed-${selectedApiTemplate}`;
+        localStorage.removeItem(processedKey);
+      }
     };
-  }, [fetchTemplates]);
+  }, [fetchTemplates, selectedApiTemplate, apiTemplates.length]);
 
   // Update handleResolutionChange to maintain current template and provide smoother transitions
   const handleResolutionChange = useCallback(

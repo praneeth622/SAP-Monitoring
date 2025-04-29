@@ -270,6 +270,9 @@ export function DynamicLayout({
   // Add a ref to track previous charts length
   const prevChartsLengthRef = useRef<number>(charts.length);
 
+  // Add a ref to track reset operation in progress
+  const resetInProgressRef = useRef(false);
+
   // Initialize baseUrl from environment
   useEffect(() => {
     // Set base URL from environment or use a default
@@ -378,8 +381,16 @@ export function DynamicLayout({
   const [savedLayoutsLocked, setSavedLayoutsLocked] = useState(false);
   const savedLayoutsRef = useRef(false);
 
-  // First declare resetToDynamicLayout
+  // Modify the resetToDynamicLayout function to use the reset in progress ref
   const resetToDynamicLayout = useCallback(async () => {
+    // Skip if a reset is already in progress
+    if (resetInProgressRef.current) {
+      console.log("Layout reset already in progress, skipping duplicate reset");
+      return [];
+    }
+
+    try {
+      resetInProgressRef.current = true;
     console.log("Resetting to dynamic layout");
 
     // Force unlock saved layouts
@@ -392,18 +403,18 @@ export function DynamicLayout({
       : 1;
     
     const numCharts = charts.length;
-    console.log(`Resetting layout for ${numCharts} charts with height factor ${heightScaleFactor}`);
+      console.log(`Resetting layout for ${numCharts} charts with height factor ${heightScaleFactor}`);
     
     let layoutConfig: Array<{x: number, y: number, w: number, h: number}> = [];
     
-    // Calculate layout based on number of charts - ensure all cases are covered
+      // Calculate layout based on number of charts - ensure all cases are covered
     switch (numCharts) {
       case 1:
-        layoutConfig = [
-          { x: 0, y: 0, w: 12, h: Math.max(12, Math.round(18 * heightScaleFactor)) }
-        ];
+          layoutConfig = [
+            { x: 0, y: 0, w: 12, h: Math.max(12, Math.round(18 * heightScaleFactor)) }
+          ];
         break;
-      
+        
       case 2:
         const twoChartHeight = Math.max(6, Math.round(9 * heightScaleFactor));
         layoutConfig = [
@@ -411,7 +422,7 @@ export function DynamicLayout({
           { x: 0, y: twoChartHeight, w: 12, h: twoChartHeight }
         ];
         break;
-      
+        
       case 3:
         const threeChartHeight = Math.max(5, Math.round(7 * heightScaleFactor));
         layoutConfig = [
@@ -420,7 +431,7 @@ export function DynamicLayout({
           { x: 0, y: threeChartHeight * 2, w: 12, h: threeChartHeight }
         ];
         break;
-      
+        
       case 4:
         const fourChartHeight = Math.max(5, Math.round(8 * heightScaleFactor));
         layoutConfig = [
@@ -430,92 +441,92 @@ export function DynamicLayout({
           { x: 6, y: fourChartHeight, w: 6, h: fourChartHeight }
         ];
         break;
-      
-      case 5:
-        const fiveChartHeight = Math.max(6, Math.round(9 * heightScaleFactor));
-        const row2Height = Math.max(5, Math.round(7 * heightScaleFactor));
-        layoutConfig = [
-          { x: 0, y: 0, w: 4, h: fiveChartHeight },
-          { x: 4, y: 0, w: 4, h: fiveChartHeight },
-          { x: 8, y: 0, w: 4, h: fiveChartHeight },
-          { x: 0, y: fiveChartHeight, w: 6, h: row2Height },
-          { x: 6, y: fiveChartHeight, w: 6, h: row2Height }
-        ];
-        break;
-      
-      case 6:
-        const sixChartHeight = Math.max(6, Math.round(7.5 * heightScaleFactor));
-        layoutConfig = [
-          { x: 0, y: 0, w: 4, h: sixChartHeight },
-          { x: 4, y: 0, w: 4, h: sixChartHeight },
-          { x: 8, y: 0, w: 4, h: sixChartHeight },
-          { x: 0, y: sixChartHeight, w: 4, h: sixChartHeight },
-          { x: 4, y: sixChartHeight, w: 4, h: sixChartHeight },
-          { x: 8, y: sixChartHeight, w: 4, h: sixChartHeight }
-        ];
-        break;
-      
-      case 7:
-        const sevenChartHeight = Math.max(5, Math.round(6 * heightScaleFactor));
-        const sevenBottomHeight = Math.max(5, Math.round(7 * heightScaleFactor));
-        layoutConfig = [
-          { x: 0, y: 0, w: 4, h: sevenChartHeight },
-          { x: 4, y: 0, w: 4, h: sevenChartHeight },
-          { x: 8, y: 0, w: 4, h: sevenChartHeight },
-          { x: 0, y: sevenChartHeight, w: 4, h: sevenChartHeight },
-          { x: 4, y: sevenChartHeight, w: 4, h: sevenChartHeight },
-          { x: 8, y: sevenChartHeight, w: 4, h: sevenChartHeight },
-          { x: 0, y: sevenChartHeight * 2, w: 12, h: sevenBottomHeight }
-        ];
-        break;
-      
-      case 8:
-        const eightChartHeight = Math.max(4, Math.round(5 * heightScaleFactor));
-        layoutConfig = [
-          { x: 0, y: 0, w: 4, h: eightChartHeight },
-          { x: 4, y: 0, w: 4, h: eightChartHeight },
-          { x: 8, y: 0, w: 4, h: eightChartHeight },
-          { x: 0, y: eightChartHeight, w: 4, h: eightChartHeight },
-          { x: 4, y: eightChartHeight, w: 4, h: eightChartHeight },
-          { x: 8, y: eightChartHeight, w: 4, h: eightChartHeight },
-          { x: 0, y: eightChartHeight * 2, w: 6, h: eightChartHeight },
-          { x: 6, y: eightChartHeight * 2, w: 6, h: eightChartHeight }
-        ];
-        break;
-      
-      case 9:
-        const nineChartHeight = Math.max(5, Math.round(6 * heightScaleFactor));
-        layoutConfig = [
-          { x: 0, y: 0, w: 4, h: nineChartHeight },
-          { x: 4, y: 0, w: 4, h: nineChartHeight },
-          { x: 8, y: 0, w: 4, h: nineChartHeight },
-          { x: 0, y: nineChartHeight, w: 4, h: nineChartHeight },
-          { x: 4, y: nineChartHeight, w: 4, h: nineChartHeight },
-          { x: 8, y: nineChartHeight, w: 4, h: nineChartHeight },
-          { x: 0, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
-          { x: 4, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
-          { x: 8, y: nineChartHeight * 2, w: 4, h: nineChartHeight }
-        ];
-        break;
-      
+        
+        case 5:
+          const fiveChartHeight = Math.max(6, Math.round(9 * heightScaleFactor));
+          const row2Height = Math.max(5, Math.round(7 * heightScaleFactor));
+          layoutConfig = [
+            { x: 0, y: 0, w: 4, h: fiveChartHeight },
+            { x: 4, y: 0, w: 4, h: fiveChartHeight },
+            { x: 8, y: 0, w: 4, h: fiveChartHeight },
+            { x: 0, y: fiveChartHeight, w: 6, h: row2Height },
+            { x: 6, y: fiveChartHeight, w: 6, h: row2Height }
+          ];
+          break;
+        
+        case 6:
+          const sixChartHeight = Math.max(6, Math.round(7.5 * heightScaleFactor));
+          layoutConfig = [
+            { x: 0, y: 0, w: 4, h: sixChartHeight },
+            { x: 4, y: 0, w: 4, h: sixChartHeight },
+            { x: 8, y: 0, w: 4, h: sixChartHeight },
+            { x: 0, y: sixChartHeight, w: 4, h: sixChartHeight },
+            { x: 4, y: sixChartHeight, w: 4, h: sixChartHeight },
+            { x: 8, y: sixChartHeight, w: 4, h: sixChartHeight }
+          ];
+          break;
+        
+        case 7:
+          const sevenChartHeight = Math.max(5, Math.round(6 * heightScaleFactor));
+          const sevenBottomHeight = Math.max(5, Math.round(7 * heightScaleFactor));
+          layoutConfig = [
+            { x: 0, y: 0, w: 4, h: sevenChartHeight },
+            { x: 4, y: 0, w: 4, h: sevenChartHeight },
+            { x: 8, y: 0, w: 4, h: sevenChartHeight },
+            { x: 0, y: sevenChartHeight, w: 4, h: sevenChartHeight },
+            { x: 4, y: sevenChartHeight, w: 4, h: sevenChartHeight },
+            { x: 8, y: sevenChartHeight, w: 4, h: sevenChartHeight },
+            { x: 0, y: sevenChartHeight * 2, w: 12, h: sevenBottomHeight }
+          ];
+          break;
+        
+        case 8:
+          const eightChartHeight = Math.max(4, Math.round(5 * heightScaleFactor));
+          layoutConfig = [
+            { x: 0, y: 0, w: 4, h: eightChartHeight },
+            { x: 4, y: 0, w: 4, h: eightChartHeight },
+            { x: 8, y: 0, w: 4, h: eightChartHeight },
+            { x: 0, y: eightChartHeight, w: 4, h: eightChartHeight },
+            { x: 4, y: eightChartHeight, w: 4, h: eightChartHeight },
+            { x: 8, y: eightChartHeight, w: 4, h: eightChartHeight },
+            { x: 0, y: eightChartHeight * 2, w: 6, h: eightChartHeight },
+            { x: 6, y: eightChartHeight * 2, w: 6, h: eightChartHeight }
+          ];
+          break;
+        
+        case 9:
+          const nineChartHeight = Math.max(5, Math.round(6 * heightScaleFactor));
+          layoutConfig = [
+            { x: 0, y: 0, w: 4, h: nineChartHeight },
+            { x: 4, y: 0, w: 4, h: nineChartHeight },
+            { x: 8, y: 0, w: 4, h: nineChartHeight },
+            { x: 0, y: nineChartHeight, w: 4, h: nineChartHeight },
+            { x: 4, y: nineChartHeight, w: 4, h: nineChartHeight },
+            { x: 8, y: nineChartHeight, w: 4, h: nineChartHeight },
+            { x: 0, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
+            { x: 4, y: nineChartHeight * 2, w: 4, h: nineChartHeight },
+            { x: 8, y: nineChartHeight * 2, w: 4, h: nineChartHeight }
+          ];
+          break;
+        
       default:
-        // For more than 9 charts, create a grid
+          // For more than 9 charts, create a grid
         const cols = 3;
         const width = 4;
         const height = Math.max(4, Math.round(6 * heightScaleFactor));
         for (let i = 0; i < numCharts; i++) {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
+            const row = Math.floor(i / cols);
+            const col = i % cols;
           layoutConfig.push({
-            x: col * width,
-            y: row * height,
+              x: col * width,
+              y: row * height,
             w: width,
             h: height
           });
         }
     }
 
-    // Convert to Layout format - ensure each chart gets a layout from the config
+      // Convert to Layout format - ensure each chart gets a layout from the config
     const newLayout = charts.map((chart, i) => {
       const position = i < layoutConfig.length 
         ? layoutConfig[i] 
@@ -549,7 +560,7 @@ export function DynamicLayout({
     setLayouts(resetLayouts);
     layoutRef.current = newLayout;
     
-    // Update the charts with the new layout if they don't already have one
+      // Update the charts with the new layout if they don't already have one
     charts.forEach((chart, index) => {
       if (index < layoutConfig.length) {
         chart.layout = {
@@ -579,11 +590,15 @@ export function DynamicLayout({
     }
 
     toast.success("Layout reset to default");
-    
-    return newLayout;
+      
+      return newLayout;
+    } finally {
+      // Always reset the flag when done
+      resetInProgressRef.current = false;
+    }
   }, [charts, viewportHeight, onLayoutReset, toast]);
 
-  // Add this effect to monitor template changes and graph count
+  // Modify the effect that monitors template changes
   useEffect(() => {
     if (!templateId || !mounted) return;
 
@@ -593,16 +608,48 @@ export function DynamicLayout({
       if (!graphChangeInfo) return;
 
       try {
-        const { templateId: changedTemplateId, needsReset, action } = JSON.parse(graphChangeInfo);
+        const { templateId: changedTemplateId, needsReset, action, timestamp, changeId } = JSON.parse(graphChangeInfo);
         
         // Only process if it's for this template and needs reset
         if (changedTemplateId !== templateId || !needsReset) return;
 
         console.log(`Template graph ${action || 'change'} detected, resetting and saving layout`);
         
+        // IMPORTANT: Immediately clear the change info from localStorage to prevent repeated processing
+        localStorage.removeItem('template-graph-change');
+        
+        // Track if we've processed this change before to prevent duplicate handling
+        const processedKey = `graph-change-processed-${changedTemplateId}`;
+        const lastProcessed = localStorage.getItem(processedKey);
+        
+        // Check if we've already processed this exact change
+        if (lastProcessed && changeId) {
+          try {
+            const processedData = JSON.parse(lastProcessed);
+            if (processedData.changeId === changeId) {
+              console.log("Already processed this exact change, skipping");
+              return;
+            }
+          } catch (e) {
+            // If parsing fails, proceed with the change
+          }
+        }
+        
+        // Mark this change as processed with current timestamp and change ID
+        localStorage.setItem(processedKey, JSON.stringify({
+          timestamp: new Date().toISOString(),
+          changeId
+        }));
+        
         // Force unlock saved layouts
         savedLayoutsRef.current = false;
         setSavedLayoutsLocked(false);
+        
+        // Skip if reset is already in progress
+        if (resetInProgressRef.current) {
+          console.log("Reset already in progress, skipping template change handler");
+          return;
+        }
         
         // Reset layout
         await resetToDynamicLayout();
@@ -612,10 +659,6 @@ export function DynamicLayout({
           try {
             await onSaveLayout(layouts);
             console.log('New layout saved after graph change');
-            
-            // Clear the change info from localStorage after successful save
-            localStorage.removeItem('template-graph-change');
-            
             toast.success("Layout reset and saved successfully");
           } catch (error) {
             console.error('Error saving layout after reset:', error);
@@ -680,10 +723,10 @@ export function DynamicLayout({
       
       if (graphChangeInfo || isNewTemplate || (templateId && useDynamicLayout)) {
         console.log("Applying automatic layout reset due to chart count change");
-        
+      
         // Apply dynamic layout
         resetToDynamicLayout();
-        
+          
         // If there's a save handler, save the new layout
         if (onSaveLayout && layouts) {
           onSaveLayout(layouts)
@@ -705,8 +748,8 @@ export function DynamicLayout({
       if (templateId && (!layoutRef.current.length || useDynamicLayout)) {
         console.log("Applying initial dynamic layout for template");
         resetToDynamicLayout();
-      }
-    }
+            }
+          }
     
   }, [charts.length, mounted, resetToDynamicLayout, templateId, onSaveLayout, layouts, useDynamicLayout]);
 
@@ -1424,7 +1467,7 @@ export function DynamicLayout({
           })}
         </ResponsiveGridLayout>
 
-        {isLayoutModified && (
+        {isLayoutModified && !isTemplatePage && (
           <div className="fixed bottom-4 right-4 z-50 flex gap-2">
             <Button
               onClick={() => {

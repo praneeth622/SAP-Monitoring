@@ -38,12 +38,16 @@ export default function TemplatesPage() {
   const handleGraphChange = (action: 'add' | 'delete') => {
     if (!selectedTemplate?.id) return;
     
+    // Create a unique ID for this change
+    const changeId = `${action}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     // Store the change info in localStorage
     localStorage.setItem('template-graph-change', JSON.stringify({
       templateId: selectedTemplate.id,
       needsReset: true,
       action: action,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      changeId
     }));
   };
 
