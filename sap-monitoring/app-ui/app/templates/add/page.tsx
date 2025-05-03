@@ -97,6 +97,8 @@ const timeRangeOptions = [
   "custom",
 ];
 
+const dummyData = generateDummyData();
+
 // Add this near the top of the file with other constants
 const resolutionOptions = [
   { value: "auto", label: "Auto" },
@@ -230,6 +232,7 @@ const LoadingSpinner = ({ message = "Loading..." }: { message?: string }) => (
 export default function TemplatesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const params = useParams(); // Move this up to the top
   const templateId = searchParams.get("templateId");
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -292,6 +295,15 @@ export default function TemplatesPage() {
 
   // Add this new state for tracking validity
   const [isFormValid, setIsFormValid] = useState(false);
+
+  // Add these state variables near the top of your component
+  const [dataRefreshState, setDataRefreshState] = useState({
+    isRefreshing: false,
+    lastRefreshTimestamp: null as number | null,
+    pendingRefresh: false,
+  });
+
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update the useEffect for isFormValid to properly handle templates with graphs
   useEffect(() => {
@@ -370,7 +382,7 @@ export default function TemplatesPage() {
     };
   }, []);
 
-  // Enhanced fetch chart data function with proper API connection
+  // Enhance fetch chart data function to use stricter caching
   const fetchChartData = useCallback(
     (
       cacheKey: string,
@@ -380,14 +392,15 @@ export default function TemplatesPage() {
         monitoringArea: string;
         dateRange: { from: Date; to: Date };
         resolution: string;
+        graphId?: string;  // Added graphId parameter
       }
-    ) => {
+    ): Promise<void> => {
       // Skip if already loading or loaded
       if (
         chartDataLoadState[cacheKey] === "loading" ||
         chartDataLoadState[cacheKey] === "success"
       ) {
-        return;
+        return Promise.resolve();
       }
 
       // Create debounced function if it doesn't exist
@@ -409,9 +422,10 @@ export default function TemplatesPage() {
                 params.correlationKpis,
                 params.monitoringArea,
                 params.dateRange,
-                params.resolution
+                params.resolution,
+                { graphId: params.graphId }  // Pass graphId to fetchTemplateChartData
               );
-            }, 3); // Increase retries to 3
+            }, 3);
 
             if (!isMounted.current) return;
 
@@ -438,7 +452,7 @@ export default function TemplatesPage() {
 
               setChartDataLoadState((prev) => ({
                 ...prev,
-                [cacheKey]: "success", // Mark as success to prevent re-fetching
+                [cacheKey]: "success",
               }));
             }
           } catch (error) {
@@ -457,60 +471,51 @@ export default function TemplatesPage() {
               [cacheKey]: dummyData,
             }));
           }
-        }, 300); // 300ms debounce
+        }, 300);
       }
 
-      // Execute the debounced function
+      // Execute the debounced function and return a promise
       debouncedFetchRef.current[cacheKey]();
+      return Promise.resolve();
     },
     [chartDataLoadState]
   );
 
-  // Convert to useCallback to avoid stale closure issues
-  const handleDeleteGraph = useCallback(
-    (graphId: string) => {
-      // Ask for confirmation
-      if (confirm("Are you sure you want to delete this graph?")) {
-        // Set a marker to indicate we're about to delete a graph
-        // This will be read by the DynamicLayout component to prevent double layout reset
-        if (templateId) {
-          localStorage.setItem('graph-deletion-in-progress', templateId || 'new-template');
-        }
-        
-        // Update state to remove the graph
-        setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
-        setHasChanges(true);
-        
-        // Mark template for layout reset - this ensures proper layout adjustment
-        localStorage.setItem('template-graph-change', JSON.stringify({
-          templateId: templateId || 'new-template',
-          needsReset: true,
-          action: 'delete',
-          timestamp: new Date().toISOString()
-        }));
-        
-        toast.success("Graph deleted successfully");
+  // Add this function to handle deleting a graph
+  const handleDeleteGraph = useCallback((graphId: string) => {
+    try {
+      // Set template-graph-change flag for dynamic layout
+      const templateId = params.id || `new-template-${Date.now()}`;
+      localStorage.setItem('template-graph-change', JSON.stringify({
+        templateId,
+        graphCount: graphs.length - 1,
+        timestamp: new Date().toISOString(),
+        needsReset: true,
+        action: 'delete'
+      }));
 
-        // If we deleted the last graph, hide the graphs section
-        if (graphs.length === 1) {
-          setShowGraphs(false);
-        }
-
-        // Force a layout refresh with delay - this allows state updates to finish first
-        setTimeout(() => {
-          window.dispatchEvent(new Event("resize"));
-          
-          // Clean up the deletion marker after a delay
-          setTimeout(() => {
-            localStorage.removeItem('graph-deletion-in-progress');
-          }, 300);
-        }, 200);
+      // Remove the graph from the state
+      setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
+      
+      // If no graphs left, hide the graphs section
+      if (graphs.length <= 1) {
+        setShowGraphs(false);
       }
-    },
-    [graphs.length, templateId]
-  );
+      
+      setHasChanges(true);
+      toast.success("Graph removed successfully");
+      
+      // Force a layout refresh with a slight delay
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 300);
+    } catch (error) {
+      console.error("Error deleting graph:", error);
+      toast.error("Failed to remove graph");
+    }
+  }, [graphs.length, params.id]);
 
-  // Function to render charts with optimized data loading
+  // Modify the renderChartConfigs function to prevent repeated fetching
   const renderChartConfigs = useCallback(
     (graph: Graph) => {
       // Ensure we have valid primary and correlation KPIs
@@ -533,22 +538,45 @@ export default function TemplatesPage() {
         to: new Date(),
       };
 
-      // Create a unique key for this graph to use in the cache
-      const cacheKey = `${graph.id}-${primaryKpi}-${correlationKpis.join(
-        "-"
-      )}-${templateData.resolution}`;
+      // Create a unique key for this graph that won't change with template data updates
+      const cacheKey = `${graph.id}-${primaryKpi}-${correlationKpis.join("-")}`;
+      
+      // Track whether we've attempted to fetch data for this graph
+      const fetchAttemptKey = `fetch-attempt-${cacheKey}`;
+      const hasFetchedBefore = localStorage.getItem(fetchAttemptKey) === 'true';
 
-      // Trigger data fetch if needed
-      if (
-        chartDataLoadState[cacheKey] !== "success" &&
-        chartDataLoadState[cacheKey] !== "loading"
-      ) {
+      // Only fetch data once per graph, not on every render or header change
+      if (!hasFetchedBefore && chartDataLoadState[cacheKey] !== "loading" && 
+          chartDataLoadState[cacheKey] !== "success") {
+        
+        // Set loading state and mark that we've attempted a fetch
+        setChartDataLoadState(prev => ({
+          ...prev,
+          [cacheKey]: "loading"
+        }));
+        
+        localStorage.setItem(fetchAttemptKey, 'true');
+        
+        // Fetch data with the graph ID for better caching
         fetchChartData(cacheKey, {
           primaryKpi,
           correlationKpis,
           monitoringArea,
           dateRange: previewDateRange,
           resolution: templateData.resolution,
+          graphId: graph.id  // Pass graph ID for strict caching
+        }).then(() => {
+          // Update loading state to success when fetch completes
+          setChartDataLoadState(prev => ({
+            ...prev,
+            [cacheKey]: "success"
+          }));
+        }).catch(() => {
+          // Mark as error if fetch fails
+          setChartDataLoadState(prev => ({
+            ...prev,
+            [cacheKey]: "error"
+          }));
         });
       }
 
@@ -606,6 +634,39 @@ export default function TemplatesPage() {
       fetchChartData,
     ]
   );
+
+  // Update useEffect that monitors resolution changes to use the debounced refresh
+  useEffect(() => {
+    if (dataRefreshState.lastRefreshTimestamp) {
+      // Set a flag to indicate a pending refresh rather than immediately refreshing
+      setDataRefreshState(prev => ({
+        ...prev,
+        pendingRefresh: true
+      }));
+      
+      // Schedule a delayed refresh if we're not currently refreshing
+      if (!dataRefreshState.isRefreshing) {
+        const timeoutId = setTimeout(() => {
+          // Only do the refresh if we still have a pending flag
+          if (dataRefreshState.pendingRefresh) {
+            // Force reset of chartDataLoadState to trigger a refresh
+            setChartDataLoadState({});
+          }
+        }, 2000); // Wait 2 seconds before refreshing after resolution changes
+        
+        return () => clearTimeout(timeoutId);
+      }
+    }
+  }, [templateData.resolution]);
+
+  // Add cleanup for debounce timeout
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const fetchSystems = async () => {
@@ -850,7 +911,9 @@ export default function TemplatesPage() {
 
   // Modify the handleSaveTemplate function to check for unique template name
 
-  const handleSaveTemplate = async () => {
+  const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
     // First check if basic form data is valid
     if (!isFormValid) {
       toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
@@ -1428,7 +1491,6 @@ export default function TemplatesPage() {
   }, [graphs]);
 
   // On component mount, check if we need to trigger a layout reset
-  const params = useParams();
   
   useEffect(() => {
     if (graphs.length > 0 && !localStorage.getItem('template-layout-optimized')) {
@@ -1666,8 +1728,9 @@ export default function TemplatesPage() {
                     </div>
 
                     <Button
+                      variant="default"
                       onClick={handleSaveTemplate}
-
+                      type="submit"
                       disabled={
                         !isFormValid || (showGraphs && graphs.length === 0)
                       }

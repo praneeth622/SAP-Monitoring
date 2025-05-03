@@ -5,6 +5,60 @@ import { getCachedData, cacheData, createKpiCacheKey, createTemplateCacheKey } f
 
 const BASE_URL = "https://shwsckbvbt.a.pinggy.link"; // Update this to your actual base URL
 
+// Add this helper function to control data fetching frequency
+export function shouldRefetchData(lastFetchTime: number | null, forceRefresh: boolean = false): boolean {
+  if (forceRefresh) return true;
+  if (!lastFetchTime) return true;
+  
+  // Implement a throttling mechanism - only refetch if it's been at least 30 seconds
+  const throttleTimeMs = 30 * 1000; // 30 seconds
+  return Date.now() - lastFetchTime > throttleTimeMs;
+}
+
+// Add this function to handle template data caching with stricter conditions
+export function getCachedTemplateData(cacheKey: string): DataPoint[] | null {
+  try {
+    // Check browser storage first
+    if (typeof window !== 'undefined') {
+      const cachedData = localStorage.getItem(`template-data-${cacheKey}`);
+      if (cachedData) {
+        return JSON.parse(cachedData);
+      }
+    }
+    
+    // Then try memory cache (defined in data-cache.ts)
+    return getCachedData<DataPoint[]>(cacheKey);
+  } catch (e) {
+    console.warn('Error accessing cached template data:', e);
+    return null;
+  }
+}
+
+// Add this function to store template data with timestamp
+export function cacheTemplateData(cacheKey: string, data: DataPoint[]): void {
+  try {
+    if (typeof window !== 'undefined') {
+      // Store data with creation timestamp
+      const cachedItem = {
+        data,
+        timestamp: Date.now(),
+        version: 1
+      };
+      
+      localStorage.setItem(`template-data-${cacheKey}`, JSON.stringify(data));
+      localStorage.setItem(`template-meta-${cacheKey}`, JSON.stringify({
+        timestamp: Date.now(),
+        version: 1
+      }));
+    }
+    
+    // Also cache in memory
+    cacheData(cacheKey, data);
+  } catch (e) {
+    console.warn('Error caching template data:', e);
+  }
+}
+
 // Modify the headers to fix CORS issues and update the API call logic
 export const fetchKpiData = async (
   kpiName: string,
@@ -595,7 +649,7 @@ export function getDummyData() {
   return data;
 }
 
-// Also update the fetchTemplateChartData function to use the updated fetchKpiData function
+// Modify fetchTemplateChartData to use strict caching
 export const fetchTemplateChartData = async (
   primaryKpi: string,
   correlationKpis: string[] = [],
@@ -610,7 +664,6 @@ export const fetchTemplateChartData = async (
     let to: Date;
     
     if (dateRange instanceof Date) {
-      // If only a single date is provided, assume a 7-day range ending at the provided date
       to = new Date(dateRange);
       from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
     } else {
@@ -618,101 +671,85 @@ export const fetchTemplateChartData = async (
       to = new Date(dateRange.to);
     }
     
-    // Ensure dates are not in the future
-    const now = new Date();
-    if (from > now) {
-      console.warn("From date is in the future, adjusting to 7 days ago");
-      from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    }
+    // Generate cache key including the graph ID if available
+    const graphId = additionalOptions?.graphId || '';
+    const cacheKey = graphId ? 
+      `${graphId}-${primaryKpi}-${correlationKpis.join('-')}` : 
+      createTemplateCacheKey(primaryKpi, correlationKpis, monitoringArea, { from, to }, resolution);
+      
+    // Check explicitly for a force refresh flag
+    const forceRefresh = additionalOptions?.forceRefresh === true;
     
-    if (to > now) {
-      console.warn("To date is in the future, adjusting to current time");
-      to = now;
+    if (!forceRefresh) {
+      // Try to get data from cache first
+      const cachedData = getCachedTemplateData(cacheKey);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`Using strictly cached data for graph ${graphId || 'unknown'}, KPI: ${primaryKpi}`);
+        return cachedData;
+      }
     }
+
+    // If we reach here, we need to fetch the data
+    console.log(`Fetching data for graph ${graphId || 'unknown'}, KPI: ${primaryKpi}`);
     
-    // Generate cache key for the entire template chart
-    const cacheKey = createTemplateCacheKey(
-    primaryKpi,
-    correlationKpis,
-    monitoringArea,
-      { from, to }, 
-    resolution
-  );
-  
-  // Check if data is already in cache
-    const cachedData = getCachedData<DataPoint[]>(cacheKey);
-    if (cachedData && cachedData.length > 0) {
-      console.log(`Using cached template data for ${primaryKpi} with ${correlationKpis.length} correlation KPIs`);
-    return cachedData;
-  }
-  
     // Fetch primary KPI data
-    console.log(`Fetching primary KPI data for ${primaryKpi}`);
     const primaryData = await fetchKpiData(primaryKpi, monitoringArea, from, to, resolution);
     
-    // Early return if primary data couldn't be fetched and no fallback was generated
     if (!primaryData || primaryData.length === 0) {
-      console.warn(`No data available for primary KPI ${primaryKpi}, using fallback data`);
-      return generateFallbackData(primaryKpi, from, to, resolution);
+      const fallbackData = generateFallbackData(primaryKpi, from, to, resolution);
+      // Cache even fallback data to prevent re-fetching
+      cacheTemplateData(cacheKey, fallbackData);
+      return fallbackData;
     }
     
-    // If there are no correlation KPIs, return primary data
+    // If no correlation KPIs, return and cache primary data
     if (!correlationKpis || correlationKpis.length === 0) {
-      // Cache the result before returning
-      cacheData(cacheKey, primaryData);
+      cacheTemplateData(cacheKey, primaryData);
       return primaryData;
     }
 
-    // Fetch correlation KPI data in parallel
-    console.log(`Fetching ${correlationKpis.length} correlation KPIs`);
-    const correlationPromises = correlationKpis.map(kpi => 
-      fetchKpiData(kpi, monitoringArea, from, to, resolution)
-    );
-    
+    // Fetch correlation data
     try {
+      const correlationPromises = correlationKpis.map(kpi => 
+        fetchKpiData(kpi, monitoringArea, from, to, resolution)
+      );
+      
       const correlationResults = await Promise.allSettled(correlationPromises);
       
-      // Combine all successful results
-      let allData: DataPoint[] = [...primaryData];
+      // Combine all data
+      let allData = [...primaryData];
       
       correlationResults.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
           allData = [...allData, ...result.value];
         } else {
-          console.warn(`Failed to fetch correlation KPI ${correlationKpis[index]}, using fallback data`);
-          // Generate fallback data for this specific KPI
           const fallbackData = generateFallbackData(correlationKpis[index], from, to, resolution);
           allData = [...allData, ...fallbackData];
         }
       });
       
-      // Sort data by date
+      // Sort and cache the combined result
       allData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // Cache the combined result
-      cacheData(cacheKey, allData);
+      cacheTemplateData(cacheKey, allData);
       
       return allData;
     } catch (error) {
-      console.error("Error fetching correlation KPI data:", error);
-      
-      // Return primary data if correlation data fails
-      cacheData(cacheKey, primaryData);
+      console.error("Error with correlation KPIs:", error);
+      cacheTemplateData(cacheKey, primaryData);
       return primaryData;
     }
   } catch (error) {
-    console.error("Error in fetchTemplateChartData:", error);
+    console.error("Template chart data error:", error);
     
-    // Provide fallback data for the entire template
+    // Fallback data as last resort
     const fallbackData = generateFallbackData(primaryKpi, 
       new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000), 
       new Date(), 
       resolution
     );
     
-    // Add fallback data for correlation KPIs
+    // Also add fallback for correlation KPIs
     let allFallbackData = [...fallbackData];
-    
     for (const kpi of correlationKpis) {
       const kpiData = generateFallbackData(kpi, 
         new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000), 
