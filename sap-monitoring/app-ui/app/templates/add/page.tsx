@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Sheet from "@/components/sheet";
@@ -59,13 +59,13 @@ interface Graph {
   activeKPIs: Set<string> | string[];
   kpiColors: Record<string, { color: string; name: string }>;
   timeInterval?: string; // Add this field
-  resolution?: string;   // Add this field
-  
+  resolution?: string; // Add this field
+
   // Legacy API properties - added to fix linter errors
   primary_kpi_ma?: string; // Monitoring area in legacy format
   primary_kpi_kpigrp?: string; // KPI group in legacy format
   primary_kpi_id?: string; // Primary KPI in legacy format
-  secondary_kpis?: Array<{ kpi_id: string, [key: string]: any }>; // Secondary KPIs in legacy format
+  secondary_kpis?: Array<{ kpi_id: string; [key: string]: any }>; // Secondary KPIs in legacy format
   top_xy_pos?: string; // Position in legacy format (x:y)
   bottom_xy_pos?: string; // Position in legacy format (x:y)
 }
@@ -97,7 +97,7 @@ const timeRangeOptions = [
   "custom",
 ];
 
-const dummyData = generateDummyData();
+// const dummyData = generateDummyData();
 
 // Add this near the top of the file with other constants
 const resolutionOptions = [
@@ -229,11 +229,13 @@ const LoadingSpinner = ({ message = "Loading..." }: { message?: string }) => (
   </div>
 );
 
-export default function TemplatesPage() {
+// Create a client component wrapper for the search params
+function TemplatesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const params = useParams(); // Move this up to the top
+  const params = useParams();
   const templateId = searchParams.get("templateId");
+
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
@@ -307,7 +309,6 @@ export default function TemplatesPage() {
 
   // Update the useEffect for isFormValid to properly handle templates with graphs
   useEffect(() => {
-
     const isValid =
       templateData.name.trim() !== "" &&
       templateData.system !== "" &&
@@ -325,7 +326,7 @@ export default function TemplatesPage() {
   // Add a function to handle editing a graph
   const handleEditGraph = (graphId: string) => {
     const graphToEdit = graphs.find((graph) => graph.id === graphId);
-    
+
     if (graphToEdit) {
       console.log("Editing graph:", graphToEdit);
 
@@ -334,19 +335,23 @@ export default function TemplatesPage() {
         id: graphToEdit.id,
         name: graphToEdit.name,
         type: graphToEdit.type,
-        monitoringArea: graphToEdit.monitoringArea ?? graphToEdit.primary_kpi_ma ?? '', // Handle both formats with default
-        kpiGroup: graphToEdit.kpiGroup ?? graphToEdit.primary_kpi_kpigrp ?? '', // Handle both formats with default
-        primaryKpi: graphToEdit.primaryKpi ?? graphToEdit.primary_kpi_id ?? '', // Handle both formats with default
-        correlationKpis: graphToEdit.correlationKpis ??
-          (graphToEdit.secondary_kpis?.map(sk => sk.kpi_id) ?? []), // Map secondary KPIs
+        monitoringArea:
+          graphToEdit.monitoringArea ?? graphToEdit.primary_kpi_ma ?? "", // Handle both formats with default
+        kpiGroup:
+          graphToEdit.kpiGroup ?? graphToEdit.primary_kpi_kpigrp ?? "", // Handle both formats with default
+        primaryKpi:
+          graphToEdit.primaryKpi ?? graphToEdit.primary_kpi_id ?? "", // Handle both formats with default
+        correlationKpis:
+          graphToEdit.correlationKpis ??
+          (graphToEdit.secondary_kpis?.map((sk) => sk.kpi_id) ?? []), // Map secondary KPIs
         layout: graphToEdit.layout ?? {
-          x: parseInt(graphToEdit.top_xy_pos?.split(':')[0] ?? '0') / 10,
-          y: parseInt(graphToEdit.top_xy_pos?.split(':')[1] ?? '0') / 10,
+          x: parseInt(graphToEdit.top_xy_pos?.split(":")[0] ?? "0") / 10,
+          y: parseInt(graphToEdit.top_xy_pos?.split(":")[1] ?? "0") / 10,
           w: 4,
-          h: 2
+          h: 2,
         },
         activeKPIs: graphToEdit.activeKPIs ?? new Set(),
-        kpiColors: graphToEdit.kpiColors ?? {}
+        kpiColors: graphToEdit.kpiColors ?? {},
       };
 
       // Set the editing graph
@@ -359,7 +364,6 @@ export default function TemplatesPage() {
         graphs,
       });
 
-
       // Open the sheet with a slight delay to ensure state updates
       setTimeout(() => {
         setIsAddGraphSheetOpen(true);
@@ -367,7 +371,6 @@ export default function TemplatesPage() {
     } else {
       toast.error("Could not find graph to edit");
       console.error("Graph not found with ID:", graphId);
-
     }
   };
 
@@ -392,7 +395,7 @@ export default function TemplatesPage() {
         monitoringArea: string;
         dateRange: { from: Date; to: Date };
         resolution: string;
-        graphId?: string;  // Added graphId parameter
+        graphId?: string; // Added graphId parameter
       }
     ): Promise<void> => {
       // Skip if already loading or loaded
@@ -423,14 +426,16 @@ export default function TemplatesPage() {
                 params.monitoringArea,
                 params.dateRange,
                 params.resolution,
-                { graphId: params.graphId }  // Pass graphId to fetchTemplateChartData
+                { graphId: params.graphId } // Pass graphId to fetchTemplateChartData
               );
             }, 3);
 
             if (!isMounted.current) return;
 
             if (data && data.length > 0) {
-              console.log(`Successfully loaded ${data.length} data points for ${cacheKey}`);
+              console.log(
+                `Successfully loaded ${data.length} data points for ${cacheKey}`
+              );
               setChartDataCache((prev) => ({
                 ...prev,
                 [cacheKey]: data,
@@ -440,9 +445,14 @@ export default function TemplatesPage() {
                 [cacheKey]: "success",
               }));
             } else {
-              console.warn(`No data received for ${cacheKey}, using dummy data instead`);
+              console.warn(
+                `No data received for ${cacheKey}, using dummy data instead`
+              );
               // Create meaningful dummy data based on the KPIs
-              const dummyData = generateDummyData([params.primaryKpi, ...params.correlationKpis]);
+              const dummyData = generateDummyData([
+                params.primaryKpi,
+                ...params.correlationKpis,
+              ]);
 
               // Store the dummy data in the cache so we don't keep trying to fetch
               setChartDataCache((prev) => ({
@@ -465,7 +475,10 @@ export default function TemplatesPage() {
             }));
 
             // Still provide dummy data on error for better UX
-            const dummyData = generateDummyData([params.primaryKpi, ...params.correlationKpis]);
+            const dummyData = generateDummyData([
+              params.primaryKpi,
+              ...params.correlationKpis,
+            ]);
             setChartDataCache((prev) => ({
               ...prev,
               [cacheKey]: dummyData,
@@ -482,38 +495,44 @@ export default function TemplatesPage() {
   );
 
   // Add this function to handle deleting a graph
-  const handleDeleteGraph = useCallback((graphId: string) => {
-    try {
-      // Set template-graph-change flag for dynamic layout
-      const templateId = params.id || `new-template-${Date.now()}`;
-      localStorage.setItem('template-graph-change', JSON.stringify({
-        templateId,
-        graphCount: graphs.length - 1,
-        timestamp: new Date().toISOString(),
-        needsReset: true,
-        action: 'delete'
-      }));
+  const handleDeleteGraph = useCallback(
+    (graphId: string) => {
+      try {
+        // Set template-graph-change flag for dynamic layout
+        const templateId = params.id || `new-template-${Date.now()}`;
+        localStorage.setItem(
+          "template-graph-change",
+          JSON.stringify({
+            templateId,
+            graphCount: graphs.length - 1,
+            timestamp: new Date().toISOString(),
+            needsReset: true,
+            action: "delete",
+          })
+        );
 
-      // Remove the graph from the state
-      setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
-      
-      // If no graphs left, hide the graphs section
-      if (graphs.length <= 1) {
-        setShowGraphs(false);
+        // Remove the graph from the state
+        setGraphs((prev) => prev.filter((graph) => graph.id !== graphId));
+
+        // If no graphs left, hide the graphs section
+        if (graphs.length <= 1) {
+          setShowGraphs(false);
+        }
+
+        setHasChanges(true);
+        toast.success("Graph removed successfully");
+
+        // Force a layout refresh with a slight delay
+        setTimeout(() => {
+          window.dispatchEvent(new Event("resize"));
+        }, 300);
+      } catch (error) {
+        console.error("Error deleting graph:", error);
+        toast.error("Failed to remove graph");
       }
-      
-      setHasChanges(true);
-      toast.success("Graph removed successfully");
-      
-      // Force a layout refresh with a slight delay
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-      }, 300);
-    } catch (error) {
-      console.error("Error deleting graph:", error);
-      toast.error("Failed to remove graph");
-    }
-  }, [graphs.length, params.id]);
+    },
+    [graphs.length, params.id]
+  );
 
   // Modify the renderChartConfigs function to prevent repeated fetching
   const renderChartConfigs = useCallback(
@@ -540,23 +559,25 @@ export default function TemplatesPage() {
 
       // Create a unique key for this graph that won't change with template data updates
       const cacheKey = `${graph.id}-${primaryKpi}-${correlationKpis.join("-")}`;
-      
+
       // Track whether we've attempted to fetch data for this graph
       const fetchAttemptKey = `fetch-attempt-${cacheKey}`;
-      const hasFetchedBefore = localStorage.getItem(fetchAttemptKey) === 'true';
+      const hasFetchedBefore = localStorage.getItem(fetchAttemptKey) === "true";
 
       // Only fetch data once per graph, not on every render or header change
-      if (!hasFetchedBefore && chartDataLoadState[cacheKey] !== "loading" && 
-          chartDataLoadState[cacheKey] !== "success") {
-        
+      if (
+        !hasFetchedBefore &&
+        chartDataLoadState[cacheKey] !== "loading" &&
+        chartDataLoadState[cacheKey] !== "success"
+      ) {
         // Set loading state and mark that we've attempted a fetch
-        setChartDataLoadState(prev => ({
+        setChartDataLoadState((prev) => ({
           ...prev,
-          [cacheKey]: "loading"
+          [cacheKey]: "loading",
         }));
-        
-        localStorage.setItem(fetchAttemptKey, 'true');
-        
+
+        localStorage.setItem(fetchAttemptKey, "true");
+
         // Fetch data with the graph ID for better caching
         fetchChartData(cacheKey, {
           primaryKpi,
@@ -564,20 +585,22 @@ export default function TemplatesPage() {
           monitoringArea,
           dateRange: previewDateRange,
           resolution: templateData.resolution,
-          graphId: graph.id  // Pass graph ID for strict caching
-        }).then(() => {
-          // Update loading state to success when fetch completes
-          setChartDataLoadState(prev => ({
-            ...prev,
-            [cacheKey]: "success"
-          }));
-        }).catch(() => {
-          // Mark as error if fetch fails
-          setChartDataLoadState(prev => ({
-            ...prev,
-            [cacheKey]: "error"
-          }));
-        });
+          graphId: graph.id, // Pass graph ID for strict caching
+        })
+          .then(() => {
+            // Update loading state to success when fetch completes
+            setChartDataLoadState((prev) => ({
+              ...prev,
+              [cacheKey]: "success",
+            }));
+          })
+          .catch(() => {
+            // Mark as error if fetch fails
+            setChartDataLoadState((prev) => ({
+              ...prev,
+              [cacheKey]: "error",
+            }));
+          });
       }
 
       // Use cached data if available, otherwise use dummy data
@@ -639,11 +662,11 @@ export default function TemplatesPage() {
   useEffect(() => {
     if (dataRefreshState.lastRefreshTimestamp) {
       // Set a flag to indicate a pending refresh rather than immediately refreshing
-      setDataRefreshState(prev => ({
+      setDataRefreshState((prev) => ({
         ...prev,
-        pendingRefresh: true
+        pendingRefresh: true,
       }));
-      
+
       // Schedule a delayed refresh if we're not currently refreshing
       if (!dataRefreshState.isRefreshing) {
         const timeoutId = setTimeout(() => {
@@ -653,7 +676,7 @@ export default function TemplatesPage() {
             setChartDataLoadState({});
           }
         }, 2000); // Wait 2 seconds before refreshing after resolution changes
-        
+
         return () => clearTimeout(timeoutId);
       }
     }
@@ -897,7 +920,6 @@ export default function TemplatesPage() {
     // Prevent opening the sheet more than once
     if (isAddGraphSheetOpen) {
       return;
-
     }
 
     setSelectedTemplate({
@@ -908,31 +930,24 @@ export default function TemplatesPage() {
     setIsAddGraphSheetOpen(true);
   };
 
-
-  // Modify the handleSaveTemplate function to check for unique template name
-
-  const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveTemplate = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
     // First check if basic form data is valid
     if (!isFormValid) {
       toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
-
-        dismissible: true, // Add dismissible property for the X button
-
+        dismissible: true,
       });
       return;
     }
 
     // Then check if we have graphs
     if (graphs.length === 0) {
-      toast.error(ERROR_MESSAGES.MIN_GRAPHS, {
-
-      });
+      toast.error(ERROR_MESSAGES.MIN_GRAPHS, {});
       return;
     }
 
-    // Rest of the function stays the same...
+    // The rest of the function remains unchanged
     try {
       setLoadingState((prev) => ({ ...prev, savingTemplate: true }));
 
@@ -955,7 +970,9 @@ export default function TemplatesPage() {
       );
 
       // Extract current template ID if in edit mode
-      const currentTemplateId = isEditMode ? searchParams.get("templateId") : null;
+      const currentTemplateId = isEditMode
+        ? searchParams.get("templateId")
+        : null;
 
       // Check if name exists, but ignore if it's the same template being edited
       const nameExists = existingTemplates.some((template: any) => {
@@ -990,28 +1007,29 @@ export default function TemplatesPage() {
         : `USER_TEST_1_${templateData.name
             .toUpperCase()
             .replace(/\s+/g, "_")}_${Date.now()}`;
-            
+
       // Make sure all graphs have valid layout positions
       const graphsWithValidLayout = graphs.map((graph, index) => {
         // If graph doesn't have layout or has invalid layout values, assign default values
-        if (!graph.layout || 
-            typeof graph.layout.x !== 'number' || 
-            typeof graph.layout.y !== 'number' || 
-            typeof graph.layout.w !== 'number' || 
-            typeof graph.layout.h !== 'number') {
-          
+        if (
+          !graph.layout ||
+          typeof graph.layout.x !== "number" ||
+          typeof graph.layout.y !== "number" ||
+          typeof graph.layout.w !== "number" ||
+          typeof graph.layout.h !== "number"
+        ) {
           // Calculate default position based on index
           const row = Math.floor(index / 3);
           const col = index % 3;
-          
+
           return {
             ...graph,
             layout: {
               x: col * 4,
               y: row * 6,
               w: 4,
-              h: 6
-            }
+              h: 6,
+            },
           };
         }
         return graph;
@@ -1024,7 +1042,7 @@ export default function TemplatesPage() {
         const y = Number(graph.layout.y) * 10;
         const w = Number(graph.layout.w) * 10;
         const h = Number(graph.layout.h) * 10;
-        
+
         // Calculate positions based on layout
         const topPos = `${y}:${x}`;
         const bottomPos = `${y + h}:${x + w}`;
@@ -1038,7 +1056,9 @@ export default function TemplatesPage() {
             // If we have detailed secondaryKpisData, use it
             if (graph.secondaryKpisData && graph.secondaryKpisData[kpiIndex]) {
               return {
-                ma: graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
+                ma:
+                  graph.secondaryKpisData[kpiIndex].ma ||
+                  graph.monitoringArea,
                 ma_desc:
                   graph.secondaryKpisData[kpiIndex].ma_desc ||
                   graph.monitoringAreaDesc ||
@@ -1101,7 +1121,6 @@ export default function TemplatesPage() {
       // If this template is being set as default, we need to check other templates
       if (templateData.isDefault) {
         try {
-
           // First, fetch all templates for the user
           const templatesResponse = await fetch(
             `https://shwsckbvbt.a.pinggy.link/api/utl?userId=USER_TEST_1`
@@ -1115,16 +1134,19 @@ export default function TemplatesPage() {
 
           // Find any template that is currently set as default
           const defaultTemplate = templates.find((template: any) =>
-            Array.isArray(template.default) ? template.default[0] : template.default
+            Array.isArray(template.default)
+              ? template.default[0]
+              : template.default
           );
 
           // If there is a default template and it's not the current one being edited
-          if (defaultTemplate &&
-              (!isEditMode ||
-               (Array.isArray(defaultTemplate.template_id)
+          if (
+            defaultTemplate &&
+            (!isEditMode ||
+              (Array.isArray(defaultTemplate.template_id)
                 ? defaultTemplate.template_id[0]
-                : defaultTemplate.template_id) !== newTemplateId)) {
-
+                : defaultTemplate.template_id) !== newTemplateId)
+          ) {
             // Update the existing default template to set default to false
             const updateDefaultTemplate = {
               user_id: "USER_TEST_1",
@@ -1143,11 +1165,9 @@ export default function TemplatesPage() {
                 ? defaultTemplate.favorite[0]
                 : defaultTemplate.favorite,
               frequency: defaultTemplate.frequency
-
                 ? Array.isArray(defaultTemplate.frequency)
                   ? defaultTemplate.frequency[0]
                   : defaultTemplate.frequency
-
                 : "auto",
               systems: defaultTemplate.systems || [],
               graphs: defaultTemplate.graphs || [],
@@ -1257,17 +1277,14 @@ export default function TemplatesPage() {
     }
   };
 
-
-  // Modify the handleAddGraphToTemplate function to capture descriptions
-
   const handleAddGraphToTemplate = (graphData: Graph) => {
     if (graphs.length >= 9) {
       toast.error(ERROR_MESSAGES.MAX_GRAPHS, {
-        dismissible: true
+        dismissible: true,
       });
       return;
     }
-  
+
     try {
       // Use the utility function to generate consistent colors
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
@@ -1277,20 +1294,23 @@ export default function TemplatesPage() {
       // Set template-graph-change flag for dynamic layout on initial view
       // Use a temporary ID or 'new-template' for templates that don't have an ID yet
       const templateId = params.id || `new-template-${Date.now()}`;
-      localStorage.setItem('template-graph-change', JSON.stringify({
-        templateId,
-        graphCount: graphs.length + 1,
-        timestamp: new Date().toISOString(),
-        needsReset: true,
-        action: 'add'
-      }));
+      localStorage.setItem(
+        "template-graph-change",
+        JSON.stringify({
+          templateId,
+          graphCount: graphs.length + 1,
+          timestamp: new Date().toISOString(),
+          needsReset: true,
+          action: "add",
+        })
+      );
 
       // Calculate optimal layout based on number of graphs
       let layout = { x: 0, y: 0, w: 4, h: 4 }; // Default layout
-  
+
       // Current graph count (not including the one we're adding)
       const currentGraphCount = graphs.length;
-      
+
       // Create layout based on where this graph would go in the sequence
       switch (currentGraphCount) {
         case 0: // First graph (1 total)
@@ -1307,24 +1327,28 @@ export default function TemplatesPage() {
           // First row, second column
           layout = { x: 6, y: 0, w: 6, h: 8 };
           // Update previous graphs for 2x2 layout
-          setGraphs(prev => prev.map((g, i) => {
-            if (i === 0) return { ...g, layout: { x: 0, y: 0, w: 6, h: 8 } };
-            if (i === 1) return { ...g, layout: { x: 0, y: 8, w: 6, h: 8 } };
-            if (i === 2) return { ...g, layout: { x: 6, y: 8, w: 6, h: 8 } };
-            return g;
-          }));
+          setGraphs((prev) =>
+            prev.map((g, i) => {
+              if (i === 0) return { ...g, layout: { x: 0, y: 0, w: 6, h: 8 } };
+              if (i === 1) return { ...g, layout: { x: 0, y: 8, w: 6, h: 8 } };
+              if (i === 2) return { ...g, layout: { x: 6, y: 8, w: 6, h: 8 } };
+              return g;
+            })
+          );
           break;
         case 4: // Fifth graph (5 total)
           // First row, third column
           layout = { x: 8, y: 0, w: 4, h: 6 };
           // Update previous graphs for new layout
-          setGraphs(prev => prev.map((g, i) => {
-            if (i === 0) return { ...g, layout: { x: 0, y: 0, w: 4, h: 6 } };
-            if (i === 1) return { ...g, layout: { x: 4, y: 0, w: 4, h: 6 } };
-            if (i === 2) return { ...g, layout: { x: 0, y: 6, w: 6, h: 6 } };
-            if (i === 3) return { ...g, layout: { x: 6, y: 6, w: 6, h: 6 } };
-            return g;
-          }));
+          setGraphs((prev) =>
+            prev.map((g, i) => {
+              if (i === 0) return { ...g, layout: { x: 0, y: 0, w: 4, h: 6 } };
+              if (i === 1) return { ...g, layout: { x: 4, y: 0, w: 4, h: 6 } };
+              if (i === 2) return { ...g, layout: { x: 0, y: 6, w: 6, h: 6 } };
+              if (i === 3) return { ...g, layout: { x: 6, y: 6, w: 6, h: 6 } };
+              return g;
+            })
+          );
           break;
         case 5: // Sixth graph (6 total)
           // 2x3 grid layout
@@ -1338,23 +1362,30 @@ export default function TemplatesPage() {
           // 4x2 grid for 8 graphs
           layout = { x: 6, y: 12, w: 6, h: 6 };
           // Update previous graphs
-          setGraphs(prev => prev.map((g, i) => {
-            if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 6, h: 6 } };
-            return g;
-          }));
+          setGraphs((prev) =>
+            prev.map((g, i) => {
+              if (i === 6)
+                return { ...g, layout: { x: 0, y: 12, w: 6, h: 6 } };
+              return g;
+            })
+          );
           break;
         case 8: // Ninth graph (9 total)
           // 3x3 grid for 9 graphs
           layout = { x: 8, y: 12, w: 4, h: 6 };
           // Update previous graphs for 3x3 layout
-          setGraphs(prev => prev.map((g, i) => {
-            if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 4, h: 6 } };
-            if (i === 7) return { ...g, layout: { x: 4, y: 12, w: 4, h: 6 } };
-            return g;
-          }));
+          setGraphs((prev) =>
+            prev.map((g, i) => {
+              if (i === 6)
+                return { ...g, layout: { x: 0, y: 12, w: 4, h: 6 } };
+              if (i === 7)
+                return { ...g, layout: { x: 4, y: 12, w: 4, h: 6 } };
+              return g;
+            })
+          );
           break;
       }
-  
+
       // Create API-compatible graph object with calculated layout
       const newGraph: Graph = {
         ...graphData,
@@ -1368,41 +1399,35 @@ export default function TemplatesPage() {
 
         layout: layout,
       };
-  
+
       // Update graphs and show immediately
       setGraphs((prev) => [...prev, newGraph]);
       setShowGraphs(true);
       setIsAddGraphSheetOpen(false);
       setHasChanges(true);
 
-
-
       // Force a layout refresh with a slight delay to ensure DynamicLayout can recalculate
-
 
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 300);
-  
+
       toast.success(SUCCESS_MESSAGES.GRAPH_ADDED, {
-        dismissible: true
+        dismissible: true,
       });
     } catch (error) {
       console.error("Error adding graph:", error);
       toast.error(ERROR_MESSAGES.ADD_GRAPH_ERROR, {
-        dismissible: true
+        dismissible: true,
       });
     }
   };
 
-  // Modify the handleUpdateGraph function to update descriptions
   const handleUpdateGraph = (graphId: string, graphData: any) => {
     try {
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
       const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
         generateConsistentColors(allKpis);
-
-
 
       // Find the existing graph to preserve properties not included in graphData
       const existingGraph = graphs.find((graph) => graph.id === graphId);
@@ -1412,7 +1437,6 @@ export default function TemplatesPage() {
         toast.error("Failed to update graph: Graph not found");
         return;
       }
-
 
       setGraphs((prev) =>
         prev.map((graph) =>
@@ -1429,16 +1453,17 @@ export default function TemplatesPage() {
                 primaryKpiDesc: graphData.primaryKpiDesc,
                 correlationKpis: graphData.correlationKpis,
                 correlationKpisDesc: graphData.correlationKpisDesc,
-                primaryFilterValues: existingGraph.primaryFilterValues || [],
+                primaryFilterValues:
+                  existingGraph.primaryFilterValues || [],
                 secondaryKpisData: existingGraph.secondaryKpisData || [],
                 activeKPIs: newActiveKPIs,
                 kpiColors: newKpiColors,
 
                 // Preserve existing layout - this is important for layout persistence
-                layout: graph.layout && Object.keys(graph.layout).length === 4
-                  ? graph.layout // Use existing layout if valid
-                  : { x: 0, y: 0, w: 4, h: 4 }, // Fallback
-
+                layout:
+                  graph.layout && Object.keys(graph.layout).length === 4
+                    ? graph.layout // Use existing layout if valid
+                    : { x: 0, y: 0, w: 4, h: 4 }, // Fallback
               }
             : graph
         )
@@ -1458,51 +1483,62 @@ export default function TemplatesPage() {
     }
   };
 
-  const handleLayoutReset = useCallback(async (newLayout: Layout[]) => {
-    console.log("Layout reset requested from DynamicLayout");
-    
-    // Map the layout to the graphs
-    const updatedGraphs = graphs.map((graph, index) => {
-      // Find the corresponding layout
-      const layout = newLayout.find(l => l.i === graph.id);
-      
-      if (layout) {
-        return {
-          ...graph,
-          layout: {
-            x: layout.x,
-            y: layout.y,
-            w: layout.w,
-            h: layout.h
-          }
-        };
-      }
-      
-      return graph;
-    });
-    
-    setGraphs(updatedGraphs);
-    setHasChanges(true);
-    
-    // Set a flag to indicate layout has been optimized
-    localStorage.setItem('template-layout-optimized', 'true');
-    
-    return Promise.resolve();
-  }, [graphs]);
+  const handleLayoutReset = useCallback(
+    async (newLayout: Layout[]) => {
+      console.log("Layout reset requested from DynamicLayout");
+
+      // Map the layout to the graphs
+      const updatedGraphs = graphs.map((graph, index) => {
+        // Find the corresponding layout
+        const layout = newLayout.find((l) => l.i === graph.id);
+
+        if (layout) {
+          return {
+            ...graph,
+            layout: {
+              x: layout.x,
+              y: layout.y,
+              w: layout.w,
+              h: layout.h,
+            },
+          };
+        }
+
+        return graph;
+      });
+
+      setGraphs(updatedGraphs);
+      setHasChanges(true);
+
+      // Set a flag to indicate layout has been optimized
+      localStorage.setItem("template-layout-optimized", "true");
+
+      return Promise.resolve();
+    },
+    [graphs]
+  );
 
   // On component mount, check if we need to trigger a layout reset
-  
+
   useEffect(() => {
-    if (graphs.length > 0 && !localStorage.getItem('template-layout-optimized')) {
+    if (
+      graphs.length > 0 &&
+      !localStorage.getItem("template-layout-optimized")
+    ) {
       // Set the flag for layout reset on first render with graphs
-      const templateId = params.id ? String(params.id) : `new-template-${Date.now()}`;
-      localStorage.setItem('template-graph-change', JSON.stringify({
-        templateId,
-        graphCount: graphs.length,
-        timestamp: new Date().toISOString(),
-        needsReset: true,
-        action: 'initialize'
-      }));
+      const templateId = params.id
+        ? String(params.id)
+        : `new-template-${Date.now()}`;
+      localStorage.setItem(
+        "template-graph-change",
+        JSON.stringify({
+          templateId,
+          graphCount: graphs.length,
+          timestamp: new Date().toISOString(),
+          needsReset: true,
+          action: "initialize",
+        })
+      );
     }
   }, [graphs.length, params]);
 
@@ -1734,7 +1770,6 @@ export default function TemplatesPage() {
                       disabled={
                         !isFormValid || (showGraphs && graphs.length === 0)
                       }
-
                       className="h-9 px-4 whitespace-nowrap ml-2"
                       size="sm"
                     >
@@ -1845,5 +1880,32 @@ export default function TemplatesPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+// Create a wrapper component that uses Suspense
+export default function TemplatesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background via-background/98 to-background/95">
+          <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl p-8 max-w-md">
+            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+              <div className="relative">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+                  <div className="h-6 w-6 bg-card rounded-full"></div>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground animate-pulse">
+                Loading template...
+              </p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <TemplatesPageContent />
+    </Suspense>
   );
 }

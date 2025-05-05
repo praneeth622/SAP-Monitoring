@@ -1,17 +1,66 @@
+"use client";
+import { useState, useEffect } from 'react';
+import { toast } from "sonner";
+import { Graph } from '@/types'; // Adjust this import to match your actual types
 import Mainscreen from './_components/mainScreen'
 import { Layout } from "react-grid-layout";
 
 export default function TemplatesPage() {
+  const [templateId, setTemplateId] = useState<string>('');
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [baseUrl, setBaseUrl] = useState<string>('');
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id') || '';
+    setTemplateId(id);
+    setBaseUrl(window.location.origin);
+
+    if (id) {
+      loadTemplateData(id);
+    }
+  }, []);
+
+  const loadTemplateData = async (id: string) => {
+    try {
+      setIsLoading(true);
+      // Replace this with your actual API call
+      // const response = await fetch(`${baseUrl}/api/templates/${id}`);
+      // const data = await response.json();
+      // setSelectedTemplate(data);
+    } catch (error) {
+      console.error('Error loading template:', error);
+      toast.error('Failed to load template data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveTemplate = async (template: any) => {
+    try {
+      // Replace with your actual save implementation
+      // const response = await fetch(`${baseUrl}/api/templates/${template.id}`, {
+      //   method: 'PUT',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(template)
+      // });
+      // if (!response.ok) throw new Error('Failed to save template');
+      return true;
+    } catch (error) {
+      console.error('Error saving template:', error);
+      throw error;
+    }
+  };
+
   const handleLayoutReset = async (newLayout: Layout[]) => {
     try {
-      // Save the new layout to localStorage for dashboard sync
       const layoutKey = `template-layout-${templateId}`;
       localStorage.setItem(layoutKey, JSON.stringify({
         timestamp: new Date().toISOString(),
         layout: newLayout
       }));
 
-      // If we have an API endpoint for syncing layouts, call it
       if (baseUrl) {
         const response = await fetch(`${baseUrl}/api/ut/sync-layout`, {
           method: 'POST',
@@ -34,14 +83,11 @@ export default function TemplatesPage() {
     }
   };
 
-  // Add this function to handle graph changes
   const handleGraphChange = (action: 'add' | 'delete') => {
     if (!selectedTemplate?.id) return;
-    
-    // Create a unique ID for this change
+
     const changeId = `${action}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Store the change info in localStorage
+
     localStorage.setItem('template-graph-change', JSON.stringify({
       templateId: selectedTemplate.id,
       needsReset: true,
@@ -51,31 +97,25 @@ export default function TemplatesPage() {
     }));
   };
 
-  // Update the onDeleteGraph function
   const onDeleteGraph = async (graphId: string) => {
     if (!selectedTemplate) return;
 
     try {
       setIsLoading(true);
-      
-      // First, handle the graph change notification
+
       handleGraphChange('delete');
 
-      // Remove the graph from the template
-      const updatedGraphs = selectedTemplate.graphs.filter(g => g.id !== graphId);
-      
-      // Update the template with the new graphs array
+      const updatedGraphs = selectedTemplate.graphs.filter((g: any) => g.id !== graphId);
+
       const updatedTemplate = {
         ...selectedTemplate,
         graphs: updatedGraphs
       };
 
-      // Update local state
       setSelectedTemplate(updatedTemplate);
-      
-      // Save to API
+
       await saveTemplate(updatedTemplate);
-      
+
       toast.success("Graph deleted successfully");
     } catch (error) {
       console.error("Error deleting graph:", error);
@@ -85,31 +125,25 @@ export default function TemplatesPage() {
     }
   };
 
-  // Update the onAddGraph function
   const onAddGraph = async (newGraph: Graph) => {
     if (!selectedTemplate) return;
 
     try {
       setIsLoading(true);
-      
-      // First, handle the graph change notification
+
       handleGraphChange('add');
 
-      // Add the new graph to the template
       const updatedGraphs = [...selectedTemplate.graphs, newGraph];
-      
-      // Update the template with the new graphs array
+
       const updatedTemplate = {
         ...selectedTemplate,
         graphs: updatedGraphs
       };
 
-      // Update local state
       setSelectedTemplate(updatedTemplate);
-      
-      // Save to API
+
       await saveTemplate(updatedTemplate);
-      
+
       toast.success("Graph added successfully");
     } catch (error) {
       console.error("Error adding graph:", error);

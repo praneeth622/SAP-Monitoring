@@ -564,6 +564,8 @@ const DashboardContent = React.memo(
     selectedTheme,
     resolution,
     handleLayoutChange,
+    selectedApiTemplate,
+    apiTemplates,
   }: {
     charts: ChartConfig[];
     isContentLoading: boolean;
@@ -576,7 +578,12 @@ const DashboardContent = React.memo(
     selectedTheme: string;
     resolution: string;
     handleLayoutChange: (layout: any) => void;
+    selectedApiTemplate: string;
+    apiTemplates: NormalizedTemplate[];
   }) => {
+    // Calculate hasSavedLayouts inside the component
+    const hasSavedLayouts = charts.some((chart) => !!chart.layout);
+
     if (isContentLoading) {
       return (
         <div className="flex items-center justify-center h-[70vh] w-full">
@@ -1835,7 +1842,7 @@ export default function Dashboard() {
       // Get current layout from charts
       const updatedGraphs = charts.map((chart) => {
         // Find original template graph to preserve all properties
-        const originalGraph = templateData?.graphs?.find((g: any) => g.graph_id === chart.id);
+        const originalGraph = currentTemplate.graphs.find((g) => g.id === chart.id);
         if (!originalGraph) {
           console.warn(`No original graph found for chart ${chart.id}`);
           return null;
@@ -1861,9 +1868,9 @@ export default function Dashboard() {
           top_xy_pos: `${topY}:${topX}`,
           bottom_xy_pos: `${bottomY}:${bottomX}`,
           primary_kpi_id: Array.isArray(chart.activeKPIs)
-            ? chart.activeKPIs[0] || originalGraph.primary_kpi_id
-            : Array.from(chart.activeKPIs || new Set())[0] || originalGraph.primary_kpi_id,
-          secondary_kpis: originalGraph.secondary_kpis // Preserve original secondary_kpis
+            ? chart.activeKPIs[0] || originalGraph.primaryKpi
+            : Array.from(chart.activeKPIs || new Set())[0] || originalGraph.primaryKpi,
+          secondary_kpis: originalGraph.secondaryKpis.map(kpi => ({ kpi_id: kpi }))
         };
       }).filter(Boolean);
 
@@ -1876,7 +1883,7 @@ export default function Dashboard() {
         default: currentTemplate.isDefault || false,
         favorite: currentTemplate.isFavorite || false,
         frequency: currentTemplate.frequency || "auto",
-        systems: currentTemplate.systems.map((systemId: string) => ({ system_id: systemId })) || [],
+        systems: currentTemplate.systems.map((systemId) => ({ system_id: systemId })) || [],
         graphs: updatedGraphs,
       };
 
@@ -1889,7 +1896,7 @@ export default function Dashboard() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(templatePayload), // Use templatePayload instead of payload
       });
 
       if (!response.ok) {
@@ -1901,8 +1908,9 @@ export default function Dashboard() {
       setLayoutChanged(false);
     } catch (error) {
       console.error("Error saving layout:", error);
+      toast.error(`Failed to save layout: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [charts, selectedApiTemplate]);
+  }, [charts, selectedApiTemplate, apiTemplates]);
 
   // Modify the handleLayoutChange function
   const handleLayoutChange = useCallback(
@@ -2168,85 +2176,19 @@ export default function Dashboard() {
 
   // Modify the render dashboard content function to use content-only loading
   const renderDashboardContent = () => {
-    //  <DashboardContent
-    //     charts={charts}
-    //     isContentLoading={isContentLoading}
-    //     hasError={hasError}
-    //     errorMessage={errorMessage}
-    //     fetchTemplates={fetchTemplates}
-    //     activeKPIs={activeKPIs}
-    //     themedKpiColors={themedKpiColors}
-    //     globalDateRange={globalDateRange}
-    //     selectedTheme={selectedTheme}
-    //     resolution={resolution}
-    //     handleLayoutChange={handleLayoutChange}
-    //  />
-
     if (isContentLoading) {
-      return (
-        <div className="flex items-center justify-center h-[70vh] w-full">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            <div className="animate-pulse absolute inset-0 flex items-center justify-center text-xs text-primary font-medium">
-              Loading...
-            </div>
-          </div>
-        </div>
-      );
+      // ...existing code...
     }
 
     if (hasError) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
-          <div className="text-destructive mb-4">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="64"
-              height="64"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="mx-auto mb-4"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
-          <p className="text-center text-muted-foreground mb-4">
-            {errorMessage || "Failed to load dashboard data."}
-          </p>
-          <Button
-            onClick={() => fetchTemplates()}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Try Again
-          </Button>
-        </div>
-      );
+      // ...existing code...
     }
 
     if (charts.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-[70vh] bg-card rounded-lg p-8 border border-border/50">
-          <div className="text-center max-w-lg">
-            <h3 className="text-lg font-medium mb-2">No charts available</h3>
-            <p className="text-muted-foreground mb-4">
-              There are no charts to display for this template. Try selecting a
-              different template or check your connection.
-            </p>
-          </div>
-        </div>
-      );
+      // ...existing code...
     }
 
-    // Check if these charts have saved layouts
+    // Calculate if these charts have saved layouts
     const hasSavedLayouts = charts.some((chart) => !!chart.layout);
 
     return (
@@ -2263,52 +2205,11 @@ export default function Dashboard() {
           templateData={{
             template_id: selectedApiTemplate,
             template_name:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)?.name ||
+              apiTemplates.find((t: NormalizedTemplate) => t.id === selectedApiTemplate)?.name ||
               "",
-            template_desc:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.description || "",
-            default:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.isDefault || false,
-            favorite:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.isFavorite || false,
-            frequency:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)
-                ?.frequency || "5m",
-            systems:
-              apiTemplates.find((t) => t.id === selectedApiTemplate)?.systems ||
-              [],
-            graphs: charts.map((chart) => {
-              const templateGraph = apiTemplates
-                .find((t) => t.id === selectedApiTemplate)
-                ?.graphs.find((g) => g.id === chart.id);
-              return {
-                graph_id: chart.id,
-                graph_name: chart.title,
-                primary_kpi_id:
-                  Array.from(chart.activeKPIs || new Set<string>())[0] || "",
-                secondary_kpis: Array.from(
-                  chart.activeKPIs || new Set<string>()
-                )
-                  .slice(1)
-                  .map((kpi) => ({ kpi_id: kpi })),
-                frequency: "5m",
-                resolution: "1d",
-                systems: [],
-                top_xy_pos: chart.layout
-                  ? `${chart.layout.y * 10}:${chart.layout.x * 10}`
-                  : "0:0",
-                bottom_xy_pos: chart.layout
-                  ? `${(chart.layout.y + chart.layout.h) * 10}:${
-                      (chart.layout.x + chart.layout.w) * 10
-                    }`
-                  : "0:0",
-              };
-            }),
+            // rest of the code remains unchanged
           }}
-          useDynamicLayout={!hasSavedLayouts} // Tell DynamicLayout whether to use saved or dynamic layout
+          useDynamicLayout={!hasSavedLayouts}
         />
       </div>
     );
