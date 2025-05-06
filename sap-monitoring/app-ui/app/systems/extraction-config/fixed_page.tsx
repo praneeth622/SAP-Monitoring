@@ -3,12 +3,12 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Settings, X, Plus, ArrowRight, ArrowLeft, Check, Pencil } from "lucide-react"
+import { Settings, X, Plus, ArrowRight, ArrowLeft, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import axios from "axios"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
@@ -18,7 +18,7 @@ import { toast } from "sonner"
 // Table styles
 const tableContainerStyles = "max-h-[60vh] overflow-y-auto"
 
-// Initialize empty KPI  data arrays
+// Initialize empty KPI data arrays
 const jobsKpiData: KPI[] = []
 const osKpiData: KPI[] = []
 const kpiData = [...jobsKpiData, ...osKpiData]
@@ -174,57 +174,8 @@ export default function ConfigDashboard() {
   const [availableFilters, setAvailableFilters] = useState<string[]>([])
   const [isLoadingFilters, setIsLoadingFilters] = useState(false)
 
-  // Add these state variables for the filter sheet and KPI-specific filter data
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-  const [selectedFilterKpi, setSelectedFilterKpi] = useState<KPI | null>(null)
-  const [kpiFiltersMap, setKpiFiltersMap] = useState<Record<string, { 
-    filterNames: string[], 
-    filterConfig: FilterOption[]
-  }>>({})
-
   // useRef to hold the activateKpiGroup function
-  const activateKpiGroupRef = useRef<any>(null)
-
-  // Function to fetch filter values for a KPI
-  const fetchFilterValues = useCallback(async (kpiName: string) => {
-    try {
-      setIsLoadingFilters(true)
-      setFilterConfig([])
-
-      // Fetch filter names for this KPI
-      const response = await axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
-
-      if (response.status === 200) {
-        // Extract filter names from response
-        console.log("Filter names response:", response.data)
-        const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
-        console.log("Filter names:", filterNames)
-        setAvailableFilters(filterNames)
-
-        // Initialize with one empty filter if there are available filters
-        if (filterNames.length > 0) {
-          setFilterConfig([
-            {
-              id: `filter-${Date.now()}`,
-              filterName: filterNames[0],
-              operator: "EQ",
-              value: "",
-            },
-          ])
-        }
-      } else {
-        throw new Error("Failed to fetch filter options")
-      }
-    } catch (error) {
-      console.error("Error fetching filter options:", error)
-      toast.error("Failed to load filter options", {
-        description: error instanceof Error ? error.message : "Please try again",
-      })
-      setAvailableFilters([])
-    } finally {
-      setIsLoadingFilters(false)
-    }
-  }, [])
+  const activateKpiGroupRef = useRef<(groupName: string, monArea: string) => Promise<boolean> | null>(null)
 
   // Update steps when current step changes
   useEffect(() => {
@@ -290,7 +241,10 @@ export default function ConfigDashboard() {
 
   // Make sure to handle the activateKpiGroupRef properly
   useEffect(() => {
-    activateKpiGroupRef.current = activateKpiGroup;
+    if (activateKpiGroupRef && activateKpiGroupRef.current !== undefined) {
+      // Safe assignment since we checked it's mutable
+      (activateKpiGroupRef as any).current = activateKpiGroup
+    }
   }, [activateKpiGroup])
 
   // Add useEffect to initialize activeKpiGroups from API data
@@ -408,7 +362,7 @@ export default function ConfigDashboard() {
       setIsLoading(true)
 
       if (activeAreas.has(areaName)) {
-        // Deactivate the monitoring area
+        // Remove area
         setActiveAreas((prev) => {
           const next = new Set(prev)
           next.delete(areaName)
@@ -422,70 +376,29 @@ export default function ConfigDashboard() {
           setJobsKpis([])
         }
 
-        // Find all KPI groups for this area
-        const groupsToDeactivate = [...osKpiGroup, ...jobsKpiGroup]
+        // Clear active KPI groups for this area
+        const groupsToRemove = [...osKpiGroup, ...jobsKpiGroup]
           .filter((group) => group.mon_area === areaName)
           .map((group) => group.kpi_grp_name)
 
-        // Deactivate all KPI groups in this area
-        for (const groupName of groupsToDeactivate) {
-          if (activeKpiGroups.has(groupName)) {
-            // Create FormData object
-            const formData = new FormData()
-            formData.append("kpi_grp", groupName)
-            formData.append("is_active", "false")
-
-            // Call API to deactivate the KPI group
-            try {
-              await fetch("https://shwsckbvbt.a.pinggy.link/api/kpigrp", {
-                method: "POST",
-                body: formData,
-                redirect: "follow",
-              })
-            } catch (error) {
-              console.error(`Error deactivating KPI group ${groupName}:`, error)
-            }
-          }
-        }
-
-        // Update active KPI groups state to remove all groups from this area
         setActiveKpiGroups((prev) => {
           const next = new Set(prev)
-          groupsToDeactivate.forEach((name) => next.delete(name))
+          groupsToRemove.forEach((name) => next.delete(name))
           return next
         })
 
-        // Update the KPI groups state to reflect deactivation
-        if (areaName === "OS") {
-          setOsKpiGroup((prev) =>
-            prev.map((g) => ({
-              ...g,
-              is_active: false
-            }))
-          )
-        } else if (areaName === "JOBS") {
-          setJobsKpiGroup((prev) =>
-            prev.map((g) => ({
-              ...g,
-              is_active: false
-            }))
-          )
-        }
-
         toast.info(`Monitoring Area Deactivated`, {
-          description: `${areaName} monitoring area has been deactivated with all its KPI groups`,
+          description: `${areaName} monitoring area has been deactivated`,
         })
       } else {
-        // Activate the monitoring area
-        setActiveAreas((prev) => new Set(prev).add(areaName))
-
-        // Fetch KPI groups for this area
+        // Add area and fetch its KPI groups
         const response = await fetch(`https://shwsckbvbt.a.pinggy.link/api/kpigrp?mon_area=${areaName}`)
         if (!response.ok) {
           throw new Error(`Failed to fetch KPI groups for ${areaName}`)
         }
 
         const kpiGroupData = await response.json()
+        setActiveAreas((prev) => new Set(prev).add(areaName))
 
         // Set KPI groups based on area
         if (areaName === "OS") {
@@ -494,29 +407,16 @@ export default function ConfigDashboard() {
           setJobsKpiGroup(kpiGroupData)
         }
 
-        // MODIFIED: Don't automatically activate KPI groups
-        // Instead, leave all KPI groups inactive by default
-
-        // Update the KPI groups state to initialize with all inactive
-        if (areaName === "OS") {
-          setOsKpiGroup((prev) =>
-            prev.map((g) => ({
-              ...g,
-              is_active: false
-            }))
-          )
-        } else if (areaName === "JOBS") {
-          setJobsKpiGroup((prev) =>
-            prev.map((g) => ({
-              ...g,
-              is_active: false
-            }))
-          )
-        }
-
         toast.success(`Monitoring Area Activated`, {
-          description: `${areaName} monitoring area has been activated. You can now enable specific KPI groups.`,
+          description: `${areaName} monitoring area has been activated`,
         })
+
+        // AUTOMATICALLY ACTIVATE ALL KPI GROUPS IN THIS MONITORING AREA
+        for (const group of kpiGroupData) {
+          if (activateKpiGroupRef.current) {
+            await activateKpiGroupRef.current(group.kpi_grp_name, areaName)
+          }
+        }
       }
     } catch (error) {
       console.error("Error toggling monitoring area:", error)
@@ -775,6 +675,29 @@ export default function ConfigDashboard() {
             prev.map((g) => (g.kpi_grp_name === groupName ? { ...g, is_active: willBeActive } : g)),
           )
         }
+
+        // Check if all KPI groups under this monitoring area are now inactive
+        if (!willBeActive) {
+          // Get all KPI groups for this monitoring area
+          const allGroupsForArea = [...osKpiGroup, ...jobsKpiGroup].filter((g) => g.mon_area === monArea)
+
+          // Check if any KPI group for this area is still active
+          const anyGroupActive = allGroupsForArea.some((g) =>
+            g.kpi_grp_name === groupName ? willBeActive : activeKpiGroups.has(g.kpi_grp_name),
+          )
+
+          // If no KPI group is active and the monitoring area is currently active, deactivate it
+          if (!anyGroupActive && activeAreas.has(monArea)) {
+            console.log(`All KPI groups under ${monArea} are inactive. Automatically deactivating monitoring area.`)
+
+            // Call the monitoring area toggle function to deactivate it
+            await handleMonitoringAreaToggle(monArea)
+
+            toast.info(`Monitoring Area Auto-Deactivated`, {
+              description: `${monArea} monitoring area has been automatically deactivated because all its KPI groups are inactive.`,
+            })
+          }
+        }
       } else {
         throw new Error(`Failed to ${willBeActive ? "activate" : "deactivate"} group`)
       }
@@ -836,20 +759,19 @@ export default function ConfigDashboard() {
 
   // Function to select a KPI for detailed configuration
   const handleSelectKpi = (kpi: KPI) => {
-    // Store the selected KPI
     setSelectedKpi(kpi)
 
-    // Initialize alert configuration based on KPI data
+    // Initialize alert configuration
     setAlertConfig({
       thresholds: {
         g2y: kpi.g2y?.toString() || "",
         y2r: kpi.y2r?.toString() || "",
       },
       criticality: kpi.criticality || "Low",
-      alertWaitTime: "5", // Default value if not provided
+      alertWaitTime: "5", // Default value
       isActive: kpi.is_active || false,
-      isDrilldown: kpi.drilldown === true, // Ensure proper boolean conversion
-      comparisonDirection: kpi.direction === "lt" ? "lt" : "gt", // Default to "gt" if not specified
+      isDrilldown: Boolean(kpi.drilldown),
+      comparisonDirection: "gt", // Default value
     })
 
     // Fetch filter values if the KPI has filters
@@ -859,6 +781,47 @@ export default function ConfigDashboard() {
 
     // Move to step 2
     setCurrentStep(2)
+  }
+
+  // Function to fetch filter values for a KPI
+  const fetchFilterValues = async (kpiName: string) => {
+    try {
+      setIsLoadingFilters(true)
+      setFilterConfig([])
+
+      // Fetch filter names for this KPI
+      const response = await axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
+
+      if (response.status === 200) {
+        // Extract filter names from response
+        console.log("Filter names response:", response.data)
+        const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
+        console.log("Filter names:", filterNames)
+        setAvailableFilters(filterNames)
+
+        // Initialize with one empty filter if there are available filters
+        if (filterNames.length > 0) {
+          setFilterConfig([
+            {
+              id: `filter-${Date.now()}`,
+              filterName: filterNames[0],
+              operator: "EQ",
+              value: "",
+            },
+          ])
+        }
+      } else {
+        throw new Error("Failed to fetch filter options")
+      }
+    } catch (error) {
+      console.error("Error fetching filter options:", error)
+      toast.error("Failed to load filter options", {
+        description: error instanceof Error ? error.message : "Please try again",
+      })
+      setAvailableFilters([])
+    } finally {
+      setIsLoadingFilters(false)
+    }
   }
 
   // Function to add a new filter
@@ -937,53 +900,15 @@ export default function ConfigDashboard() {
       setIsLoading(true)
 
       // API call to save alert configuration
-      const formData = new FormData()
-      formData.append("kpiName", selectedKpi.kpi_name)
-      formData.append("g2y", alertConfig.thresholds.g2y)
-      formData.append("y2r", alertConfig.thresholds.y2r)
-      formData.append("criticality", alertConfig.criticality)
-      formData.append("alertWaitTime", alertConfig.alertWaitTime)
-      formData.append("isActive", alertConfig.isActive.toString())
-      formData.append("isDrilldown", alertConfig.isDrilldown.toString())
-      formData.append("direction", alertConfig.comparisonDirection)
-
-      // Log the data being sent to API for debugging
-      console.log("Saving alert configuration:", {
-        kpiName: selectedKpi.kpi_name,
-        g2y: alertConfig.thresholds.g2y,
-        y2r: alertConfig.thresholds.y2r,
+      const response = await axios.post(`https://shwsckbvbt.a.pinggy.link/api/kpi/${selectedKpi.kpi_name}/settings`, {
+        thresholds: alertConfig.thresholds,
         criticality: alertConfig.criticality,
         alertWaitTime: alertConfig.alertWaitTime,
         isActive: alertConfig.isActive,
         isDrilldown: alertConfig.isDrilldown,
-        direction: alertConfig.comparisonDirection
-      })
-
-      const response = await axios.post(`https://shwsckbvbt.a.pinggy.link/api/kpi/${selectedKpi.kpi_name}/settings`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
       })
 
       if (response.status === 200) {
-        // Update the local KPI data with the new settings
-        const updatedKpi = {
-          ...selectedKpi,
-          g2y: alertConfig.thresholds.g2y ? parseFloat(alertConfig.thresholds.g2y) : null,
-          y2r: alertConfig.thresholds.y2r ? parseFloat(alertConfig.thresholds.y2r) : null,
-          criticality: alertConfig.criticality,
-          is_active: alertConfig.isActive,
-          drilldown: alertConfig.isDrilldown,
-          direction: alertConfig.comparisonDirection,
-        }
-
-        // Update the KPI in the appropriate array
-        if (updatedKpi.kpi_group.startsWith("OS") || osKpis.some(k => k.kpi_name === updatedKpi.kpi_name)) {
-          setOsKpis(prev => prev.map(k => k.kpi_name === updatedKpi.kpi_name ? updatedKpi : k))
-        } else {
-          setJobsKpis(prev => prev.map(k => k.kpi_name === updatedKpi.kpi_name ? updatedKpi : k))
-        }
-
         toast.success("Alert Configuration Saved", {
           description: "Alert settings have been updated successfully",
         })
@@ -1003,138 +928,9 @@ export default function ConfigDashboard() {
     }
   }
 
-  // Function to fetch filter data for a specific KPI
-  const fetchKpiFilterData = useCallback(async (kpiName: string) => {
-    try {
-      // Fetch filter names for this KPI
-      const response = await axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
-
-      if (response.status === 200) {
-        // Extract filter names from response
-        const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
-        
-        // Fetch existing filter configurations if any
-        try {
-          const configResponse = await axios.get(`https://shwsckbvbt.a.pinggy.link/api/kpi/${kpiName}/filters`)
-          
-          if (configResponse.status === 200 && configResponse.data && Array.isArray(configResponse.data)) {
-            // Convert API response to FilterOption format with proper typing for operator
-            const configs: FilterOption[] = configResponse.data.map((filter: any) => ({
-              id: `filter-${Date.now()}-${Math.random()}`,
-              filterName: filter.name || (filterNames.length > 0 ? filterNames[0] : ""),
-              operator: (filter.operator === "EQ" || filter.operator === "NE" || filter.operator === "CP") 
-                ? (filter.operator as "EQ" | "NE" | "CP") 
-                : "EQ",
-              value: filter.value || ""
-            }))
-
-            // Store the filter data for this KPI
-            setKpiFiltersMap(prev => ({
-              ...prev,
-              [kpiName]: {
-                filterNames,
-                filterConfig: configs
-              }
-            }))
-          } else {
-            // If no configurations exist yet, create default config with first filter name if available
-            const defaultConfig: FilterOption[] = filterNames.length > 0 ? [
-              {
-                id: `filter-${Date.now()}`,
-                filterName: filterNames[0],
-                operator: "EQ",
-                value: ""
-              }
-            ] : [];
-            
-            // Store the filter data for this KPI
-            setKpiFiltersMap(prev => ({
-              ...prev,
-              [kpiName]: {
-                filterNames,
-                filterConfig: defaultConfig
-              }
-            }))
-          }
-        } catch (error) {
-          console.error(`Error fetching filter configurations for ${kpiName}:`, error)
-          
-          // On error, still create a default config
-          const defaultConfig: FilterOption[] = filterNames.length > 0 ? [
-            {
-              id: `filter-${Date.now()}`,
-              filterName: filterNames[0],
-              operator: "EQ",
-              value: ""
-            }
-          ] : [];
-          
-          setKpiFiltersMap(prev => ({
-            ...prev,
-            [kpiName]: {
-              filterNames,
-              filterConfig: defaultConfig
-            }
-          }))
-        }
-      }
-    } catch (error) {
-      console.error(`Error fetching filter names for ${kpiName}:`, error)
-    }
-  }, [])
-
-  // Update openFilterConfigSheet to use the stored filter data
-  const openFilterConfigSheet = (kpi: KPI) => {
-    setSelectedFilterKpi(kpi)
-    if (kpi.filter === true) {
-      // If we already have filter data for this KPI, use it
-      if (kpiFiltersMap[kpi.kpi_name]) {
-        // Set the available filters and filter config from our stored data
-        setAvailableFilters(kpiFiltersMap[kpi.kpi_name].filterNames)
-        
-        // If there are existing filter configurations, use them
-        if (kpiFiltersMap[kpi.kpi_name].filterConfig.length > 0) {
-          setFilterConfig(kpiFiltersMap[kpi.kpi_name].filterConfig)
-        }
-        // Otherwise create a default one if we have filter names
-        else if (kpiFiltersMap[kpi.kpi_name].filterNames.length > 0) {
-          setFilterConfig([{
-            id: `filter-${Date.now()}`,
-            filterName: kpiFiltersMap[kpi.kpi_name].filterNames[0],
-            operator: "EQ",
-            value: ""
-          }])
-        }
-        // Fallback to empty array if no filter names available
-        else {
-          setFilterConfig([])
-        }
-      } else {
-        // If no data for this KPI yet, fetch it
-        fetchFilterValues(kpi.kpi_name)
-      }
-    }
-    setIsFilterSheetOpen(true)
-  }
-
-  // Load filter data for all KPIs with filters when the component mounts
-  useEffect(() => {
-    const loadAllKpiFilters = async () => {
-      const allKpis = [...osKpis, ...jobsKpis].filter(kpi => kpi.filter === true)
-      
-      for (const kpi of allKpis) {
-        await fetchKpiFilterData(kpi.kpi_name)
-      }
-    }
-    
-    if (osKpis.length > 0 || jobsKpis.length > 0) {
-      loadAllKpiFilters()
-    }
-  }, [osKpis, jobsKpis, fetchKpiFilterData])
-
-  // Update the handleSaveFilterConfig function to update our kpiFiltersMap
+  // Function to save filter configuration
   const handleSaveFilterConfig = async () => {
-    if (!selectedFilterKpi) return
+    if (!selectedKpi) return
 
     try {
       setIsLoading(true)
@@ -1146,54 +942,19 @@ export default function ConfigDashboard() {
         value: filter.value,
       }))
 
-      // Create FormData for more reliable submission
-      const formData = new FormData()
-      formData.append("kpiName", selectedFilterKpi.kpi_name)
-      formData.append("filters", JSON.stringify(formattedFilters))
-
-      // Log the data being sent to API for debugging
-      console.log("Saving filter configuration:", {
-        kpiName: selectedFilterKpi.kpi_name,
-        filters: formattedFilters
+      // API call to save filter configuration
+      const response = await axios.post(`https://shwsckbvbt.a.pinggy.link/api/kpi/${selectedKpi.kpi_name}/filters`, {
+        filters: formattedFilters,
       })
 
-      // API call to save filter configuration
-      const response = await axios.post(`https://shwsckbvbt.a.pinggy.link/api/kpi/${selectedFilterKpi.kpi_name}/filters`, 
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      )
-
       if (response.status === 200) {
-        // Update our local map of KPI filters
-        setKpiFiltersMap(prev => ({
-          ...prev,
-          [selectedFilterKpi.kpi_name]: {
-            filterNames: kpiFiltersMap[selectedFilterKpi.kpi_name]?.filterNames || availableFilters,
-            filterConfig: filterConfig
-          }
-        }))
-        
-        // Update the local KPI data to reflect the changes
-        const updatedKpi = { ...selectedFilterKpi };
-        
-        // Update in the appropriate KPI array
-        if (updatedKpi.kpi_group.startsWith("OS")) {
-          setOsKpis((prev: KPI[]) => prev.map((k: KPI) => k.kpi_name === updatedKpi.kpi_name ? updatedKpi : k))
-        } else {
-          setJobsKpis((prev: KPI[]) => prev.map((k: KPI) => k.kpi_name === updatedKpi.kpi_name ? updatedKpi : k))
-        }
-        
         toast.success("Filter Configuration Saved", {
           description: "Filter settings have been updated successfully",
         })
 
-        // Close the filter sheet
-        setIsFilterSheetOpen(false)
-        setSelectedFilterKpi(null)
+        // Complete the wizard
+        setCurrentStep(1)
+        setSelectedKpi(null)
       } else {
         throw new Error("Failed to save filter configuration")
       }
@@ -1209,42 +970,34 @@ export default function ConfigDashboard() {
 
   // Render the progress steps
   const renderProgressSteps = () => (
-    <div className="flex mb-8 w-full">
-      {steps.map((step, index) => (
-        <div
-          key={step.id}
-          className={`flex-1 relative ${index > 0 ? "-ml-4" : ""}`}
-          onClick={() => {
-            // Make all steps clickable to allow direct navigation
-            setCurrentStep(step.id)
-          }}
-        >
+    <div className="flex justify-between mb-8 px-4">
+      {steps.map((step) => (
+        <div key={step.id} className="flex flex-1 items-center">
           <div
-            className={`
-              h-12 flex items-center justify-center px-4
-              ${step.current ? "bg-blue-500 text-white" : 
-                step.completed ? "bg-gray-200 text-gray-700" : "bg-muted/30 text-muted-foreground"}
-              ${index === 0 ? "rounded-l-md" : ""}
-              ${index === steps.length - 1 ? "rounded-r-md" : ""}
-              cursor-pointer hover:brightness-95
-              transition-all duration-200
-            `}
-            style={{
-              clipPath:
-                index < steps.length - 1
-                  ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
-                  : undefined,
-            }}
+            className={`flex items-center justify-center w-10 h-10 rounded-full
+              ${
+                step.completed
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : step.current
+                    ? "bg-primary/80 text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+              } mr-2 transition-all duration-200 hover:scale-105 hover:shadow-md`}
           >
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-white text-primary font-bold mr-2">
-                {step.completed ? <Check className="h-3 w-3" /> : step.id}
-              </div>
-              <span className="font-medium">
+            {step.completed ? <Check className="h-5 w-5" /> : step.id}
+          </div>
+          <div
+            className={`text-sm font-medium ${
+              step.current ? "text-primary font-semibold" : step.completed ? "text-primary/80" : "text-muted-foreground"
+            }`}
+          >
             {step.name}
-              </span>
           </div>
-          </div>
+          {step.id < steps.length && (
+            <div
+              className={`flex-1 h-1 mx-4 rounded-full transition-colors duration-200
+              ${step.completed ? "bg-primary" : "bg-muted"}`}
+            />
+          )}
         </div>
       ))}
     </div>
@@ -1376,6 +1129,9 @@ export default function ConfigDashboard() {
     </Card>
   )
 
+  // Add this state at the component level
+  const [showKpiChildren, setShowKpiChildren] = useState(false)
+
   // Render the KPIs section
   const renderKPIs = () => {
     const parentKpis = filteredKpis([...osKpis, ...jobsKpis].filter((kpi) => kpi.parent === true))
@@ -1397,14 +1153,6 @@ export default function ConfigDashboard() {
             <h2 className="text-xl font-semibold">KPIs Configuration</h2>
             <p className="text-sm text-muted-foreground">Manage and configure your key performance indicators</p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setShowKpiChildren(!showKpiChildren)}
-              className="mr-3"
-            >
-              {showKpiChildren ? "Hide Child KPIs" : "Show Child KPIs"}
-            </Button>
           <div className="w-[300px]">
             <Input
               placeholder="Search KPIs..."
@@ -1412,7 +1160,6 @@ export default function ConfigDashboard() {
               onChange={(e) => setKpiSearchTerm(e.target.value)}
               className="w-full"
             />
-            </div>
           </div>
         </div>
 
@@ -1421,17 +1168,14 @@ export default function ConfigDashboard() {
             <Spinner className="h-6 w-6" />
           </div>
         ) : parentKpis.length > 0 ? (
-          <>
-            {/* Parent KPIs Table */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold mb-4">Parent KPIs</h3>
           <div className={tableContainerStyles}>
             {/* Table Header */}
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
-                    <div className="col-span-6">KPI Name</div>
-                    <div className="col-span-3">Area</div>
+                <div className="col-span-4">KPI Name</div>
+                <div className="col-span-2">Area</div>
                 <div className="col-span-2">Monitoring Area</div>
+                <div className="col-span-3 text-center">Status</div>
                 <div className="col-span-1 text-right">Actions</div>
               </div>
             </div>
@@ -1439,12 +1183,14 @@ export default function ConfigDashboard() {
             {/* Table Body */}
             <div className="space-y-0">
               {parentKpis.map((kpi) => (
+                <div key={kpi.kpi_name} className="group">
+                  {/* Parent KPI Row */}
                   <div
-                      key={kpi.kpi_name}
-                      className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg items-center"
+                    className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center"
+                    onClick={() => handleSelectKpi(kpi)}
                   >
-                      <div className="col-span-6 text-sm text-muted-foreground truncate">{kpi.kpi_desc}</div>
-                      <div className="col-span-3">
+                    <div className="col-span-4 text-sm text-muted-foreground truncate">{kpi.kpi_desc}</div>
+                    <div className="col-span-2">
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
                         {kpi.kpi_group}
                       </span>
@@ -1454,87 +1200,23 @@ export default function ConfigDashboard() {
                         {kpi.kpi_group.startsWith("OS") ? "OS" : "JOBS"}
                       </span>
                     </div>
+                    <div className="col-span-3 flex justify-center">
+                      <Switch
+                        checked={kpi.is_active}
+                        onCheckedChange={() => handleKpiStatusChange(kpi)}
+                        disabled={isUpdating === kpi.kpi_name}
+                      />
+                    </div>
                     <div className="col-span-1 flex justify-end">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleKpiSettings(kpi, e);
-                          }}
-                        >
-                          Configure
+                      <Button variant="ghost" size="icon" onClick={(e) => handleKpiSettings(kpi, e)}>
+                        <Settings className="h-4 w-4" />
                       </Button>
                     </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Child KPIs Table - Only show when showChildren is true */}
-            {showKpiChildren && activeChildKpis.length > 0 && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Child KPIs</h3>
-                <div className={tableContainerStyles}>
-                  {/* Table Header */}
-                  <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
-                      <div className="col-span-6">KPI Name</div>
-                      <div className="col-span-3">Area</div>
-                      <div className="col-span-2">Parent Group</div>
-                      <div className="col-span-1 text-right">Actions</div>
-                    </div>
-                  </div>
-
-                  {/* Table Body */}
-                  <div className="space-y-0">
-                    {activeChildKpis.map((childKpi) => (
-                      <div
-                        key={childKpi.kpi_name}
-                        className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg items-center"
-                      >
-                        <div className="col-span-6 text-sm text-muted-foreground truncate">
-                          {childKpi.kpi_desc}
-                        </div>
-                        <div className="col-span-3">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
-                            {childKpi.kpi_group}
-                          </span>
-                        </div>
-                        <div className="col-span-2">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/30 text-xs font-medium">
-                            {childKpi.kpi_group.startsWith("OS") ? "OS" : "JOBS"}
-                          </span>
-                        </div>
-                        <div className="col-span-1 flex justify-end">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleKpiSettings(childKpi, e);
-                            }}
-                          >
-                            Configure
-                          </Button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-              </div>
-            )}
-            
-            {/* Show message if showChildren is true but no child KPIs */}
-            {showKpiChildren && activeChildKpis.length === 0 && (
-              <div className="py-4 text-center text-muted-foreground border rounded-md p-4 mt-4">
-                No child KPIs found for the active KPI groups
-              </div>
-            )}
-          </>
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             {kpiSearchTerm ? "No matching KPIs found" : "Select a KPI group to view KPIs"}
@@ -1544,740 +1226,393 @@ export default function ConfigDashboard() {
     )
   }
 
-  // Add these states for Alert Configuration similar to Filter Settings
-  const [isEditingAlert, setIsEditingAlert] = useState(false)
-  const [savedAlerts, setSavedAlerts] = useState<Array<{
-    kpiName: string,
-    kpiDesc: string,
-    kpiGroup: string,
-    g2y: string,
-    y2r: string,
-    criticality: string,
-    waitTime: string,
-    direction: "gt" | "lt",
-    isActive: boolean
-  }>>([])
-  const [newAlert, setNewAlert] = useState({
-    kpiName: "",
-    kpiDesc: "",
-    kpiGroup: "",
-    g2y: "",
-    y2r: "",
-    criticality: "Low",
-    waitTime: "5",
-    direction: "gt" as "gt" | "lt",
-    isActive: false
-  })
-  
-  // Add state for KPI dropdown search in Alert Config
-  const [kpiAlertSearchTerm, setKpiAlertSearchTerm] = useState("")
-
-  // Handle KPI selection for Alert
-  const handleAlertKpiSelection = (kpiName: string) => {
-    const selectedKpi = [...osKpis, ...jobsKpis].find(kpi => kpi.kpi_name === kpiName)
-    if (selectedKpi) {
-      setNewAlert(prev => ({
-                        ...prev,
-        kpiName: selectedKpi.kpi_name,
-        kpiDesc: selectedKpi.kpi_desc,
-        kpiGroup: selectedKpi.kpi_group,
-        g2y: selectedKpi.g2y?.toString() || "",
-        y2r: selectedKpi.y2r?.toString() || ""
-                      }))
-                    }
-  }
-
-  // Cancel editing alert
-  const handleCancelEditingAlert = () => {
-    setIsEditingAlert(false)
-    setNewAlert({
-      kpiName: "",
-      kpiDesc: "",
-      kpiGroup: "",
-      g2y: "",
-      y2r: "",
-      criticality: "Low",
-      waitTime: "5",
-      direction: "gt",
-      isActive: false
-    })
-  }
-
-  // Handle editing an existing alert
-  const handleEditAlert = (alert: typeof savedAlerts[0], index: number) => {
-    // Set the alert to be edited in the newAlert state
-    setNewAlert({...alert})
-    
-    // Enable editing mode
-    setIsEditingAlert(true)
-    
-    // Remove the alert from the savedAlerts array while editing
-    setSavedAlerts(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // Validate alert thresholds
-  const validateAlertThresholds = () => {
-    const g2y = Number.parseFloat(newAlert.g2y)
-    const y2r = Number.parseFloat(newAlert.y2r)
-
-    if (isNaN(g2y) || isNaN(y2r)) {
-      return true // Skip validation if values are not numbers yet
-    }
-
-    if (newAlert.direction === "gt") {
-      // For greater than (>), yellow threshold should be less than red threshold
-      return g2y < y2r
-    } else {
-      // For less than (<), yellow threshold should be greater than red threshold
-      return g2y > y2r
-    }
-  }
-
-  // Handle saving new alert
-  const handleSaveNewAlert = () => {
-    if (!newAlert.kpiName || !newAlert.g2y || !newAlert.y2r) {
-      toast.error("Please fill all required fields", {
-        description: "KPI name, Green to Yellow, and Yellow to Red thresholds are required"
-      })
-      return
-    }
-
-    if (!validateAlertThresholds()) {
-      toast.error("Invalid thresholds", {
-        description: newAlert.direction === "gt" 
-          ? "Green to Yellow must be lower than Yellow to Red"
-          : "Green to Yellow must be higher than Yellow to Red"
-      })
-      return
-    }
-    
-    // Add the new alert to savedAlerts
-    setSavedAlerts(prev => [...prev, {...newAlert}])
-    
-    // Reset the form
-    setNewAlert({
-      kpiName: "",
-      kpiDesc: "",
-      kpiGroup: "",
-      g2y: "",
-      y2r: "",
-      criticality: "Low",
-      waitTime: "5",
-      direction: "gt",
-      isActive: false
-    })
-    
-    // Exit editing mode
-    setIsEditingAlert(false)
-    
-    // Show success toast
-    toast.success("Alert Configuration Saved", {
-      description: "The alert configuration has been added"
-    })
-  }
-
   // Render the alert configuration step
   const renderAlertConfig = () => {
-    const parentKpis = getAllParentKpis()
-    
-    // Filter out KPIs that are already in the savedAlerts table
-    const availableKpis = parentKpis.filter(kpi => 
-      !savedAlerts.some(alert => alert.kpiName === kpi.kpi_name)
-    )
-    
-    // Filter KPIs based on search term
-    const filteredKpis = kpiAlertSearchTerm ? 
-      availableKpis.filter(kpi => 
-        kpi.kpi_desc.toLowerCase().includes(kpiAlertSearchTerm.toLowerCase()) ||
-        kpi.kpi_name.toLowerCase().includes(kpiAlertSearchTerm.toLowerCase())
-      ) : 
-      availableKpis
+    // Get all parent KPIs
+    const primaryKpis = [...osKpis, ...jobsKpis].filter((kpi) => kpi.parent === true && activeKpiGroups.has(kpi.kpi_group))
 
+    // If a specific KPI is selected, show its details
+    if (selectedKpi) {
+      return (
+        <Card className="p-6">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold">Alert Configuration</h2>
+            <p className="text-sm text-muted-foreground">
+              Configuration details for <span className="font-medium">{selectedKpi.kpi_desc}</span>
+            </p>
+          </div>
+
+          {/* Display all KPI details in a table format */}
+          <div className="overflow-hidden rounded-lg border">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Property</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">KPI Name</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.kpi_name}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Description</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.kpi_desc}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">KPI Group</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.kpi_group}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Unit</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.unit}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Active</td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-md ${selectedKpi.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} text-xs font-medium`}>
+                      {selectedKpi.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Green to Yellow Threshold</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.g2y !== null ? selectedKpi.g2y : 'Not set'}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Yellow to Red Threshold</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.y2r !== null ? selectedKpi.y2r : 'Not set'}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Comparison Direction</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.direction || 'Not set'}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Criticality</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.criticality || 'Not set'}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">SAP Frequency</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.sap_frequency || 'Not set'}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">System Frequency</td>
+                  <td className="px-4 py-3 text-sm">{selectedKpi.sys_frequency || 'Not set'}</td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Drilldown</td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-md ${selectedKpi.drilldown === true ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} text-xs font-medium`}>
+                      {selectedKpi.drilldown === true ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </td>
+                </tr>
+                <tr className="border-t">
+                  <td className="px-4 py-3 text-sm font-medium">Filter</td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-md ${selectedKpi.filter === true ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} text-xs font-medium`}>
+                      {selectedKpi.filter === true ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )
+    }
+
+    // If no KPI selected, show all primary KPIs
     return (
       <Card className="p-6">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold">Alert Configuration</h2>
-          <p className="text-sm text-muted-foreground">Configure alert settings for KPIs</p>
-            </div>
+          <h2 className="text-xl font-semibold">KPIs Alert Configuration</h2>
+          <p className="text-sm text-muted-foreground">View and configure all primary KPIs</p>
+        </div>
 
-        <div className="space-y-4">
-            <div className="rounded-md border">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 border-b">
-                      <th className="h-10 px-4 text-left font-medium">KPI Name</th>
-                      <th className="h-10 px-2 text-left font-medium">Group</th>
-                      <th className="h-10 px-2 text-center font-medium">Green to Yellow</th>
-                      <th className="h-10 px-2 text-center font-medium">Direction</th>
-                      <th className="h-10 px-2 text-center font-medium">Yellow to Red</th>
-                      <th className="h-10 px-2 text-center font-medium">Criticality</th>
-                      <th className="h-10 px-2 text-center font-medium">Wait Time</th>
-                      <th className="h-10 px-2 text-center font-medium">Active Status</th>
-                      <th className="h-10 px-2 text-center font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                  {savedAlerts.length > 0 ? (
-                    savedAlerts.map((alert, index) => (
-                      <tr key={index} className="border-b hover:bg-muted/30 transition-colors">
-                        <td className="p-2 px-4 align-middle">{alert.kpiDesc}</td>
-                          <td className="p-2 align-middle">
-                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
-                            {alert.kpiGroup}
-                            </span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                            <span className="font-mono bg-green-100 text-green-800 px-2 py-1 rounded">
-                            {alert.g2y || "-"}
-                          </span>
-                        </td>
-                        <td className="p-2 text-center align-middle">
-                          <span className="font-mono px-2 py-1 rounded">
-                            {alert.direction === "gt" ? ">" : "<"}
-                            </span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                            <span className="font-mono bg-red-100 text-red-800 px-2 py-1 rounded">
-                            {alert.y2r || "-"}
-                            </span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                          <span className={`px-2 py-1 rounded text-xs font-medium
-                              ${
-                              alert.criticality === "Low"
-                                  ? "bg-blue-100 text-blue-800"
-                                : alert.criticality === "Medium"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                  : alert.criticality === "High"
-                                      ? "bg-orange-100 text-orange-800"
-                                      : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                            {alert.criticality}
-                            </span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                          <span className="font-mono">{alert.waitTime} min</span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            alert.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                            {alert.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditAlert(alert, index)}>
-                            <Pencil className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))
-                  ) : !isEditingAlert ? (
-                      <tr>
-                      <td colSpan={9} className="h-24 text-center text-muted-foreground">
-                        No alert configurations yet
-                      </td>
-                    </tr>
-                  ) : null}
-                  
-                  {/* New alert row - shown when isEditingAlert is true */}
-                  {isEditingAlert && (
-                    <tr className="border-b bg-accent/5">
-                      <td className="p-2 px-4 align-middle">
-                        <Select 
-                          value={newAlert.kpiName} 
-                          onValueChange={(value) => handleAlertKpiSelection(value)}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Please select a KPI" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <div className="p-2 sticky top-0 bg-popover z-10">
-                              <Input 
-                                placeholder="Search KPIs..." 
-                                className="mb-2"
-                                value={kpiAlertSearchTerm}
-                                onChange={(e) => setKpiAlertSearchTerm(e.target.value)}
-                              />
-                            </div>
-                            <SelectGroup>
-                              {filteredKpis.length > 0 ? (
-                                filteredKpis.map(kpi => (
-                                  <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
-                                    {kpi.kpi_desc}
-                                  </SelectItem>
-                                ))
-                              ) : (
-                                <SelectItem value="no-kpis" disabled>
-                                  No KPIs available
-                                </SelectItem>
-                              )}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-2 align-middle">
-                        {newAlert.kpiGroup && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
-                            {newAlert.kpiGroup}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-2 text-center align-middle">
-                        <Input
-                          value={newAlert.g2y}
-                          onChange={(e) => setNewAlert(prev => ({...prev, g2y: e.target.value}))}
-                          placeholder="G2Y"
-                          className={`text-center max-w-[70px] mx-auto ${
-                            !validateAlertThresholds() && newAlert.g2y && newAlert.y2r
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }`}
-                        />
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                            <Button 
-                          type="button"
-                          variant="ghost"
-                              size="sm" 
-                          className="rounded-full h-8 w-8 p-0 flex items-center justify-center"
-                          onClick={() => setNewAlert(prev => ({...prev, direction: prev.direction === "gt" ? "lt" : "gt"}))}
-                        >
-                          {newAlert.direction === "gt" ? (
-                            <p className="text-lg"> &gt; </p>
-                          ) : (
-                            <p className="text-lg"> &lt; </p>
-                          )}
-                            </Button>
-                          </td>
-                      <td className="p-2 text-center align-middle">
-                        <Input
-                          value={newAlert.y2r}
-                          onChange={(e) => setNewAlert(prev => ({...prev, y2r: e.target.value}))}
-                          placeholder="Y2R"
-                          className={`text-center max-w-[70px] mx-auto ${
-                            !validateAlertThresholds() && newAlert.g2y && newAlert.y2r
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }`}
-                        />
-                      </td>
-                      <td className="p-2 text-center align-middle">
-                        <Select
-                          value={newAlert.criticality}
-                          onValueChange={(value) => setNewAlert(prev => ({...prev, criticality: value}))}
-                        >
-                          <SelectTrigger className="w-[100px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Low">Low</SelectItem>
-                            <SelectItem value="Medium">Medium</SelectItem>
-                            <SelectItem value="High">High</SelectItem>
-                            <SelectItem value="Very High">Very High</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-2 text-center align-middle">
-                        <Input
-                          value={newAlert.waitTime}
-                          onChange={(e) => setNewAlert(prev => ({...prev, waitTime: e.target.value}))}
-                          placeholder="Minutes"
-                          className="text-center max-w-[70px] mx-auto"
-                        />
-                      </td>
-                      <td className="p-2 text-center align-middle">
-                        <Switch
-                          checked={newAlert.isActive}
-                          onCheckedChange={(checked) => setNewAlert(prev => ({...prev, isActive: checked}))}
-                        />
-                      </td>
-                      <td className="p-2 text-center align-middle">
-                        <div className="flex space-x-1">
-                          <Button variant="ghost" size="icon" onClick={handleCancelEditingAlert}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            onClick={handleSaveNewAlert}
-                            disabled={!newAlert.kpiName || !newAlert.g2y || !newAlert.y2r || !validateAlertThresholds()}
-                            className="px-2"
-                          >
-                            Save
-                          </Button>
-                        </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-40">
+            <Spinner className="h-6 w-6" />
+          </div>
+        ) : primaryKpis.length > 0 ? (
+          <div className={tableContainerStyles}>
+            {/* Table Header */}
+            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
+                <div className="col-span-3">KPI Name</div>
+                <div className="col-span-2">Group</div>
+                <div className="col-span-2">Status</div>
+                <div className="col-span-2">Green to Yellow</div>
+                <div className="col-span-2">Yellow to Red</div>
+                <div className="col-span-1 text-right">Actions</div>
               </div>
             </div>
-          
-          <div className="flex items-center justify-center py-4">
-            {!isEditingAlert && (
-              <Button 
-                onClick={() => setIsEditingAlert(true)}
-                className="flex items-center"
-                disabled={isEditingAlert || availableKpis.length === 0}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add KPI Alert
-              </Button>
-            )}
+
+            {/* Table Body */}
+            <div className="space-y-0">
+              {primaryKpis.map((kpi) => (
+                <div 
+                  key={kpi.kpi_name} 
+                  className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center"
+                  onClick={() => handleSelectKpi(kpi)}
+                >
+                  <div className="col-span-3 text-sm truncate">{kpi.kpi_desc}</div>
+                  <div className="col-span-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
+                      {kpi.kpi_group}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-md ${kpi.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} text-xs font-medium`}>
+                      {kpi.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="col-span-2 text-sm">{kpi.g2y !== null ? kpi.g2y : 'Not set'}</div>
+                  <div className="col-span-2 text-sm">{kpi.y2r !== null ? kpi.y2r : 'Not set'}</div>
+                  <div className="col-span-1 flex justify-end">
+                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleKpiSettings(kpi, e); }}>
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            No KPIs found. Please activate KPI groups in step 1.
+          </div>
+        )}
       </Card>
     )
-  }
-
-  // Add this state for new filter form
-  const [showFilterForm, setShowFilterForm] = useState(false)
-  const [newFilter, setNewFilter] = useState({
-    kpiName: "",
-    kpiDesc: "",
-    kpiGroup: "",
-    filterName: "",
-    operator: "EQ" as "EQ" | "NE" | "CP",
-    value: ""
-  })
-  const [savedFilters, setSavedFilters] = useState<Array<{
-    kpiName: string,
-    kpiDesc: string,
-    kpiGroup: string,
-    filterName: string,
-    operator: "EQ" | "NE" | "CP",
-    value: string
-  }>>([])
-  const [isEditing, setIsEditing] = useState(false)
-
-  // Helper function to get all parent KPIs
-  const getAllParentKpis = useCallback(() => {
-    return [...osKpis, ...jobsKpis].filter(kpi => kpi.parent === true)
-  }, [osKpis, jobsKpis])
-
-  // Handle saving new filter
-  const handleSaveNewFilter = () => {
-    if (!newFilter.kpiName || !newFilter.filterName || !newFilter.value) {
-      toast.error("Please fill all required fields", {
-        description: "KPI name, filter name and value are required"
-      })
-      return
-    }
-    
-    // Add the new filter to savedFilters
-    setSavedFilters(prev => [...prev, {...newFilter}])
-    
-    // Reset the form
-    setNewFilter({
-      kpiName: "",
-      kpiDesc: "",
-      kpiGroup: "",
-      filterName: "",
-      operator: "EQ",
-      value: ""
-    })
-    
-    // Exit editing mode
-    setIsEditing(false)
-    
-    // Show success toast
-    toast.success("Filter saved successfully", {
-      description: "The filter has been added to your configuration"
-    })
-  }
-
-  // Handle KPI selection
-  const handleKpiSelection = (kpiName: string) => {
-    const selectedKpi = [...osKpis, ...jobsKpis].find(kpi => kpi.kpi_name === kpiName)
-    if (selectedKpi) {
-      setNewFilter(prev => ({
-        ...prev,
-        kpiName: selectedKpi.kpi_name,
-        kpiDesc: selectedKpi.kpi_desc,
-        kpiGroup: selectedKpi.kpi_group
-      }))
-      
-      // Fetch filter names and auto-populate the first one
-      if (selectedKpi.filter === true) {
-        axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
-          .then(response => {
-            if (response.status === 200 && response.data.length > 0) {
-              const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
-              if (filterNames.length > 0) {
-                // Auto-populate the filter name with the first available filter
-                setNewFilter(prev => ({
-                  ...prev,
-                  filterName: filterNames[0],
-                  operator: "EQ" // Default to EQ operator
-                }))
-              }
-            }
-          })
-          .catch(error => {
-            console.error("Error fetching filter options:", error)
-          })
-      }
-    }
-  }
-
-  // Handle editing an existing filter
-  const handleEditFilter = (filter: typeof savedFilters[0], index: number) => {
-    // Set the filter to be edited in the newFilter state
-    setNewFilter({
-      kpiName: filter.kpiName,
-      kpiDesc: filter.kpiDesc,
-      kpiGroup: filter.kpiGroup,
-      filterName: filter.filterName,
-      operator: filter.operator,
-      value: filter.value
-    })
-    
-    // Enable editing mode
-    setIsEditing(true)
-    
-    // Remove the filter from the savedFilters array while editing
-    setSavedFilters(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // Cancel editing
-  const handleCancelEditing = () => {
-    setIsEditing(false)
-    setNewFilter({
-      kpiName: "",
-      kpiDesc: "",
-      kpiGroup: "",
-      filterName: "",
-      operator: "EQ",
-      value: ""
-    })
   }
 
   // Render the filter settings step
   const renderFilterSettings = () => {
-    const parentKpis = getAllParentKpis()
+    // Get all KPIs with filters
+    const kpisWithFilters = [...osKpis, ...jobsKpis].filter(
+      (kpi) => kpi.parent === true && kpi.filter === true && activeKpiGroups.has(kpi.kpi_group)
+    )
 
+    // If a specific KPI is selected, show its filter details
+    if (selectedKpi) {
+      return (
+        <Card className="p-6">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold">Filter Settings</h2>
+            <p className="text-sm text-muted-foreground">
+              Filter details for <span className="font-medium">{selectedKpi.kpi_desc}</span>
+            </p>
+          </div>
+
+          {selectedKpi.filter === true ? (
+            <div className="space-y-6">
+              {isLoadingFilters ? (
+                <div className="flex justify-center p-4">
+                  <Spinner className="h-6 w-6" />
+                  <span className="ml-2">Loading filters...</span>
+                </div>
+              ) : availableFilters.length > 0 ? (
+                <>
+                  {/* Display filters in a table format */}
+                  <div className="overflow-hidden rounded-lg border">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Filter Name</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Operator</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filterConfig.length > 0 ? (
+                          filterConfig.map((filter) => (
+                            <tr key={filter.id} className="border-t">
+                              <td className="px-4 py-3 text-sm">{filter.filterName}</td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
+                                  {filter.operator}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm">{filter.value}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr className="border-t">
+                            <td colSpan={3} className="px-4 py-3 text-center text-sm text-muted-foreground">
+                              No filters configured for this KPI
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Additional information about available filters */}
+                  <div className="p-4 bg-accent/5 rounded-lg">
+                    <h3 className="font-medium mb-2">Available Filters</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {availableFilters.map((filterName) => (
+                        <div key={filterName} className="text-sm px-2 py-1 bg-background rounded border">
+                          {filterName}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-muted-foreground p-4 border rounded-lg">
+                  No filter options available for this KPI
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground p-4 border rounded-lg">
+              Filtering is not available for this KPI
+            </div>
+          )}
+        </Card>
+      )
+    }
+
+    // If no KPI selected, show all KPIs with filters
     return (
       <Card className="p-6">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold">Filter Settings</h2>
-          <p className="text-sm text-muted-foreground">Configure filter settings for KPIs</p>
+          <h2 className="text-xl font-semibold">KPIs Filter Settings</h2>
+          <p className="text-sm text-muted-foreground">View and configure filters for all KPIs</p>
         </div>
 
-        <div className="space-y-4">
-        <div className="rounded-md border">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="h-10 px-4 text-left font-medium">KPI Name</th>
-                  <th className="h-10 px-2 text-left font-medium">Group</th>
-                  <th className="h-10 px-4 text-left font-medium">Filter Name</th>
-                    <th className="h-10 px-2 text-center font-medium">Operator</th>
-                  <th className="h-10 px-4 text-left font-medium">Value</th>
-                  <th className="h-10 px-2 text-center font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                  {savedFilters.length > 0 ? (
-                    savedFilters.map((filter, index) => (
-                      <tr key={index} className="border-b hover:bg-muted/30 transition-colors">
-                        <td className="p-2 px-4 align-middle">{filter.kpiDesc}</td>
-                      <td className="p-2 align-middle">
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
-                            {filter.kpiGroup}
-                        </span>
-                      </td>
-                        <td className="p-2 px-4 align-middle">{filter.filterName}</td>
-                        <td className="p-2 text-center align-middle">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
-                            {filter.operator}
-                          </span>
-                      </td>
-                        <td className="p-2 px-4 align-middle">{filter.value}</td>
-                      <td className="p-2 text-center align-middle">
-                          {/* Could add edit/delete actions here */}
-                          <Button variant="ghost" size="icon" onClick={() => handleEditFilter(filter, index)}>
-                            <Pencil className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                  ) : !isEditing ? (
-                  <tr>
-                    <td colSpan={6} className="h-24 text-center text-muted-foreground">
-                        No filters configured yet
-                    </td>
-                  </tr>
-                  ) : null}
-                  
-                  {/* New filter row - shown when isEditing is true */}
-                  {isEditing && (
-                    <tr className="border-b bg-accent/5">
-                                  <td className="p-2 px-4 align-middle">
-                        <Select
-                          value={newFilter.kpiName} 
-                          onValueChange={(value) => handleKpiSelection(value)}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Please select a KPI" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <div className="p-2 sticky top-0 bg-popover z-10">
-                              <Input 
-                                placeholder="Search KPIs..." 
-                                className="mb-2"
-                                value={kpiFilterSearchTerm}
-                                onChange={(e) => setKpiFilterSearchTerm(e.target.value)}
-                              />
-                            </div>
-                            <SelectGroup>
-                              {parentKpis.filter(kpi => 
-                                kpi.kpi_desc.toLowerCase().includes(kpiFilterSearchTerm.toLowerCase()) ||
-                                kpi.kpi_name.toLowerCase().includes(kpiFilterSearchTerm.toLowerCase())
-                              ).map(kpi => (
-                                <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
-                                  {kpi.kpi_desc}
-                              </SelectItem>
-                            ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-2 align-middle">
-                        {newFilter.kpiGroup && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
-                            {newFilter.kpiGroup}
-                          </span>
-                        )}
-                                  </td>
-                                  <td className="p-2 px-4 align-middle">
-                        <Input
-                          value={newFilter.filterName}
-                          onChange={(e) => setNewFilter(prev => ({...prev, filterName: e.target.value}))}
-                          placeholder="Enter filter name"
-                        />
-                      </td>
-                      <td className="p-2 text-center align-middle">
-                        <Select
-                          value={newFilter.operator} 
-                          onValueChange={(value: "EQ" | "NE" | "CP") => setNewFilter(prev => ({...prev, operator: value}))}
-                        >
-                          <SelectTrigger className="w-[80px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="EQ">EQ</SelectItem>
-                            <SelectItem value="NE">NE</SelectItem>
-                            <SelectItem value="CP">CP</SelectItem>
-                          </SelectContent>
-                        </Select>
-                                  </td>
-                                  <td className="p-2 px-4 align-middle">
-                        <Input
-                          value={newFilter.value}
-                          onChange={(e) => setNewFilter(prev => ({...prev, value: e.target.value}))}
-                          placeholder="Enter value"
-                        />
-                                  </td>
-                      <td className="p-2 text-center align-middle">
-                        <div className="flex space-x-1">
-                          <Button variant="ghost" size="icon" onClick={handleCancelEditing}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                          <Button 
-                            variant="default" 
-                            onClick={handleSaveNewFilter} 
-                            disabled={!newFilter.kpiName || !newFilter.filterName || !newFilter.value}
-                            size="sm"
-                          >
-                            Save
-                          </Button>
-                        </div>
-                                  </td>
-                                </tr>
-                  )}
-                            </tbody>
-                          </table>
-                        </div>
-                </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-40">
+            <Spinner className="h-6 w-6" />
+          </div>
+        ) : kpisWithFilters.length > 0 ? (
+          <div className={tableContainerStyles}>
+            {/* Table Header */}
+            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
+                <div className="col-span-5">KPI Name</div>
+                <div className="col-span-3">Group</div>
+                <div className="col-span-3">Filter Status</div>
+                <div className="col-span-1 text-right">Actions</div>
+              </div>
+            </div>
 
-          <div className="flex items-center justify-center py-4">
-            {!isEditing && (
-                <Button
-                onClick={() => setIsEditing(true)}
-                className="flex items-center"
-                disabled={isEditing}
+            {/* Table Body */}
+            <div className="space-y-0">
+              {kpisWithFilters.map((kpi) => (
+                <div 
+                  key={kpi.kpi_name} 
+                  className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg cursor-pointer items-center"
+                  onClick={() => {
+                    setSelectedKpi(kpi);
+                    fetchFilterValues(kpi.kpi_name);
+                  }}
                 >
-                <Plus className="h-4 w-4 mr-2" />
-                  Add Filter
-                </Button>
-            )}
+                  <div className="col-span-5 text-sm truncate">{kpi.kpi_desc}</div>
+                  <div className="col-span-3">
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
+                      {kpi.kpi_group}
+                    </span>
+                  </div>
+                  <div className="col-span-3">
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100 text-green-800 text-xs font-medium">
+                      Filters Available
+                    </span>
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        handleKpiSettings(kpi, e); 
+                      }}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            No KPIs with filters found. Please activate KPI groups with filters in step 1.
           </div>
+        )}
       </Card>
     )
   }
 
-  // Update the navigation buttons to be more consistent
+  // Render the navigation buttons
   const renderNavButtons = () => {
+    const handleNextClick = () => {
+      // Simple navigation to next step
+      setCurrentStep((prev) => Math.min(steps.length, prev + 1))
+    }
+
+    const handlePreviousClick = () => {
+      // Simple navigation to previous step
+      setCurrentStep((prev) => Math.max(1, prev - 1))
+    }
+
+    // For step 1, show a Next button
+    if (currentStep === 1) {
+      return (
+        <div className="flex justify-end mt-8">
+          <Button
+            type="button"
+            variant="default"
+            onClick={handleNextClick}
+            disabled={isLoading}
+          >
+            Next
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </div>
+      )
+    }
+
+    // For steps 2 and 3, show both Previous and Next/Complete buttons
     return (
       <div className="flex justify-between mt-8">
-        {currentStep > 1 && (
         <Button
           type="button"
           variant="outline"
-          onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
+          onClick={handlePreviousClick}
           disabled={isLoading}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Previous
         </Button>
-        )}
 
-        {currentStep === 1 && (
-          <div></div> // Empty div to maintain flex layout
-        )}
-
-        {currentStep < 3 ? (
-          <Button
-            type="button"
-            onClick={() => {
-              if (currentStep === 1) {
-                // Move to step 2 without selecting a specific KPI
-                setCurrentStep(2)
-              } else if (currentStep === 2) {
-                // Move to step 3
-                setCurrentStep(3)
-              }
-            }}
+        {currentStep === 2 ? (
+          <Button 
+            type="button" 
+            onClick={handleNextClick}
+            disabled={isLoading}
           >
-                Next
-                <ArrowRight className="h-4 w-4 ml-2" />
+            Next
+            <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         ) : (
-          <Button
-            type="button"
-            onClick={() => {
-              // Complete the wizard
-              setCurrentStep(1)
-              setSelectedKpi(null)
-              toast.success("Configuration completed", {
-                description: "All settings have been saved successfully",
-              })
-            }}
-          >
-            Complete
+          <Button type="button" onClick={handleSaveFilterConfig} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <span className="animate-spin mr-2">⌛</span>
+                Saving...
+              </>
+            ) : (
+              "Complete"
+            )}
           </Button>
         )}
       </div>
     )
   }
-
-  // Add state for KPI dropdown search in Filter Settings
-  const [kpiFilterSearchTerm, setKpiFilterSearchTerm] = useState("")
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -2323,9 +1658,14 @@ export default function ConfigDashboard() {
         </div>
       </Card>
 
+      {/* Progress Steps */}
+      {renderProgressSteps()}
+
       {/* Main Content */}
       <div className="space-y-8">
-        {/* Monitoring Areas and KPI Groups always visible in all steps */}
+        {currentStep === 1 && (
+          <>
+            {/* First Row - Monitoring Areas and KPI Groups */}
             <div className="grid grid-cols-2 gap-8">
               {/* Monitoring Areas Card */}
               <div>{renderMonitoringAreas()}</div>
@@ -2334,15 +1674,14 @@ export default function ConfigDashboard() {
               <div>{renderKPIGroups()}</div>
             </div>
 
-        {/* Progress Steps - Moved below monitoring areas and KPI groups */}
-        {renderProgressSteps()}
+            {/* Second Row - Full Width KPIs Table */}
+            <div className="w-full">{renderKPIs()}</div>
+          </>
+        )}
 
-        {/* Step-specific content shown below */}
-        <div className="w-full">
-          {currentStep === 1 && renderKPIs()}
         {currentStep === 2 && renderAlertConfig()}
+
         {currentStep === 3 && renderFilterSettings()}
-        </div>
 
         {/* Navigation Buttons */}
         {renderNavButtons()}
@@ -2356,8 +1695,6 @@ export default function ConfigDashboard() {
           setSelectedKpiSettings(null)
         }}
         kpi={selectedKpiSettings}
-        setOsKpis={setOsKpis}
-        setJobsKpis={setJobsKpis}
       />
     </div>
   )
@@ -2367,14 +1704,10 @@ const KpiSettingsSheet = ({
   open,
   onClose,
   kpi,
-  setOsKpis,
-  setJobsKpis
 }: {
   open: boolean
   onClose: () => void
   kpi: KPI | null
-  setOsKpis: React.Dispatch<React.SetStateAction<KPI[]>>
-  setJobsKpis: React.Dispatch<React.SetStateAction<KPI[]>>
 }) => {
   const [isLoading, setIsLoading] = useState(false)
   // Add state for filter values
@@ -2404,8 +1737,37 @@ const KpiSettingsSheet = ({
 
   const [comparisonDirection, setComparisonDirection] = useState<"gt" | "lt">("gt")
 
+  // Fetch filter values when the KPI is set and has filter=true
+  useEffect(() => {
+    if (kpi) {
+      setConfiguration({
+        isActive: kpi.is_active || false,
+        isDrilldown: Boolean(kpi.drilldown),
+        frequency: {
+          sap: kpi.sap_frequency || "",
+          sys: kpi.sys_frequency || "",
+        },
+        thresholds: {
+          g2y: kpi.g2y?.toString() || "",
+          y2r: kpi.y2r?.toString() || "",
+        },
+        criticality: kpi.criticality || "Low",
+        alertWaitTime: "5", // Default value if not provided by API
+        filters: [], // Reset filters
+      })
+
+      // If KPI has filter=true, fetch the filter values
+      if (kpi.filter === true) {
+        fetchFilterValues(kpi.kpi_name)
+      } else {
+        // Reset filter values if KPI doesn't have filters
+        setFilterValues([])
+      }
+    }
+  }, [kpi])
+
   // Function to fetch filter values for a KPI
-  const kpiSheetFetchFilterValues = async (kpiName: string) => {
+  const fetchFilterValues = async (kpiName: string) => {
     try {
       setIsLoadingFilters(true)
       setFilterError(null)
@@ -2447,39 +1809,6 @@ const KpiSettingsSheet = ({
       setIsLoadingFilterOptions(false)
     }
   }
-
-  // Fetch filter values when the KPI is set and has filter=true
-  useEffect(() => {
-    if (kpi) {
-      // Initialize the configuration based on the KPI's current settings
-      setConfiguration({
-        isActive: kpi.is_active || false,
-        isDrilldown: kpi.drilldown === true, // Ensure proper boolean conversion
-        frequency: {
-          sap: kpi.sap_frequency || "",
-          sys: kpi.sys_frequency || "",
-        },
-        thresholds: {
-          g2y: kpi.g2y?.toString() || "",
-          y2r: kpi.y2r?.toString() || "",
-        },
-        criticality: kpi.criticality || "Low",
-        alertWaitTime: "5", // Default value if not provided by API
-        filters: [], // Reset filters
-      });
-      
-      // Set the comparison direction from the KPI or default to "gt"
-      setComparisonDirection(kpi.direction === "lt" ? "lt" : "gt");
-
-      // If KPI has filter=true, fetch the filter values
-      if (kpi.filter === true) {
-        kpiSheetFetchFilterValues(kpi.kpi_name);
-      } else {
-        // Reset filter values if KPI doesn't have filters
-        setFilterValues([]);
-      }
-    }
-  }, [kpi]);
 
   const handleAddFilter = () => {
     if (availableFilters.length === 0) return
@@ -2524,58 +1853,19 @@ const KpiSettingsSheet = ({
         value: filter.value,
       }))
 
-      // Create FormData for more reliable submission
-      const formData = new FormData()
-      formData.append("kpiName", kpi?.kpi_name || "")
-      formData.append("g2y", configuration.thresholds.g2y)
-      formData.append("y2r", configuration.thresholds.y2r)
-      formData.append("criticality", configuration.criticality)
-      formData.append("alertWaitTime", configuration.alertWaitTime)
-      formData.append("isActive", configuration.isActive.toString())
-      formData.append("isDrilldown", configuration.isDrilldown.toString())
-      formData.append("direction", comparisonDirection)
-      formData.append("filters", JSON.stringify(formattedFilters))
-
-      // Log the data being sent to API for debugging
-      console.log("Saving settings from sheet:", {
-        kpiName: kpi?.kpi_name,
-        g2y: configuration.thresholds.g2y,
-        y2r: configuration.thresholds.y2r,
-        criticality: configuration.criticality,
-        alertWaitTime: configuration.alertWaitTime,
-        isActive: configuration.isActive,
-        isDrilldown: configuration.isDrilldown,
-        direction: comparisonDirection,
-        filters: formattedFilters
-      })
-
       // API call to save configuration
       const response = await fetch(`https://shwsckbvbt.a.pinggy.link/api/kpi/${kpi?.kpi_name}/settings`, {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...configuration,
+          filters: formattedFilters,
+        }),
       })
 
       if (!response.ok) throw new Error("Failed to save settings")
-
-      // Update local KPI data if the kpi exists in one of the arrays
-      if (kpi) {
-        const updatedKpi = {
-          ...kpi,
-          g2y: configuration.thresholds.g2y ? parseFloat(configuration.thresholds.g2y) : null,
-          y2r: configuration.thresholds.y2r ? parseFloat(configuration.thresholds.y2r) : null,
-          criticality: configuration.criticality,
-          is_active: configuration.isActive,
-          drilldown: configuration.isDrilldown,
-          direction: comparisonDirection,
-        }
-
-        // Update in the appropriate KPI array
-        if (updatedKpi.kpi_group.startsWith("OS")) {
-          setOsKpis((prev: KPI[]) => prev.map((k: KPI) => k.kpi_name === updatedKpi.kpi_name ? updatedKpi : k))
-        } else {
-          setJobsKpis((prev: KPI[]) => prev.map((k: KPI) => k.kpi_name === updatedKpi.kpi_name ? updatedKpi : k))
-        }
-      }
 
       toast.success("Settings Updated", {
         description: "KPI configuration has been updated successfully",
@@ -2649,7 +1939,7 @@ const KpiSettingsSheet = ({
           {/* Section 1: Threshold Settings */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Threshold Settings</h3>
-            <div className="grid gap-4 bg-accent/5">
+            <div className="grid gap-4  bg-accent/5">
               <div className="grid grid-cols-5 gap-2 items-center">
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="g2y" className="font-medium text-green-600">
@@ -2679,9 +1969,9 @@ const KpiSettingsSheet = ({
                     onClick={() => setComparisonDirection((prev) => (prev === "gt" ? "lt" : "gt"))}
                   >
                     {comparisonDirection === "gt" ? (
-                      <p className="text-lg"> &gt; </p>
-                    ) : (
                       <p className="text-lg"> &lt; </p>
+                    ) : (
+                      <p className="text-lg"> &gt; </p>
                     )}
                   </Button>
                 </div>
@@ -2716,7 +2006,7 @@ const KpiSettingsSheet = ({
                     </>
                   ) : (
                     <>
-                      <span className="font-medium">Invalid thresholds:</span> When using <span> &lt; </span>, Green to Yellow
+                      <span className="font-medium">Invalid thresholds:</span> When using <p> &lt; </p>, Green to Yellow
                       ({configuration.thresholds.g2y}) must be higher than Yellow to Red ({configuration.thresholds.y2r}
                       )
                     </>
@@ -2799,7 +2089,6 @@ const KpiSettingsSheet = ({
                   checked={configuration.isDrilldown}
                   onCheckedChange={(checked) =>
                     setConfiguration((prev) => ({
-                      
                       ...prev,
                       isDrilldown: checked,
                     }))

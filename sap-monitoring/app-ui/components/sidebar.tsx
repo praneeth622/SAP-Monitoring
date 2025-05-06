@@ -325,7 +325,7 @@ export function Sidebar() {
     width: isCollapsed ? (isHovering ? '16rem' : '4rem') : '16rem',
     position: 'fixed' as 'fixed',
     height: '100vh',
-    zIndex: 50,
+    zIndex: 60,
   };
 
   return (

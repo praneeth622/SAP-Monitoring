@@ -65,9 +65,9 @@ const getDateFormatter = (dates: string[]) => {
         } else if (diffDays > 7) {
           return format(dateObj, 'MMM dd');
         } else if (diffDays > 1) {
-          return format(dateObj, 'EEE HH:mm');
+          return format(dateObj, 'MMM dd HH:mm');
         } else if (diffHours > 24) {
-          return format(dateObj, 'HH:mm');
+          return format(dateObj, 'MMM dd HH:mm');
         } else if (diffMinutes > 60) {
           return format(dateObj, 'HH:mm');
         } else {
@@ -129,11 +129,12 @@ const ChartContainer = memo(
     const filteredData = React.useMemo(() => {
       if (!dateRange?.from || !dateRange?.to) return data;
       return data.filter((item) => {
+        if (!item.date) return false;
+        
         const itemDate = dayjs(item.date);
         const fromDate = dayjs(dateRange.from);
         const toDate = dayjs(dateRange.to);
 
-        // Include data points that fall within the exact date-time range (inclusive)
         return (
           (itemDate.isAfter(fromDate) || itemDate.isSame(fromDate)) &&
           (itemDate.isBefore(toDate) || itemDate.isSame(toDate))
@@ -308,6 +309,7 @@ const ChartContainer = memo(
           const color = kpiColors?.[category]?.color || defaultColor;
           const isActive = isKpiActive(category);
 
+          // Process categoryData to connect valid data points
           const categoryData = dates.map((date) => {
             const points = filteredData.filter(
               (p) => p.date === date && p.category === category
@@ -316,10 +318,20 @@ const ChartContainer = memo(
               ? points.reduce((sum, p) => sum + p.value, 0)
               : null;
           });
+          
+          // Filter out null values to avoid showing them as points
+          const filteredCategoryData = categoryData.map((value, idx) => {
+            return {
+              value: value,
+              symbol: value === null ? 'none' : 'circle',
+              symbolSize: value === null ? 0 : 6,
+            };
+          });
 
           const baseSeriesConfig = {
             name: kpiColors?.[category]?.name || category,
-            data: categoryData,
+            data: filteredCategoryData,
+            connectNulls: true, // Connect lines over null values
             itemStyle: {
               color,
               opacity: isActive ? 1 : 0.3,
@@ -412,28 +424,51 @@ const ChartContainer = memo(
             formatter: (params: any) => {
               if (!Array.isArray(params)) return "";
 
-              const date = params[0].axisValue;
-              let result = `<div style="margin-bottom: 4px; font-weight: 500;">${date}</div>`;
-
-              params.forEach((param: any) => {
-                if (param.value !== null && param.value !== undefined) {
-                  const color = param.color || "#fff";
-                  const value =
-                    typeof param.value === "number"
-                      ? param.value.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })
-                      : param.value;
-                  result += `
-                    <div style="display: flex; align-items: center; margin: 2px 0;">
-                      <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; margin-right: 6px;"></span>
-                      <span style="color: ${color};">${param.seriesName}: ${value}</span>
-                    </div>
-                  `;
+              try {
+                // Format the date consistently in the tooltip
+                const dateStr = params[0].axisValue;
+                let formattedDate = dateStr;
+                
+                try {
+                  const date = new Date(dateStr);
+                  if (isValid(date)) {
+                    formattedDate = format(date, 'MMM dd, yyyy HH:mm');
+                  }
+                } catch (e) {
+                  console.warn('Error formatting tooltip date:', e);
                 }
-              });
+                
+                let result = `<div style="margin-bottom: 4px; font-weight: 500;">${formattedDate}</div>`;
 
-              return result;
+                // Only include series with non-null values
+                const validParams = params.filter(
+                  (param: any) => param.value !== null && param.value !== undefined && 
+                            (typeof param.value === 'number' || typeof param.value === 'object' && param.value.value !== null)
+                );
+                
+                validParams.forEach((param: any) => {
+                  const value = typeof param.value === 'object' ? param.value.value : param.value;
+                  if (value !== null && value !== undefined) {
+                    const color = param.color || "#fff";
+                    const displayValue = typeof value === "number"
+                        ? value.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : value;
+                    result += `
+                      <div style="display: flex; align-items: center; margin: 2px 0;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; margin-right: 6px;"></span>
+                        <span style="color: ${color};">${param.seriesName}: ${displayValue}</span>
+                      </div>
+                    `;
+                  }
+                });
+
+                return result;
+              } catch (error) {
+                console.warn('Error in tooltip formatter:', error);
+                return "";
+              }
             },
           },
           dataZoom: [
@@ -496,6 +531,7 @@ const ChartContainer = memo(
                   const date = new Date(dateStr);
                   if (!isValid(date)) return dateStr;
 
+                  // Always include month and date
                   return format(date, 'MMM dd HH:mm');
                 } catch (error) {
                   console.warn('Error formatting zoom label:', error);
@@ -521,8 +557,12 @@ const ChartContainer = memo(
                   const date = new Date(value);
                   if (!isValid(date)) return value;
                   
-                  const formatter = getDateFormatter(dates);
-                  return formatter(value);
+                  // Always ensure month and date are shown in the label
+                  if (dates.length > 30) {
+                    return format(date, 'MMM dd');
+                  } else {
+                    return format(date, 'MMM dd HH:mm');
+                  }
                 } catch (error) {
                   console.warn('Error formatting axis label:', error);
                   return value;

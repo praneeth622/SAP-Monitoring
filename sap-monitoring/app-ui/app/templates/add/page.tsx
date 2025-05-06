@@ -18,11 +18,13 @@ import {
 } from "@/components/ui/select";
 import { DynamicLayout } from "@/components/charts/DynamicLayout";
 import { generateDummyData, fetchTemplateChartData } from "@/utils/data";
+import { getTemplateChartDummyData, getTemplateDummyData } from "@/utils/template-dummy-data";
 import { toast } from "sonner";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import debounce from "lodash/debounce";
 import { app_globals } from "@/config/config";
 import { Layout } from "react-grid-layout";
+import React from "react";
 
 interface Template {
   id: string;
@@ -60,6 +62,9 @@ interface Graph {
   kpiColors: Record<string, { color: string; name: string }>;
   timeInterval?: string; // Add this field
   resolution?: string;   // Add this field
+  
+  // Add this property for stable color references
+  stableKpiColors?: Record<string, { color: string; name: string }>;
   
   // Legacy API properties - added to fix linter errors
   primary_kpi_ma?: string; // Monitoring area in legacy format
@@ -305,9 +310,23 @@ export default function TemplatesPage() {
 
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Add a debounced setter for template data to prevent flickering
+  const setTemplateDataDebounced = useCallback((updates: Partial<typeof templateData>) => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    
+    debounceTimeoutRef.current = setTimeout(() => {
+      setTemplateData(prev => ({
+        ...prev,
+        ...updates
+      }));
+      debounceTimeoutRef.current = null;
+    }, 300);
+  }, []);
+
   // Update the useEffect for isFormValid to properly handle templates with graphs
   useEffect(() => {
-
     const isValid =
       templateData.name.trim() !== "" &&
       templateData.system !== "" &&
@@ -442,7 +461,7 @@ export default function TemplatesPage() {
             } else {
               console.warn(`No data received for ${cacheKey}, using dummy data instead`);
               // Create meaningful dummy data based on the KPIs
-              const dummyData = generateDummyData([params.primaryKpi, ...params.correlationKpis]);
+              const dummyData = getTemplateChartDummyData(params.primaryKpi, params.correlationKpis);
 
               // Store the dummy data in the cache so we don't keep trying to fetch
               setChartDataCache((prev) => ({
@@ -465,7 +484,7 @@ export default function TemplatesPage() {
             }));
 
             // Still provide dummy data on error for better UX
-            const dummyData = generateDummyData([params.primaryKpi, ...params.correlationKpis]);
+            const dummyData = getTemplateChartDummyData(params.primaryKpi, params.correlationKpis);
             setChartDataCache((prev) => ({
               ...prev,
               [cacheKey]: dummyData,
@@ -515,7 +534,10 @@ export default function TemplatesPage() {
     }
   }, [graphs.length, params.id]);
 
-  // Modify the renderChartConfigs function to prevent repeated fetching
+  // Add stable chart data references
+  const chartDataRef = useRef<Record<string, DataPoint[]>>({});
+  
+  // Modify the renderChartConfigs function to use stable references
   const renderChartConfigs = useCallback(
     (graph: Graph) => {
       // Ensure we have valid primary and correlation KPIs
@@ -532,12 +554,6 @@ export default function TemplatesPage() {
         ? "JOBS"
         : "OS";
 
-      // Create a date range for the preview
-      const previewDateRange = {
-        from: new Date(new Date().setDate(new Date().getDate() - 7)),
-        to: new Date(),
-      };
-
       // Create a unique key for this graph that won't change with template data updates
       const cacheKey = `${graph.id}-${primaryKpi}-${correlationKpis.join("-")}`;
       
@@ -547,7 +563,7 @@ export default function TemplatesPage() {
 
       // Only fetch data once per graph, not on every render or header change
       if (!hasFetchedBefore && chartDataLoadState[cacheKey] !== "loading" && 
-          chartDataLoadState[cacheKey] !== "success") {
+          chartDataLoadState[cacheKey] !== "success" && !chartDataRef.current[cacheKey]) {
         
         // Set loading state and mark that we've attempted a fetch
         setChartDataLoadState(prev => ({
@@ -556,6 +572,12 @@ export default function TemplatesPage() {
         }));
         
         localStorage.setItem(fetchAttemptKey, 'true');
+        
+        // Create a date range for the preview - only when needed
+        const previewDateRange = {
+          from: new Date(new Date().setDate(new Date().getDate() - 7)),
+          to: new Date(),
+        };
         
         // Fetch data with the graph ID for better caching
         fetchChartData(cacheKey, {
@@ -581,44 +603,39 @@ export default function TemplatesPage() {
       }
 
       // Use cached data if available, otherwise use dummy data
-      const chartData = chartDataCache[cacheKey] || generateDummyData(allKpis);
+      if (!chartDataRef.current[cacheKey]) {
+        // First attempt to use the cached data from state
+        if (chartDataCache[cacheKey] && chartDataCache[cacheKey].length > 0) {
+          chartDataRef.current[cacheKey] = chartDataCache[cacheKey];
+        } else {
+          // If no data in cache, generate dummy data once and store it
+          chartDataRef.current[cacheKey] = getTemplateChartDummyData(primaryKpi, correlationKpis);
+        }
+      }
+      
+      const chartData = chartDataRef.current[cacheKey];
       const isLoading = chartDataLoadState[cacheKey] === "loading";
 
-      // Ensure we have activeKPIs and kpiColors
-      const chartActiveKPIs = new Set(allKpis);
-      const chartKpiColors = allKpis.reduce((colors, kpi, index) => {
-        colors[kpi] = {
-          color:
-            defaultChartTheme.colors[index % defaultChartTheme.colors.length],
-          name: kpi,
-        };
-        return colors;
-      }, {} as Record<string, { color: string; name: string }>);
+      // Ensure we have activeKPIs and kpiColors - stable reference
+      if (!graph.stableKpiColors) {
+        graph.stableKpiColors = allKpis.reduce((colors, kpi, index) => {
+          colors[kpi] = {
+            color: defaultChartTheme.colors[index % defaultChartTheme.colors.length],
+            name: kpi,
+          };
+          return colors;
+        }, {} as Record<string, { color: string; name: string }>);
+      }
 
       return {
         id: graph.id!,
         type: graph.type || "line",
         title: graph.name || "Untitled Chart",
-        data:
-          chartData.length > 0
-            ? chartData
-            : [
-                // Fallback data if no data is available
-                {
-                  category: primaryKpi,
-                  date: new Date().toISOString(),
-                  value: 1000,
-                },
-                {
-                  category: primaryKpi,
-                  date: new Date(Date.now() - 3600000).toISOString(),
-                  value: 1500,
-                },
-              ],
+        data: chartData,
         width: graph.layout.w * 100,
         height: graph.layout.h * 60,
-        activeKPIs: chartActiveKPIs,
-        kpiColors: chartKpiColors,
+        activeKPIs: new Set(allKpis),
+        kpiColors: graph.stableKpiColors,
         hideControls: true,
         onDeleteGraph: handleDeleteGraph,
         onEditGraph: handleEditGraph,
@@ -628,11 +645,17 @@ export default function TemplatesPage() {
     [
       chartDataCache,
       chartDataLoadState,
-      templateData.resolution,
+      templateData.resolution, // Only depend on resolution from templateData
       handleDeleteGraph,
       handleEditGraph,
       fetchChartData,
     ]
+  );
+
+  // Add a memoized charts array that won't change when template header fields are edited
+  const memoizedCharts = React.useMemo(() => 
+    graphs.map(renderChartConfigs),
+    [graphs, renderChartConfigs]
   );
 
   // Update useEffect that monitors resolution changes to use the debounced refresh
@@ -910,8 +933,7 @@ export default function TemplatesPage() {
 
 
   // Modify the handleSaveTemplate function to check for unique template name
-
-  const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
     // First check if basic form data is valid
@@ -1101,10 +1123,9 @@ export default function TemplatesPage() {
       // If this template is being set as default, we need to check other templates
       if (templateData.isDefault) {
         try {
-
           // First, fetch all templates for the user
           const templatesResponse = await fetch(
-            `https://shwsckbvbt.a.pinggy.link/api/utl?userId=USER_TEST_1`
+            `${app_globals.base_url}/api/utl?userId=${app_globals.default_user_id}`
           );
 
           if (!templatesResponse.ok) {
@@ -1124,34 +1145,57 @@ export default function TemplatesPage() {
                (Array.isArray(defaultTemplate.template_id)
                 ? defaultTemplate.template_id[0]
                 : defaultTemplate.template_id) !== newTemplateId)) {
-
-            // Update the existing default template to set default to false
+                
+            // Get the template ID for fetching detailed template data
+            const existingDefaultTemplateId = Array.isArray(defaultTemplate.template_id)
+              ? defaultTemplate.template_id[0]
+              : defaultTemplate.template_id;
+              
+            // Fetch the FULL detailed template data to ensure we have all graphs
+            const detailResponse = await fetch(
+              `${app_globals.base_url}/api/ut?templateId=${existingDefaultTemplateId}`
+            );
+            
+            if (!detailResponse.ok) {
+              throw new Error("Failed to fetch detailed template data for the previous default template");
+            }
+            
+            const detailData = await detailResponse.json();
+            if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+              throw new Error("No data returned for the previous default template");
+            }
+            
+            // Use the complete detailed data of the template
+            const completeDefaultTemplate = detailData[0];
+            
+            // Create the update payload with ALL the original data and just change default to false
             const updateDefaultTemplate = {
-              user_id: "USER_TEST_1",
-
-              template_id: Array.isArray(defaultTemplate.template_id)
-                ? defaultTemplate.template_id[0]
-                : defaultTemplate.template_id,
-              template_name: Array.isArray(defaultTemplate.template_name)
-                ? defaultTemplate.template_name[0]
-                : defaultTemplate.template_name,
-              template_desc: Array.isArray(defaultTemplate.template_desc)
-                ? defaultTemplate.template_desc[0]
-                : defaultTemplate.template_desc,
-              default: false,
-              favorite: Array.isArray(defaultTemplate.favorite)
-                ? defaultTemplate.favorite[0]
-                : defaultTemplate.favorite,
-              frequency: defaultTemplate.frequency
-
-                ? Array.isArray(defaultTemplate.frequency)
-                  ? defaultTemplate.frequency[0]
-                  : defaultTemplate.frequency
-
+              user_id: app_globals.default_user_id,
+              template_id: existingDefaultTemplateId,
+              template_name: Array.isArray(completeDefaultTemplate.template_name)
+                ? completeDefaultTemplate.template_name[0]
+                : completeDefaultTemplate.template_name,
+              template_desc: Array.isArray(completeDefaultTemplate.template_desc)
+                ? completeDefaultTemplate.template_desc[0]
+                : completeDefaultTemplate.template_desc,
+              default: false, // Set default to false
+              favorite: Array.isArray(completeDefaultTemplate.favorite)
+                ? completeDefaultTemplate.favorite[0]
+                : completeDefaultTemplate.favorite,
+              frequency: completeDefaultTemplate.frequency
+                ? Array.isArray(completeDefaultTemplate.frequency)
+                  ? completeDefaultTemplate.frequency[0]
+                  : completeDefaultTemplate.frequency
                 : "auto",
-              systems: defaultTemplate.systems || [],
-              graphs: defaultTemplate.graphs || [],
+              systems: completeDefaultTemplate.systems || [],
+              graphs: completeDefaultTemplate.graphs || [], // Keep ALL original graphs
             };
+
+            console.log("Updating previous default template with complete data:", 
+              JSON.stringify({
+                templateId: existingDefaultTemplateId,
+                graphCount: updateDefaultTemplate.graphs.length
+              }));
 
             const updateResponse = await fetch(
               `${app_globals.base_url}/api/ut`,
@@ -1165,12 +1209,18 @@ export default function TemplatesPage() {
             );
 
             if (!updateResponse.ok) {
-              throw new Error("Failed to update existing default template");
+              const errorText = await updateResponse.text();
+              console.error("Failed to update existing default template:", errorText);
+              throw new Error(`Failed to update existing default template: ${errorText}`);
             }
           }
         } catch (error) {
           console.error("Error handling default template:", error);
-          // Continue with saving the new template even if default handling fails
+          // Show toast but continue with saving the new template
+          toast.error("Warning: There was an issue updating the previous default template.", {
+            description: "Your template was still saved as default.",
+            dismissible: true
+          });
         }
       }
 
@@ -1225,22 +1275,10 @@ export default function TemplatesPage() {
 
       // Reset form or redirect after successful save
       if (!isEditMode) {
-        // Reset form for new template creation
-        setTemplateData({
-          name: "",
-          system: "",
-          timeRange: "auto",
-          resolution: "auto",
-          isDefault: false,
-          isFavorite: false,
-          graphs: [],
-        });
-        setGraphs([]);
-        setShowGraphs(false);
-        setActiveKPIs(new Set());
-        setKpiColors({});
+        // Redirect to templates page after adding a new template
+        router.push("/templates");
       } else {
-        // Redirect to templates list after editing
+        // Already redirects to templates list after editing
         router.push("/templates");
       }
 
@@ -1553,11 +1591,16 @@ export default function TemplatesPage() {
                     <Input
                       value={templateData.name}
                       onChange={(e) => {
-                        setTemplateData((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }));
-                        setErrors((prev) => ({ ...prev, name: false }));
+                        // Only update visual state immediately 
+                        const newValue = e.target.value;
+                        
+                        // For immediate UI responsiveness, update the input visually
+                        setTemplateData(prev => ({...prev, name: newValue}));
+                        
+                        // Clear any errors
+                        if (errors.name) {
+                          setErrors((prev) => ({ ...prev, name: false }));
+                        }
                       }}
                       placeholder="Enter template name"
                       className={`h-9 text-sm ${
@@ -1577,7 +1620,9 @@ export default function TemplatesPage() {
                       value={templateData.system}
                       onValueChange={(value) => {
                         setTemplateData((prev) => ({ ...prev, system: value }));
-                        setErrors((prev) => ({ ...prev, system: false }));
+                        if (errors.system) {
+                          setErrors((prev) => ({ ...prev, system: false }));
+                        }
                       }}
                     >
                       <SelectTrigger
@@ -1734,7 +1779,6 @@ export default function TemplatesPage() {
                       disabled={
                         !isFormValid || (showGraphs && graphs.length === 0)
                       }
-
                       className="h-9 px-4 whitespace-nowrap ml-2"
                       size="sm"
                     >
@@ -1778,7 +1822,7 @@ export default function TemplatesPage() {
             {showGraphs && graphs.length > 0 && (
               <div className="mt-6">
                 <DynamicLayout
-                  charts={graphs.map(renderChartConfigs)}
+                  charts={memoizedCharts}
                   theme={defaultChartTheme}
                   resolution={templateData.resolution}
                   onDeleteGraph={handleDeleteGraph}

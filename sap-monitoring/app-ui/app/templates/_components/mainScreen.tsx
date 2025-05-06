@@ -17,6 +17,8 @@ import {
   LayoutTemplate,
   Star,
   StarOff,
+  Check,
+  CheckCircle
 } from "lucide-react";
 import {
   Table,
@@ -35,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 // Interface definitions
 interface Template {
@@ -296,11 +299,24 @@ export default function Mainscreen() {
       // Close the confirmation dialog
       setConfirmDelete(null);
 
+      // Immediately remove the deleted template from the local state for instant UI feedback
+      setTemplates(prevTemplates => 
+        prevTemplates.filter(template => {
+          const templateId = Array.isArray(template.template_id) 
+            ? template.template_id[0] 
+            : template.template_id;
+          return templateId !== id;
+        })
+      );
+
       // Show success message
       toast.success("Template deleted successfully");
-
-      // Refetch templates from API to ensure data is up-to-date
+      
+      // Refresh templates list to ensure we have consistent data
       await fetchTemplates();
+      
+      // Turn off loading state
+      setLoading(false);
     } catch (error) {
       console.error("Error deleting template:", error);
       toast.error("Failed to delete template", {
@@ -308,7 +324,17 @@ export default function Mainscreen() {
           error instanceof Error
             ? error.message
             : "Please try again or contact support",
+        duration: 5000,
+        dismissible: true
       });
+      
+      // Refresh templates to ensure UI is in a consistent state
+      try {
+        await fetchTemplates();
+      } catch (refreshError) {
+        console.error("Failed to refresh templates after delete error:", refreshError);
+      }
+      
       // Make sure loading state is turned off even if there's an error
       setLoading(false);
     }
@@ -440,6 +466,180 @@ export default function Mainscreen() {
       toast.error('Failed to add graph');
     }
   }, [baseUrl, handleGraphChange, setTemplates]);
+
+  const handleSetDefaultTemplate = async (template: Template) => {
+    try {
+      // Get the normalized values for the API request
+      const templateId = Array.isArray(template.template_id)
+        ? template.template_id[0]
+        : template.template_id;
+      const templateName = Array.isArray(template.template_name)
+        ? template.template_name[0]
+        : template.template_name;
+      const templateDesc = Array.isArray(template.template_desc)
+        ? template.template_desc[0]
+        : template.template_desc;
+      const isDefault = Array.isArray(template.default)
+        ? template.default[0]
+        : template.default;
+      const isFavorite = Array.isArray(template.favorite)
+        ? template.favorite[0]
+        : template.favorite;
+      const frequency = template.frequency
+        ? Array.isArray(template.frequency)
+          ? template.frequency[0]
+          : template.frequency
+        : "5m";
+
+      // If already default, no need to do anything
+      if (isDefault) {
+        toast.info("This template is already set as default");
+        return;
+      }
+
+      // First, update all other templates to not be default
+      const promises = templates.map(async (t) => {
+        const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
+        const tName = Array.isArray(t.template_name) ? t.template_name[0] : t.template_name;
+        const tDesc = Array.isArray(t.template_desc) ? t.template_desc[0] : t.template_desc;
+        const tIsFavorite = Array.isArray(t.favorite) ? t.favorite[0] : t.favorite;
+        const tFrequency = t.frequency
+          ? Array.isArray(t.frequency) ? t.frequency[0] : t.frequency
+          : "5m";
+        
+        // Skip the template we're setting as default
+        if (tId === templateId) return;
+        
+        // Only update templates that are currently set as default
+        const tIsDefault = Array.isArray(t.default) ? t.default[0] : t.default;
+        if (!tIsDefault) return;
+
+        // Fetch the FULL detailed template data to ensure we have all graphs
+        const detailResponse = await fetch(
+          `${baseUrl}/api/ut?templateId=${tId}`
+        );
+        
+        if (!detailResponse.ok) {
+          throw new Error("Failed to fetch detailed template data for the previous default template");
+        }
+        
+        const detailData = await detailResponse.json();
+        if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+          throw new Error("No data returned for the previous default template");
+        }
+        
+        // Use the complete detailed data of the template
+        const completeTemplate = detailData[0];
+
+        const updatePayload = {
+          user_id: "USER_TEST_1",
+          template_id: tId,
+          template_name: tName,
+          template_desc: tDesc,
+          default: false,
+          favorite: tIsFavorite,
+          frequency: tFrequency,
+          systems: completeTemplate.systems || [],
+          graphs: completeTemplate.graphs || [] // Use the complete graphs from the fetched data
+        };
+
+        console.log(`Updating template ${tId} with ${updatePayload.graphs?.length || 0} graphs`);
+
+        const response = await fetch(`${baseUrl}/api/ut`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatePayload),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Failed to update template ${tId}:`, errorText);
+          throw new Error(`Failed to update template ${tId}: ${errorText}`);
+        }
+      });
+
+      // Wait for all updates to complete
+      await Promise.all(promises.filter(Boolean));
+
+      // Fetch the complete data for the template we're setting as default
+      const detailResponse = await fetch(
+        `${baseUrl}/api/ut?templateId=${templateId}`
+      );
+      
+      if (!detailResponse.ok) {
+        throw new Error("Failed to fetch detailed data for template being set as default");
+      }
+      
+      const detailData = await detailResponse.json();
+      if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+        throw new Error("No detailed data returned for the template being set as default");
+      }
+      
+      // Use the complete template data
+      const completeTemplate = detailData[0];
+
+      // Then set the selected template as default with complete data
+      const updatedTemplate = {
+        user_id: "USER_TEST_1",
+        template_id: templateId,
+        template_name: templateName,
+        template_desc: templateDesc,
+        default: true,
+        favorite: isFavorite,
+        frequency: frequency,
+        systems: completeTemplate.systems || [],
+        graphs: completeTemplate.graphs || [], // Use complete graph data
+      };
+      
+      console.log(`Setting template ${templateId} as default with ${updatedTemplate.graphs?.length || 0} graphs`);
+
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedTemplate),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to set template as default");
+      }
+
+      // Update local state after successful API call
+      setTemplates((prevTemplates) =>
+        prevTemplates.map((t) => {
+          const tId = Array.isArray(t.template_id)
+            ? t.template_id[0]
+            : t.template_id;
+          
+          if (tId === templateId) {
+            return { ...t, default: true };
+          } else {
+            return { ...t, default: false };
+          }
+        })
+      );
+
+      toast.success(`"${templateName}" is now the default template`);
+      
+      // Refresh the templates list to show updated data
+      fetchTemplates();
+    } catch (error) {
+      console.error("Error setting default template:", error);
+      toast.error("Failed to set default template", {
+        description: error instanceof Error ? error.message : "Please try again or contact support",
+        duration: 5000,
+        dismissible: true
+      });
+      
+      // Try to refresh templates to avoid inconsistent UI state
+      fetchTemplates().catch(e => {
+        console.error("Failed to refresh templates after error:", e);
+      });
+    }
+  };
 
   const filteredTemplates = templates.filter((template) => {
     const name = Array.isArray(template.template_name)
@@ -598,6 +798,15 @@ export default function Mainscreen() {
                               ) : (
                                 <StarOff className="h-4 w-4" />
                               )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleSetDefaultTemplate(template)}
+                              title={isDefault ? "Default template" : "Set as default template"}
+                              disabled={isDefault}
+                            >
+                              <CheckCircle className={cn("h-4 w-4", isDefault && "text-green-500 fill-green-500")} />
                             </Button>
                             <Button
                               variant="ghost"

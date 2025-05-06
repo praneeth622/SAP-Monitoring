@@ -12,6 +12,7 @@ import {
   Clock,
   Check,
   Calendar,
+  CalendarRange, // Add CalendarRange icon
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
@@ -69,6 +70,7 @@ import {
 import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { useSearchParams } from "next/navigation";
+import { addDays } from "date-fns";
 
 // Helper function to safely access localStorage
 const safeLocalStorage = {
@@ -2361,145 +2363,224 @@ export default function Dashboard() {
         templateData[selectedTemplate as TemplateKey].charts.includes(index)
       );
 
+  const presets = [
+    {
+      label: 'Today',
+      value: 'today',
+      getDate: () => ({
+        from: new Date(),
+        to: new Date()
+      })
+    },
+    {
+      label: 'Yesterday',
+      value: 'yesterday',
+      getDate: () => ({
+        from: addDays(new Date(), -1),
+        to: addDays(new Date(), -1)
+      })
+    },
+    {
+      label: 'Last 7 days',
+      value: 'last7days',
+      getDate: () => ({
+        from: addDays(new Date(), -7),
+        to: new Date()
+      })
+    },
+    {
+      label: 'Last 30 days',
+      value: 'last30days',
+      getDate: () => ({
+        from: addDays(new Date(), -30),
+        to: new Date()
+      })
+    }
+  ];
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
       {/* <Sidebar /> */}
       <main className={`flex-1 overflow-y-auto transition-all duration-300`}>
         <div className="container mx-auto px-6 py-6 max-w-[1600px]">
-          {/* Dashboard header with title and save button */}
-          <div className="flex flex-col mb-4 sticky-header-wrapper">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex justify-between items-center bg-card/90 backdrop-blur-lg rounded-lg px-4 py-3 mb-4 shadow-sm border border-border/30 z-50 transition-all duration-300 ease-in-out sticky top-0"
-              style={{
-                width: "100%",
-              }}
-            >
-              {/* Header content remains the same */}
-              <div className="flex items-center gap-6">
-                <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight whitespace-nowrap">
-                  SAP Analytics
-                </h1>
+          {/* Dashboard header with title and save button - Make it truly sticky */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex justify-between items-center bg-card/90 backdrop-blur-lg rounded-lg px-4 py-3 mb-6 shadow-sm border border-border/30 sticky top-0 z-50 transition-all duration-300 ease-in-out"
+          >
+            {/* Header content remains the same */}
+            <div className="flex items-center gap-6">
+              <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight whitespace-nowrap">
+                SAP Analytics
+              </h1>
 
-                <div className="flex items-center gap-4">
-                  {/* Template selector */}
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">
-                      Template
-                    </label>
-                    <Select
-                      value={selectedApiTemplate}
-                      onValueChange={handleApiTemplateChange}
-                      disabled={apiTemplates.length === 0}
-                    >
-                      <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[140px] border-muted">
-                        <SelectValue placeholder="Select template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {/* First group: Favorite + Default templates */}
-                        {apiTemplates
-                          .filter(
-                            (template) =>
-                              template.isFavorite && template.isDefault
-                          )
-                          .map((template) => (
-                            <SelectItem
-                              key={template.id}
-                              value={template.id}
-                              className="text-xs"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span>{template.name}</span>
-                                <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
-                                  Default
-                                </span>
-                                <span className="text-yellow-500">★</span>
-                              </div>
-                            </SelectItem>
-                          ))}
+              <div className="flex items-center gap-4">
+                {/* Template selector */}
+                <div className="flex flex-col">
+                  <label className="text-xs text-muted-foreground mb-1">
+                    Template
+                  </label>
+                  <Select
+                    value={selectedApiTemplate}
+                    onValueChange={handleApiTemplateChange}
+                    disabled={apiTemplates.length === 0}
+                  >
+                    <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[140px] border-muted">
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* First group: Favorite + Default templates */}
+                      {apiTemplates
+                        .filter(
+                          (template) =>
+                            template.isFavorite && template.isDefault
+                        )
+                        .map((template) => (
+                          <SelectItem
+                            key={template.id}
+                            value={template.id}
+                            className="text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{template.name}</span>
+                              <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
+                                Default
+                              </span>
+                              <span className="text-yellow-500">★</span>
+                            </div>
+                          </SelectItem>
+                        ))}
 
-                        {/* Second group: Only Default templates (excluding those already shown) */}
-                        {apiTemplates
-                          .filter(
-                            (template) =>
-                              template.isDefault && !template.isFavorite
-                          )
-                          .map((template) => (
-                            <SelectItem
-                              key={template.id}
-                              value={template.id}
-                              className="text-xs"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span>{template.name}</span>
-                                <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
-                                  Default
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
+                      {/* Second group: Only Default templates (excluding those already shown) */}
+                      {apiTemplates
+                        .filter(
+                          (template) =>
+                            template.isDefault && !template.isFavorite
+                        )
+                        .map((template) => (
+                          <SelectItem
+                            key={template.id}
+                            value={template.id}
+                            className="text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{template.name}</span>
+                              <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800">
+                                Default
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
 
-                        {/* Third group: Only Favorite templates (excluding those already shown) */}
-                        {apiTemplates
-                          .filter(
-                            (template) =>
-                              template.isFavorite && !template.isDefault
-                          )
-                          .map((template) => (
-                            <SelectItem
-                              key={template.id}
-                              value={template.id}
-                              className="text-xs"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span>{template.name}</span>
-                                <span className="text-yellow-500">★</span>
-                              </div>
-                            </SelectItem>
-                          ))}
+                      {/* Third group: Only Favorite templates (excluding those already shown) */}
+                      {apiTemplates
+                        .filter(
+                          (template) =>
+                            template.isFavorite && !template.isDefault
+                        )
+                        .map((template) => (
+                          <SelectItem
+                            key={template.id}
+                            value={template.id}
+                            className="text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{template.name}</span>
+                              <span className="text-yellow-500">★</span>
+                            </div>
+                          </SelectItem>
+                        ))}
 
-                        {/* Fourth group: Normal templates (neither default nor favorite) */}
-                        {apiTemplates
-                          .filter(
-                            (template) =>
-                              !template.isDefault && !template.isFavorite
-                          )
-                          .map((template) => (
-                            <SelectItem
-                              key={template.id}
-                              value={template.id}
-                              className="text-xs"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span>{template.name}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      {/* Fourth group: Normal templates (neither default nor favorite) */}
+                      {apiTemplates
+                        .filter(
+                          (template) =>
+                            !template.isDefault && !template.isFavorite
+                        )
+                        .map((template) => (
+                          <SelectItem
+                            key={template.id}
+                            value={template.id}
+                            className="text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{template.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  {/* Theme selector */}
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">
-                      Theme
-                    </label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 flex items-center gap-2"
+                {/* Theme selector */}
+                <div className="flex flex-col">
+                  <label className="text-xs text-muted-foreground mb-1">
+                    Theme
+                  </label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 flex items-center gap-2"
+                      >
+                        <div className="relative w-5 h-5">
+                          <svg
+                            viewBox="0 0 100 100"
+                            className="w-full h-full"
+                          >
+                            {chartThemes[
+                              selectedTheme as keyof typeof chartThemes
+                            ].colors.map((color, index) => {
+                              const angle = index * 72 - 90; // 72 degrees per segment (360/5)
+                              const nextAngle = (index + 1) * 72 - 90;
+                              const x1 =
+                                50 + 50 * Math.cos((angle * Math.PI) / 180);
+                              const y1 =
+                                50 + 50 * Math.sin((angle * Math.PI) / 180);
+                              const x2 =
+                                50 +
+                                50 * Math.cos((nextAngle * Math.PI) / 180);
+                              const y2 =
+                                50 +
+                                50 * Math.sin((nextAngle * Math.PI) / 180);
+
+                              return (
+                                <path
+                                  key={index}
+                                  d={`M 50 50 L ${x1} ${y1} A 50 50 0 0 1 ${x2} ${y2} Z`}
+                                  fill={color}
+                                />
+                              );
+                            })}
+                          </svg>
+                        </div>
+
+                        <span>
+                          {
+                            chartThemes[
+                              selectedTheme as keyof typeof chartThemes
+                            ].name
+                          }
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-[200px]">
+                      <DropdownMenuLabel>Chart Theme</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {Object.entries(chartThemes).map(([key, theme]) => (
+                        <DropdownMenuItem
+                          key={key}
+                          onClick={() => handleThemeChange(key)}
+                          className="flex items-center gap-2"
                         >
                           <div className="relative w-5 h-5">
                             <svg
                               viewBox="0 0 100 100"
                               className="w-full h-full"
                             >
-                              {chartThemes[
-                                selectedTheme as keyof typeof chartThemes
-                              ].colors.map((color, index) => {
+                              {theme.colors.map((color, index) => {
                                 const angle = index * 72 - 90; // 72 degrees per segment (360/5)
                                 const nextAngle = (index + 1) * 72 - 90;
                                 const x1 =
@@ -2512,7 +2593,6 @@ export default function Dashboard() {
                                 const y2 =
                                   50 +
                                   50 * Math.sin((nextAngle * Math.PI) / 180);
-
                                 return (
                                   <path
                                     key={index}
@@ -2523,279 +2603,267 @@ export default function Dashboard() {
                               })}
                             </svg>
                           </div>
+                          <span>{theme.name}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
 
-                          <span>
-                            {
-                              chartThemes[
-                                selectedTheme as keyof typeof chartThemes
-                              ].name
-                            }
-                          </span>
+                {/* Resolution selector */}
+                <div className="flex flex-col">
+                  <label className="text-xs text-muted-foreground mb-1">
+                    Resolution
+                  </label>
+                  <Select
+                    value={resolution}
+                    onValueChange={handleResolutionChange}
+                  >
+                    <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <SelectValue placeholder="Resolution" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resolutionOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="text-xs"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Date Range */}
+                <div className="flex flex-col">
+                  <label className="text-xs text-muted-foreground mb-1">
+                    Date Range
+                  </label>
+                  <DateRangePicker
+                    date={globalDateRange}
+                    onDateChange={setGlobalDateRange}
+                    align="end"
+                    className="w-auto"
+                    showTime={true}
+                  />
+                </div>
+
+                {/* Quick Select date presets - new component */}
+                <div className="flex flex-col">
+                  <label className="text-xs text-muted-foreground mb-1">
+                    Quick Dates
+                  </label>
+                  <Select
+                    onValueChange={(value) => {
+                      const preset = presets.find(p => p.value === value);
+                      if (preset) {
+                        const newDate = preset.getDate();
+                        setGlobalDateRange(newDate);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
+                      <div className="flex items-center gap-1.5">
+                        <CalendarRange className="h-3 w-3 text-muted-foreground" />
+                        <SelectValue placeholder="Select period" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {presets.map((preset) => (
+                        <SelectItem
+                          key={preset.value}
+                          value={preset.value}
+                          className="text-xs"
+                        >
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Auto-refresh dropdown - Replace with Timer icon and add Refresh label */}
+                <div className="flex flex-col">
+                  <label className="text-xs text-muted-foreground mb-1">
+                    Refresh
+                  </label>
+                  <div className="relative">
+                    {autoRefreshInterval && timeRemaining !== null && (
+                      <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground text-[9px] px-1.5 py-0.5 rounded-sm font-medium whitespace-nowrap shadow-sm">
+                        {formatTimeRemaining()}
+                      </div>
+                    )}
+
+                    <DropdownMenu
+                      open={autoRefreshDropdownOpen}
+                      onOpenChange={setAutoRefreshDropdownOpen}
+                    >
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          disabled={isRefreshing}
+                          variant="outline"
+                          size="icon"
+                          className={cn(
+                            "h-8 w-8 rounded-md border relative bg-background/50 border-muted",
+                            autoRefreshInterval && "ring-1 ring-primary/40",
+                            isRefreshing && "opacity-70 cursor-not-allowed"
+                          )}
+                        >
+                          {isRefreshing ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                          ) : (
+                            <>
+                              <Clock
+                                className={cn(
+                                  "h-3.5 w-3.5",
+                                  autoRefreshInterval
+                                    ? "text-primary"
+                                    : "text-muted-foreground"
+                                )}
+                              />
+                              {autoRefreshInterval && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <svg
+                                    className="w-7 h-7"
+                                    viewBox="0 0 100 100"
+                                  >
+                                    <circle
+                                      className="text-primary/20 fill-none"
+                                      cx="50"
+                                      cy="50"
+                                      r="40"
+                                      strokeWidth="8"
+                                      stroke="currentColor"
+                                    />
+                                    <circle
+                                      className="text-primary fill-none"
+                                      cx="50"
+                                      cy="50"
+                                      r="40"
+                                      strokeWidth="8"
+                                      stroke="currentColor"
+                                      strokeDasharray={`${
+                                        2.51 * getProgressPercentage()
+                                      } 251`}
+                                      transform="rotate(-90 50 50)"
+                                    />
+                                  </svg>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-[200px]">
-                        <DropdownMenuLabel>Chart Theme</DropdownMenuLabel>
+                      <DropdownMenuContent
+                        align="end"
+                        sideOffset={4}
+                        className="w-[220px]"
+                      >
+                        <DropdownMenuItem
+                          className="flex items-center justify-between cursor-pointer text-xs"
+                          onClick={() => handleManualRefresh(false)}
+                        >
+                          <span className="mr-4">Refresh now</span>
+                          <RefreshCw className="h-3 w-3" />
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        {Object.entries(chartThemes).map(([key, theme]) => (
-                          <DropdownMenuItem
-                            key={key}
-                            onClick={() => handleThemeChange(key)}
-                            className="flex items-center gap-2"
-                          >
-                            <div className="relative w-5 h-5">
-                              <svg
-                                viewBox="0 0 100 100"
-                                className="w-full h-full"
-                              >
-                                {theme.colors.map((color, index) => {
-                                  const angle = index * 72 - 90; // 72 degrees per segment (360/5)
-                                  const nextAngle = (index + 1) * 72 - 90;
-                                  const x1 =
-                                    50 + 50 * Math.cos((angle * Math.PI) / 180);
-                                  const y1 =
-                                    50 + 50 * Math.sin((angle * Math.PI) / 180);
-                                  const x2 =
-                                    50 +
-                                    50 * Math.cos((nextAngle * Math.PI) / 180);
-                                  const y2 =
-                                    50 +
-                                    50 * Math.sin((nextAngle * Math.PI) / 180);
-                                  return (
-                                    <path
-                                      key={index}
-                                      d={`M 50 50 L ${x1} ${y1} A 50 50 0 0 1 ${x2} ${y2} Z`}
-                                      fill={color}
-                                    />
+                        <div className="px-2 py-1.5 flex items-center justify-between">
+                          <span className="text-xs font-medium">
+                            Auto-refresh
+                          </span>
+                          <Switch
+                            checked={isAutoRefreshEnabled}
+                            onCheckedChange={(checked) => {
+                              setIsAutoRefreshEnabled(checked);
+                              if (checked) {
+                                if (autoRefreshInterval) {
+                                  const option = autoRefreshOptions.find(
+                                    (opt) => opt.value === autoRefreshInterval
                                   );
-                                })}
-                              </svg>
-                            </div>
-                            <span>{theme.name}</span>
+                                  toast.success(
+                                    `Auto-refresh enabled - will refresh every ${
+                                      option?.label ||
+                                      `${autoRefreshInterval}s`
+                                    }`
+                                  );
+                                  if (!nextRefreshTime) {
+                                    handleSelectAutoRefresh(
+                                      autoRefreshInterval
+                                    );
+                                  }
+                                } else {
+                                  handleSelectAutoRefresh(300);
+                                }
+                              } else {
+                                if (autoRefreshInterval && nextRefreshTime) {
+                                  toast.success(
+                                    `Auto-refresh disabled - will refresh once more, then stop`
+                                  );
+                                } else {
+                                  stopAutoRefresh();
+                                }
+                              }
+                            }}
+                            className="ml-auto"
+                          />
+                        </div>
+                        <DropdownMenuLabel className="text-xs mt-1">
+                          Refresh interval:
+                        </DropdownMenuLabel>
+                        {autoRefreshOptions.map((option) => (
+                          <DropdownMenuItem
+                            key={option.value}
+                            className="flex items-center justify-between cursor-pointer text-xs"
+                            onClick={() =>
+                              handleSelectAutoRefresh(option.value)
+                            }
+                          >
+                            <span>{option.label}</span>
+                            {autoRefreshInterval === option.value && (
+                              <Check className="h-3 w-3 ml-2 text-primary" />
+                            )}
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-
-                  {/* Resolution selector */}
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">
-                      Resolution
-                    </label>
-                    <Select
-                      value={resolution}
-                      onValueChange={handleResolutionChange}
-                    >
-                      <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          <SelectValue placeholder="Resolution" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {resolutionOptions.map((option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            className="text-xs"
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Date Range */}
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">
-                      Date Range
-                    </label>
-                    <DateRangePicker
-                      date={globalDateRange}
-                      onDateChange={setGlobalDateRange}
-                      align="end"
-                      className="w-auto"
-                      showTime={true}
-                    />
-                  </div>
-
-                  {/* Auto-refresh dropdown */}
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1"></label>
-                    <div className="relative">
-                      {autoRefreshInterval && timeRemaining !== null && (
-                        <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground text-[9px] px-1.5 py-0.5 rounded-sm font-medium whitespace-nowrap shadow-sm">
-                          {formatTimeRemaining()}
-                        </div>
-                      )}
-
-                      <DropdownMenu
-                        open={autoRefreshDropdownOpen}
-                        onOpenChange={setAutoRefreshDropdownOpen}
-                      >
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            disabled={isRefreshing}
-                            variant="outline"
-                            size="icon"
-                            className={cn(
-                              "h-8 w-8 rounded-md border relative bg-background/50 border-muted",
-                              autoRefreshInterval && "ring-1 ring-primary/40",
-                              isRefreshing && "opacity-70 cursor-not-allowed"
-                            )}
-                          >
-                            {isRefreshing ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            ) : (
-                              <>
-                                <RefreshCw
-                                  className={cn(
-                                    "h-3.5 w-3.5",
-                                    autoRefreshInterval
-                                      ? "text-primary"
-                                      : "text-muted-foreground"
-                                  )}
-                                />
-                                {autoRefreshInterval && (
-                                  <div className="absolute inset-0 flex items-center justify-center">
-                                    <svg
-                                      className="w-7 h-7"
-                                      viewBox="0 0 100 100"
-                                    >
-                                      <circle
-                                        className="text-primary/20 fill-none"
-                                        cx="50"
-                                        cy="50"
-                                        r="40"
-                                        strokeWidth="8"
-                                        stroke="currentColor"
-                                      />
-                                      <circle
-                                        className="text-primary fill-none"
-                                        cx="50"
-                                        cy="50"
-                                        r="40"
-                                        strokeWidth="8"
-                                        stroke="currentColor"
-                                        strokeDasharray={`${
-                                          2.51 * getProgressPercentage()
-                                        } 251`}
-                                        transform="rotate(-90 50 50)"
-                                      />
-                                    </svg>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          sideOffset={4}
-                          className="w-[220px]"
-                        >
-                          <DropdownMenuItem
-                            className="flex items-center justify-between cursor-pointer text-xs"
-                            onClick={() => handleManualRefresh(false)}
-                          >
-                            <span className="mr-4">Refresh now</span>
-                            <RefreshCw className="h-3 w-3" />
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <div className="px-2 py-1.5 flex items-center justify-between">
-                            <span className="text-xs font-medium">
-                              Auto-refresh
-                            </span>
-                            <Switch
-                              checked={isAutoRefreshEnabled}
-                              onCheckedChange={(checked) => {
-                                setIsAutoRefreshEnabled(checked);
-                                if (checked) {
-                                  if (autoRefreshInterval) {
-                                    const option = autoRefreshOptions.find(
-                                      (opt) => opt.value === autoRefreshInterval
-                                    );
-                                    toast.success(
-                                      `Auto-refresh enabled - will refresh every ${
-                                        option?.label ||
-                                        `${autoRefreshInterval}s`
-                                      }`
-                                    );
-                                    if (!nextRefreshTime) {
-                                      handleSelectAutoRefresh(
-                                        autoRefreshInterval
-                                      );
-                                    }
-                                  } else {
-                                    handleSelectAutoRefresh(300);
-                                  }
-                                } else {
-                                  if (autoRefreshInterval && nextRefreshTime) {
-                                    toast.success(
-                                      `Auto-refresh disabled - will refresh once more, then stop`
-                                    );
-                                  } else {
-                                    stopAutoRefresh();
-                                  }
-                                }
-                              }}
-                              className="ml-auto"
-                            />
-                          </div>
-                          <DropdownMenuLabel className="text-xs mt-1">
-                            Refresh interval:
-                          </DropdownMenuLabel>
-                          {autoRefreshOptions.map((option) => (
-                            <DropdownMenuItem
-                              key={option.value}
-                              className="flex items-center justify-between cursor-pointer text-xs"
-                              onClick={() =>
-                                handleSelectAutoRefresh(option.value)
-                              }
-                            >
-                              <span>{option.label}</span>
-                              {autoRefreshInterval === option.value && (
-                                <Check className="h-3 w-3 ml-2 text-primary" />
-                              )}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-
-                  {/* Save button */}
-                  {layoutChanged && selectedTemplate && (
-                    <div className="flex flex-col">
-                      <label className="text-xs text-muted-foreground mb-1">
-                        Save Layout
-                      </label>
-                      <Button
-                        onClick={saveLayout}
-                        disabled={
-                          !layoutChanged || isSaving || !selectedTemplate
-                        }
-                        variant="outline"
-                        size="sm"
-                        className={cn(
-                          "h-8 px-2 text-xs flex items-center gap-1.5 bg-background/50 border-muted",
-                          isSaving && "opacity-70 cursor-not-allowed"
-                        )}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Save className="h-3.5 w-3.5" />
-                        )}
-                        <span>{isSaving ? "Saving..." : "Save Layout"}</span>
-                      </Button>
-                    </div>
-                  )}
                 </div>
+
+                {/* Save button */}
+                {layoutChanged && selectedTemplate && (
+                  <div className="flex flex-col">
+                    <label className="text-xs text-muted-foreground mb-1">
+                      Save Layout
+                    </label>
+                    <Button
+                      onClick={saveLayout}
+                      disabled={
+                        !layoutChanged || isSaving || !selectedTemplate
+                      }
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "h-8 px-2 text-xs flex items-center gap-1.5 bg-background/50 border-muted",
+                        isSaving && "opacity-70 cursor-not-allowed"
+                      )}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isSaving ? "Saving..." : "Save Layout"}</span>
+                    </Button>
+                  </div>
+                )}
               </div>
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
 
           {/* Charts grid */}
           <motion.div
