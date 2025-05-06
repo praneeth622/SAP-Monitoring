@@ -9,12 +9,13 @@ import Sheet from "@/components/sheet";
 import AddGraphSheet from "@/components/add-graph-sheet";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Suspense } from "react";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue, 
 } from "@/components/ui/select";
 import { DynamicLayout } from "@/components/charts/DynamicLayout";
 import { generateDummyData, fetchTemplateChartData } from "@/utils/data";
@@ -97,9 +98,6 @@ const timeRangeOptions = [
   "custom",
 ];
 
-const dummyData = generateDummyData();
-
-// Add this near the top of the file with other constants
 const resolutionOptions = [
   { value: "auto", label: "Auto" },
   { value: "1m", label: "1 Minute" },
@@ -218,18 +216,21 @@ const normalizeFilterValues = (filterValues: any) => {
 
 // First, add a Loading component we can use throughout the page
 const LoadingSpinner = ({ message = "Loading..." }: { message?: string }) => (
-  <div className="flex flex-col items-center justify-center py-8 space-y-3">
-    <div className="relative">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
-        <div className="h-6 w-6 bg-card rounded-full"></div>
+  <Suspense>
+    <div className="flex flex-col items-center justify-center py-8 space-y-3">
+      <div className="relative">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+          <div className="h-6 w-6 bg-card rounded-full"></div>
+        </div>
       </div>
+      <p className="text-sm text-muted-foreground animate-pulse">{message}</p>
     </div>
-    <p className="text-sm text-muted-foreground animate-pulse">{message}</p>
-  </div>
+  </Suspense>
 );
 
-export default function TemplatesPage() {
+// Create a wrapper component that contains all the actual functionality
+function TemplatesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const params = useParams(); // Move this up to the top
@@ -711,7 +712,6 @@ export default function TemplatesPage() {
     }
   }, [templateId]);
 
-  // Update the fetchTemplateForEditing function to correctly set the system ID
   const fetchTemplateForEditing = async (templateId: string) => {
     try {
       setLoadingState((prev) => ({ ...prev, fetchingTemplate: true }));
@@ -908,18 +908,13 @@ export default function TemplatesPage() {
     setIsAddGraphSheetOpen(true);
   };
 
-
-  // Modify the handleSaveTemplate function to check for unique template name
-
   const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     // First check if basic form data is valid
     if (!isFormValid) {
       toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
-
         dismissible: true, // Add dismissible property for the X button
-
       });
       return;
     }
@@ -1038,7 +1033,8 @@ export default function TemplatesPage() {
             // If we have detailed secondaryKpisData, use it
             if (graph.secondaryKpisData && graph.secondaryKpisData[kpiIndex]) {
               return {
-                ma: graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
+                ma:
+                  graph.secondaryKpisData[kpiIndex].ma || graph.monitoringArea,
                 ma_desc:
                   graph.secondaryKpisData[kpiIndex].ma_desc ||
                   graph.monitoringAreaDesc ||
@@ -1123,22 +1119,37 @@ export default function TemplatesPage() {
               (!isEditMode ||
                (Array.isArray(defaultTemplate.template_id)
                 ? defaultTemplate.template_id[0]
-                : defaultTemplate.template_id) !== newTemplateId)) {
+                : defaultTemplate.template_id) !== newTemplateId)
+          ) {
+            // Fetch the complete data for the default template to ensure we have all graphs
+            const defaultTemplateId = Array.isArray(defaultTemplate.template_id)
+              ? defaultTemplate.template_id[0]
+              : defaultTemplate.template_id;
+
+            // Fetch the complete template data to ensure we have all graphs
+            const completeTemplateResponse = await fetch(
+              `${app_globals.base_url}/api/ut?templateId=${defaultTemplateId}`
+            );
+
+            if (!completeTemplateResponse.ok) {
+              throw new Error("Failed to fetch complete template data");
+            }
+
+            const completeTemplateData = await completeTemplateResponse.json();
+            const completeTemplate = completeTemplateData[0]; // Get the first item
 
             // Update the existing default template to set default to false
+            // But preserve all other data, especially the graphs
             const updateDefaultTemplate = {
               user_id: "USER_TEST_1",
-
-              template_id: Array.isArray(defaultTemplate.template_id)
-                ? defaultTemplate.template_id[0]
-                : defaultTemplate.template_id,
+              template_id: defaultTemplateId,
               template_name: Array.isArray(defaultTemplate.template_name)
                 ? defaultTemplate.template_name[0]
                 : defaultTemplate.template_name,
               template_desc: Array.isArray(defaultTemplate.template_desc)
                 ? defaultTemplate.template_desc[0]
                 : defaultTemplate.template_desc,
-              default: false,
+              default: false, // Set default to false
               favorite: Array.isArray(defaultTemplate.favorite)
                 ? defaultTemplate.favorite[0]
                 : defaultTemplate.favorite,
@@ -1149,9 +1160,16 @@ export default function TemplatesPage() {
                   : defaultTemplate.frequency
 
                 : "auto",
-              systems: defaultTemplate.systems || [],
-              graphs: defaultTemplate.graphs || [],
+              // Preserve the original systems from the complete template data
+              systems: completeTemplate.systems || defaultTemplate.systems || [],
+              // Use the graphs from the complete template data to ensure all graphs are preserved
+              graphs: completeTemplate.graphs || defaultTemplate.graphs || [],
             };
+
+            console.log(
+              "Updating previous default template:",
+              updateDefaultTemplate
+            );
 
             const updateResponse = await fetch(
               `${app_globals.base_url}/api/ut`,
@@ -1338,20 +1356,24 @@ export default function TemplatesPage() {
           // 4x2 grid for 8 graphs
           layout = { x: 6, y: 12, w: 6, h: 6 };
           // Update previous graphs
-          setGraphs(prev => prev.map((g, i) => {
-            if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 6, h: 6 } };
-            return g;
-          }));
+          setGraphs((prev) =>
+            prev.map((g, i) => {
+              if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 6, h: 6 } };
+              return g;
+            })
+          );
           break;
         case 8: // Ninth graph (9 total)
           // 3x3 grid for 9 graphs
           layout = { x: 8, y: 12, w: 4, h: 6 };
           // Update previous graphs for 3x3 layout
-          setGraphs(prev => prev.map((g, i) => {
-            if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 4, h: 6 } };
-            if (i === 7) return { ...g, layout: { x: 4, y: 12, w: 4, h: 6 } };
-            return g;
-          }));
+          setGraphs((prev) =>
+            prev.map((g, i) => {
+              if (i === 6) return { ...g, layout: { x: 0, y: 12, w: 4, h: 6 } };
+              if (i === 7) return { ...g, layout: { x: 4, y: 12, w: 4, h: 6 } };
+              return g;
+            })
+          );
           break;
       }
   
@@ -1511,339 +1533,359 @@ export default function TemplatesPage() {
   // Show main loading state when initially loading template
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background via-background/98 to-background/95">
-        <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl p-8 max-w-md">
-          <LoadingSpinner
-            message={`${isEditMode ? "Loading" : "Creating"} template...`}
-          />
+      <Suspense fallback={<div>Loading...</div>}>
+        <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background via-background/98 to-background/95">
+          <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl p-8 max-w-md">
+            <LoadingSpinner
+              message={`${isEditMode ? "Loading" : "Creating"} template...`}
+            />
+          </div>
         </div>
-      </div>
+      </Suspense>
     );
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
-      <main className="flex-1 overflow-y-auto">
-        <div className="container mx-auto px-2 py-6">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
-            {/* Combined header with all controls in a single row */}
-            <div className="rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
-              <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0">
-                {/* Left side - title */}
-                <div className="md:w-1/5 flex-shrink-0">
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
-                    {pageTitle}
-                  </h1>
-                  <p className="text-muted-foreground/90 text-sm mt-1 hidden md:block">
-                    Create and manage your monitoring templates
-                  </p>
-                </div>
-
-                {/* Right side - all controls in a row */}
-                <div className="flex-1 grid grid-cols-2 md:grid-cols-12 gap-3">
-                  {/* Template Name */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-foreground/70 mb-1">
-                      Template Name <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      value={templateData.name}
-                      onChange={(e) => {
-                        setTemplateData((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }));
-                        setErrors((prev) => ({ ...prev, name: false }));
-                      }}
-                      placeholder="Enter template name"
-                      className={`h-9 text-sm ${
-                        errors.name
-                          ? "border-red-500 focus-visible:ring-red-500"
-                          : ""
-                      }`}
-                    />
+    <Suspense fallback={<div>Loading...</div>}>
+      <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
+        <main className="flex-1 overflow-y-auto">
+          <div className="container mx-auto px-2 py-6">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              {/* Combined header with all controls in a single row */}
+              <div className="rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
+                <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0">
+                  {/* Left side - title */}
+                  <div className="md:w-1/5 flex-shrink-0">
+                    <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
+                      {pageTitle}
+                    </h1>
+                    <p className="text-muted-foreground/90 text-sm mt-1 hidden md:block">
+                      Create and manage your monitoring templates
+                    </p>
                   </div>
 
-                  {/* System Select */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-foreground/70 mb-1">
-                      System <span className="text-red-500">*</span>
-                    </label>
-                    <Select
-                      value={templateData.system}
-                      onValueChange={(value) => {
-                        setTemplateData((prev) => ({ ...prev, system: value }));
-                        setErrors((prev) => ({ ...prev, system: false }));
-                      }}
-                    >
-                      <SelectTrigger
+                  {/* Right side - all controls in a row */}
+                  <div className="flex-1 grid grid-cols-2 md:grid-cols-12 gap-3">
+                    {/* Template Name */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-foreground/70 mb-1">
+                        Template Name <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        value={templateData.name}
+                        onChange={(e) => {
+                          setTemplateData((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }));
+                          setErrors((prev) => ({ ...prev, name: false }));
+                        }}
+                        placeholder="Enter template name"
                         className={`h-9 text-sm ${
-                          errors.system
+                          errors.name
                             ? "border-red-500 focus-visible:ring-red-500"
                             : ""
                         }`}
-                      >
-                        <SelectValue placeholder="Select">
-                          {templateData.system || "Select"}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {isEditMode &&
-                          templateData.system &&
-                          !systems.some(
-                            (sys) => sys.system_id === templateData.system
-                          ) && (
-                            <SelectItem
-                              key={templateData.system}
-                              value={templateData.system}
-                            >
-                              {templateData.system}
-                            </SelectItem>
-                          )}
-                        {systems.map((system) => (
-                          <SelectItem
-                            key={system.system_id}
-                            value={system.system_id}
-                          >
-                            {system.system_id}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Time Range */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-foreground/70 mb-1">
-                      Time Range <span className="text-red-500">*</span>
-                    </label>
-                    <Select
-                      value={templateData.timeRange}
-                      onValueChange={(value) => {
-                        setTemplateData((prev) => ({
-                          ...prev,
-                          timeRange: value,
-                        }));
-                        setErrors((prev) => ({ ...prev, timeRange: false }));
-                      }}
-                    >
-                      <SelectTrigger
-                        className={`h-9 text-sm ${
-                          errors.timeRange
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }`}
-                      >
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timeRangeOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Resolution */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-foreground/70 mb-1">
-                      Resolution <span className="text-red-500">*</span>
-                    </label>
-                    <Select
-                      value={templateData.resolution}
-                      onValueChange={(value) => {
-                        setTemplateData((prev) => ({
-                          ...prev,
-                          resolution: value,
-                        }));
-                        setErrors((prev) => ({ ...prev, resolution: false }));
-                      }}
-                    >
-                      <SelectTrigger
-                        className={`h-9 text-sm ${
-                          errors.resolution
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }`}
-                      >
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {resolutionOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Switches and Save Button */}
-                  <div className="md:col-span-2 flex flex-row items-end justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1">
-                        <Switch
-                          id="default-toggle"
-                          checked={templateData.isDefault}
-                          onCheckedChange={(checked) =>
-                            setTemplateData((prev) => ({
-                              ...prev,
-                              isDefault: checked,
-                            }))
-                          }
-                          className="scale-90"
-                        />
-                        <label
-                          htmlFor="default-toggle"
-                          className="text-xs font-medium cursor-pointer"
-                        >
-                          Default
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Switch
-                          id="favorite-toggle"
-                          checked={templateData.isFavorite}
-                          onCheckedChange={(checked) =>
-                            setTemplateData((prev) => ({
-                              ...prev,
-                              isFavorite: checked,
-                            }))
-                          }
-                          className="scale-90"
-                        />
-                        <label
-                          htmlFor="favorite-toggle"
-                          className="text-xs font-medium cursor-pointer"
-                        >
-                          Favorite
-                        </label>
-                      </div>
+                      />
                     </div>
 
-                    <Button
-                      variant="default"
-                      onClick={handleSaveTemplate}
-                      type="submit"
-                      disabled={
-                        !isFormValid || (showGraphs && graphs.length === 0)
-                      }
+                    {/* System Select */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-foreground/70 mb-1">
+                        System <span className="text-red-500">*</span>
+                      </label>
+                      <Select
+                        value={templateData.system}
+                        onValueChange={(value) => {
+                          setTemplateData((prev) => ({
+                            ...prev,
+                            system: value,
+                          }));
+                          setErrors((prev) => ({ ...prev, system: false }));
+                        }}
+                      >
+                        <SelectTrigger
+                          className={`h-9 text-sm ${
+                            errors.system
+                              ? "border-red-500 focus-visible:ring-red-500"
+                              : ""
+                          }`}
+                        >
+                          <SelectValue placeholder="Select">
+                            {templateData.system || "Select"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {isEditMode &&
+                            templateData.system &&
+                            !systems.some(
+                              (sys) => sys.system_id === templateData.system
+                            ) && (
+                              <SelectItem
+                                key={templateData.system}
+                                value={templateData.system}
+                              >
+                                {templateData.system}
+                              </SelectItem>
+                            )}
+                          {systems.map((system) => (
+                            <SelectItem
+                              key={system.system_id}
+                              value={system.system_id}
+                            >
+                              {system.system_id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                      className="h-9 px-4 whitespace-nowrap ml-2"
-                      size="sm"
-                    >
-                      {isEditMode ? "Update Template" : "Save Template"}
-                    </Button>
+                    {/* Time Range */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-foreground/70 mb-1">
+                        Time Range <span className="text-red-500">*</span>
+                      </label>
+                      <Select
+                        value={templateData.timeRange}
+                        onValueChange={(value) => {
+                          setTemplateData((prev) => ({
+                            ...prev,
+                            timeRange: value,
+                          }));
+                          setErrors((prev) => ({ ...prev, timeRange: false }));
+                        }}
+                      >
+                        <SelectTrigger
+                          className={`h-9 text-sm ${
+                            errors.timeRange
+                              ? "border-red-500 focus-visible:ring-red-500"
+                              : ""
+                          }`}
+                        >
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {timeRangeOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Resolution */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-foreground/70 mb-1">
+                        Resolution <span className="text-red-500">*</span>
+                      </label>
+                      <Select
+                        value={templateData.resolution}
+                        onValueChange={(value) => {
+                          setTemplateData((prev) => ({
+                            ...prev,
+                            resolution: value,
+                          }));
+                          setErrors((prev) => ({ ...prev, resolution: false }));
+                        }}
+                      >
+                        <SelectTrigger
+                          className={`h-9 text-sm ${
+                            errors.resolution
+                              ? "border-red-500 focus-visible:ring-red-500"
+                              : ""
+                          }`}
+                        >
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {resolutionOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Switches and Save Button */}
+                    <div className="md:col-span-2 flex flex-row items-end justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <Switch
+                            id="default-toggle"
+                            checked={templateData.isDefault}
+                            onCheckedChange={(checked) =>
+                              setTemplateData((prev) => ({
+                                ...prev,
+                                isDefault: checked,
+                              }))
+                            }
+                            className="scale-90"
+                          />
+                          <label
+                            htmlFor="default-toggle"
+                            className="text-xs font-medium cursor-pointer"
+                          >
+                            Default
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Switch
+                            id="favorite-toggle"
+                            checked={templateData.isFavorite}
+                            onCheckedChange={(checked) =>
+                              setTemplateData((prev) => ({
+                                ...prev,
+                                isFavorite: checked,
+                              }))
+                            }
+                            className="scale-90"
+                          />
+                          <label
+                            htmlFor="favorite-toggle"
+                            className="text-xs font-medium cursor-pointer"
+                          >
+                            Favorite
+                          </label>
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="default"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSaveTemplate(
+                            e as unknown as React.FormEvent<HTMLFormElement>
+                          );
+                        }}
+                        type="submit"
+                        disabled={
+                          !isFormValid || (showGraphs && graphs.length === 0)
+                        }
+                        className="h-9 px-4 whitespace-nowrap ml-2"
+                        size="sm"
+                      >
+                        {isEditMode ? "Update Template" : "Save Template"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-4"
-          >
-            {/* Add Graph section with border */}
-            <div className="border border-border rounded-lg p-4 mb-6">
-              <Card
-                className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
-                onClick={handleAddGraph}
-              >
-                <div className="flex flex-col items-center justify-center py-4">
-                  <Plus className="w-8 h-8 text-muted-foreground mb-2" />
-                  <h3 className="text-base font-medium text-foreground/90">
-                    {showGraphs && graphs.length > 0
-                      ? "Add Another Graph"
-                      : "Add Graph"}
-                  </h3>
-                  {!showGraphs && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Click to add a new graph to your template
-                    </p>
-                  )}
-                </div>
-              </Card>
-            </div>
-
-            {/* Graphs container */}
-            {showGraphs && graphs.length > 0 && (
-              <div className="mt-6">
-                <DynamicLayout
-                  charts={graphs.map(renderChartConfigs)}
-                  theme={defaultChartTheme}
-                  resolution={templateData.resolution}
-                  onDeleteGraph={handleDeleteGraph}
-                  onEditGraph={handleEditGraph}
-                  onLayoutReset={handleLayoutReset}
-                  isTemplatePage={true}
-                  hideControls={true}
-                />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-4"
+            >
+              {/* Add Graph section with border */}
+              <div className="border border-border rounded-lg p-4 mb-6">
+                <Card
+                  className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
+                  onClick={handleAddGraph}
+                >
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <Plus className="w-8 h-8 text-muted-foreground mb-2" />
+                    <h3 className="text-base font-medium text-foreground/90">
+                      {showGraphs && graphs.length > 0
+                        ? "Add Another Graph"
+                        : "Add Graph"}
+                    </h3>
+                    {!showGraphs && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Click to add a new graph to your template
+                      </p>
+                    )}
+                  </div>
+                </Card>
               </div>
-            )}
-          </motion.div>
 
-          <Sheet
-            isOpen={isAddGraphSheetOpen}
-            onClose={() => {
-              setIsAddGraphSheetOpen(false);
-              setEditingGraph(null);
-            }}
-            title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
-          >
-            {selectedTemplate && (
-              <AddGraphSheet
-                template={selectedTemplate}
-                editingGraph={
-                  editingGraph
-                    ? {
-                        id: editingGraph.id || "",
-                        name: editingGraph.name,
-                        type: editingGraph.type,
-                        monitoringArea: editingGraph.monitoringArea,
-                        kpiGroup: editingGraph.kpiGroup,
-                        primaryKpi: editingGraph.primaryKpi,
-                        correlationKpis: editingGraph.correlationKpis,
-                        layout: editingGraph.layout,
-                        activeKPIs: editingGraph.activeKPIs,
-                        kpiColors: editingGraph.kpiColors,
-                      }
-                    : null
-                }
-                onClose={() => {
-                  setIsAddGraphSheetOpen(false);
-                  setEditingGraph(null);
-                }}
-                onAddGraph={(graphData) => {
-                  // Prevent multiple calls by immediately disabling the sheet
-                  setIsAddGraphSheetOpen(false);
+              {/* Graphs container */}
+              {showGraphs && graphs.length > 0 && (
+                <div className="mt-6">
+                  <DynamicLayout
+                    charts={graphs.map(renderChartConfigs)}
+                    theme={defaultChartTheme}
+                    resolution={templateData.resolution}
+                    onDeleteGraph={handleDeleteGraph}
+                    onEditGraph={handleEditGraph}
+                    onLayoutReset={handleLayoutReset}
+                    isTemplatePage={true}
+                    hideControls={true}
+                  />
+                </div>
+              )}
+            </motion.div>
 
-                  if (editingGraph) {
-                    // Update existing graph
-                    handleUpdateGraph(editingGraph.id!, graphData);
-                  } else {
-                    // Add new graph
-                    const completeGraphData: Graph = {
-                      ...graphData,
-                      activeKPIs: graphData.activeKPIs || new Set<string>(),
-                      kpiColors: graphData.kpiColors || {},
-                    };
-                    handleAddGraphToTemplate(completeGraphData);
+            <Sheet
+              isOpen={isAddGraphSheetOpen}
+              onClose={() => {
+                setIsAddGraphSheetOpen(false);
+                setEditingGraph(null);
+              }}
+              title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
+            >
+              {selectedTemplate && (
+                <AddGraphSheet
+                  template={selectedTemplate}
+                  editingGraph={
+                    editingGraph
+                      ? {
+                          id: editingGraph.id || "",
+                          name: editingGraph.name,
+                          type: editingGraph.type,
+                          monitoringArea: editingGraph.monitoringArea,
+                          kpiGroup: editingGraph.kpiGroup,
+                          primaryKpi: editingGraph.primaryKpi,
+                          correlationKpis: editingGraph.correlationKpis,
+                          layout: editingGraph.layout,
+                          activeKPIs: editingGraph.activeKPIs,
+                          kpiColors: editingGraph.kpiColors,
+                        }
+                      : null
                   }
-                }}
-              />
-            )}
-          </Sheet>
-        </div>
-      </main>
-    </div>
+                  onClose={() => {
+                    setIsAddGraphSheetOpen(false);
+                    setEditingGraph(null);
+                  }}
+                  onAddGraph={(graphData) => {
+                    // Prevent multiple calls by immediately disabling the sheet
+                    setIsAddGraphSheetOpen(false);
+
+                    if (editingGraph) {
+                      // Update existing graph
+                      handleUpdateGraph(editingGraph.id!, graphData);
+                    } else {
+                      // Add new graph
+                      const completeGraphData: Graph = {
+                        ...graphData,
+                        activeKPIs: graphData.activeKPIs || new Set<string>(),
+                        kpiColors: graphData.kpiColors || {},
+                      };
+                      handleAddGraphToTemplate(completeGraphData);
+                    }
+                  }}
+                />
+              )}
+            </Sheet>
+          </div>
+        </main>
+      </div>
+    </Suspense>
+  );
+}
+
+// Main component that serves as the Suspense boundary
+export default function TemplatesPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner message="Loading template editor..." />}>
+      <TemplatesPageContent />
+    </Suspense>
   );
 }

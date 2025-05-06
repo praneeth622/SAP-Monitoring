@@ -763,10 +763,14 @@ export const fetchTemplateChartData = async (
   }
 };
 
-export const generateDummyData = (categories: string[]): DataPoint[] => {
-  // Existing implementation unchanged
+export const generateDummyData = (categories: string[] | undefined | null): DataPoint[] => {
   const data: DataPoint[] = [];
   const now = new Date();
+
+  // Ensure categories is an array with at least one value
+  const validCategories = Array.isArray(categories) && categories.length > 0 
+    ? categories 
+    : ['DefaultCategory'];
 
   // Generate 24 data points (hourly for a day)
   for (let i = 0; i < 24; i++) {
@@ -774,7 +778,7 @@ export const generateDummyData = (categories: string[]): DataPoint[] => {
     date.setHours(date.getHours() - i);
 
     // Generate a data point for each category
-    categories.forEach((category) => {
+    validCategories.forEach((category) => {
       // Base value + random component + upward trend for older data
       const baseValue = 1000;
       const randomFactor = Math.random() * 500;
