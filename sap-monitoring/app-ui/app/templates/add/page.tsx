@@ -1566,10 +1566,10 @@ export default function TemplatesPage() {
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
+            className="fixed top-0 left-0 right-0 z-50 px-2 py-4 bg-background/95 backdrop-blur-sm border-b border-border/40"
           >
             {/* Combined header with all controls in a single row */}
-            <div className="rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
+            <div className="container mx-auto rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
               <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0">
                 {/* Left side - title */}
                 <div className="md:w-1/5 flex-shrink-0">
@@ -1790,102 +1790,105 @@ export default function TemplatesPage() {
             </div>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-4"
-          >
-            {/* Add Graph section with border */}
-            <div className="border border-border rounded-lg p-4 mb-6">
-              <Card
-                className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
-                onClick={handleAddGraph}
-              >
-                <div className="flex flex-col items-center justify-center py-4">
-                  <Plus className="w-8 h-8 text-muted-foreground mb-2" />
-                  <h3 className="text-base font-medium text-foreground/90">
-                    {showGraphs && graphs.length > 0
-                      ? "Add Another Graph"
-                      : "Add Graph"}
-                  </h3>
-                  {!showGraphs && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Click to add a new graph to your template
-                    </p>
-                  )}
-                </div>
-              </Card>
-            </div>
-
-            {/* Graphs container */}
-            {showGraphs && graphs.length > 0 && (
-              <div className="mt-6">
-                <DynamicLayout
-                  charts={memoizedCharts}
-                  theme={defaultChartTheme}
-                  resolution={templateData.resolution}
-                  onDeleteGraph={handleDeleteGraph}
-                  onEditGraph={handleEditGraph}
-                  onLayoutReset={handleLayoutReset}
-                  isTemplatePage={true}
-                  hideControls={true}
-                />
+          {/* Add padding to account for fixed header */}
+          <div className="pt-[120px]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-2"
+            >
+              {/* Add Graph section with border */}
+              <div className="border border-border rounded-lg p-4">
+                <Card
+                  className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
+                  onClick={handleAddGraph}
+                >
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <Plus className="w-8 h-8 text-muted-foreground mb-2" />
+                    <h3 className="text-base font-medium text-foreground/90">
+                      {showGraphs && graphs.length > 0
+                        ? "Add Another Graph"
+                        : "Add Graph"}
+                    </h3>
+                    {!showGraphs && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Click to add a new graph to your template
+                      </p>
+                    )}
+                  </div>
+                </Card>
               </div>
-            )}
-          </motion.div>
 
-          <Sheet
-            isOpen={isAddGraphSheetOpen}
-            onClose={() => {
-              setIsAddGraphSheetOpen(false);
-              setEditingGraph(null);
-            }}
-            title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
-          >
-            {selectedTemplate && (
-              <AddGraphSheet
-                template={selectedTemplate}
-                editingGraph={
-                  editingGraph
-                    ? {
-                        id: editingGraph.id || "",
-                        name: editingGraph.name,
-                        type: editingGraph.type,
-                        monitoringArea: editingGraph.monitoringArea,
-                        kpiGroup: editingGraph.kpiGroup,
-                        primaryKpi: editingGraph.primaryKpi,
-                        correlationKpis: editingGraph.correlationKpis,
-                        layout: editingGraph.layout,
-                        activeKPIs: editingGraph.activeKPIs,
-                        kpiColors: editingGraph.kpiColors,
-                      }
-                    : null
-                }
-                onClose={() => {
-                  setIsAddGraphSheetOpen(false);
-                  setEditingGraph(null);
-                }}
-                onAddGraph={(graphData) => {
-                  // Prevent multiple calls by immediately disabling the sheet
-                  setIsAddGraphSheetOpen(false);
+              {/* Graphs container */}
+              {showGraphs && graphs.length > 0 && (
+                <div className="mt-6">
+                  <DynamicLayout
+                    charts={memoizedCharts}
+                    theme={defaultChartTheme}
+                    resolution={templateData.resolution}
+                    onDeleteGraph={handleDeleteGraph}
+                    onEditGraph={handleEditGraph}
+                    onLayoutReset={handleLayoutReset}
+                    isTemplatePage={true}
+                    hideControls={true}
+                  />
+                </div>
+              )}
+            </motion.div>
 
-                  if (editingGraph) {
-                    // Update existing graph
-                    handleUpdateGraph(editingGraph.id!, graphData);
-                  } else {
-                    // Add new graph
-                    const completeGraphData: Graph = {
-                      ...graphData,
-                      activeKPIs: graphData.activeKPIs || new Set<string>(),
-                      kpiColors: graphData.kpiColors || {},
-                    };
-                    handleAddGraphToTemplate(completeGraphData);
+            <Sheet
+              isOpen={isAddGraphSheetOpen}
+              onClose={() => {
+                setIsAddGraphSheetOpen(false);
+                setEditingGraph(null);
+              }}
+              title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
+            >
+              {selectedTemplate && (
+                <AddGraphSheet
+                  template={selectedTemplate}
+                  editingGraph={
+                    editingGraph
+                      ? {
+                          id: editingGraph.id || "",
+                          name: editingGraph.name,
+                          type: editingGraph.type,
+                          monitoringArea: editingGraph.monitoringArea,
+                          kpiGroup: editingGraph.kpiGroup,
+                          primaryKpi: editingGraph.primaryKpi,
+                          correlationKpis: editingGraph.correlationKpis,
+                          layout: editingGraph.layout,
+                          activeKPIs: editingGraph.activeKPIs,
+                          kpiColors: editingGraph.kpiColors,
+                        }
+                      : null
                   }
-                }}
-              />
-            )}
-          </Sheet>
+                  onClose={() => {
+                    setIsAddGraphSheetOpen(false);
+                    setEditingGraph(null);
+                  }}
+                  onAddGraph={(graphData) => {
+                    // Prevent multiple calls by immediately disabling the sheet
+                    setIsAddGraphSheetOpen(false);
+
+                    if (editingGraph) {
+                      // Update existing graph
+                      handleUpdateGraph(editingGraph.id!, graphData);
+                    } else {
+                      // Add new graph
+                      const completeGraphData: Graph = {
+                        ...graphData,
+                        activeKPIs: graphData.activeKPIs || new Set<string>(),
+                        kpiColors: graphData.kpiColors || {},
+                      };
+                      handleAddGraphToTemplate(completeGraphData);
+                    }
+                  }}
+                />
+              )}
+            </Sheet>
+          </div>
         </div>
       </main>
     </div>

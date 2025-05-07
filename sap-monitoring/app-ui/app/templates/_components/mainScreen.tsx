@@ -276,32 +276,25 @@ export default function Mainscreen() {
 
   const handleDeleteTemplate = async (id: string) => {
     try {
-      // Show loading state
+      // Show loading state while deleting
       setLoading(true);
 
-      // Set up proper request options
-      const requestOptions = {
+      // Use the correct API endpoint for template deletion
+      const response = await fetch(`${baseUrl}/api/ut?templateId=${id}`, {
         method: "DELETE",
-        redirect: "follow" as const,
-      };
-
-      // Use the API format provided in the prompt
-      const response = await fetch(
-        `${baseUrl}/api/ut?templateId=${id}`,
-        requestOptions
-      );
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Failed to delete template: ${errorText}`);
       }
 
-      // Close the confirmation dialog
-      setConfirmDelete(null);
-
-      // Immediately remove the deleted template from the local state for instant UI feedback
-      setTemplates(prevTemplates => 
-        prevTemplates.filter(template => {
+      // Immediately update local state to remove the deleted template
+      setTemplates((prevTemplates) => 
+        prevTemplates.filter((template) => {
           const templateId = Array.isArray(template.template_id) 
             ? template.template_id[0] 
             : template.template_id;
@@ -309,33 +302,17 @@ export default function Mainscreen() {
         })
       );
 
-      // Show success message
+      // Clear the confirm delete state
+      setConfirmDelete(null);
+
       toast.success("Template deleted successfully");
-      
-      // Refresh templates list to ensure we have consistent data
-      await fetchTemplates();
-      
-      // Turn off loading state
-      setLoading(false);
     } catch (error) {
       console.error("Error deleting template:", error);
       toast.error("Failed to delete template", {
-        description:
-          error instanceof Error
-            ? error.message
-            : "Please try again or contact support",
-        duration: 5000,
-        dismissible: true
+        description: error instanceof Error ? error.message : "Please try again",
+        duration: 5000
       });
-      
-      // Refresh templates to ensure UI is in a consistent state
-      try {
-        await fetchTemplates();
-      } catch (refreshError) {
-        console.error("Failed to refresh templates after delete error:", refreshError);
-      }
-      
-      // Make sure loading state is turned off even if there's an error
+    } finally {
       setLoading(false);
     }
   };
