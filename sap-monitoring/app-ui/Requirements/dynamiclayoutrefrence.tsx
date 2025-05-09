@@ -2,12 +2,13 @@
 
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import { Responsive, WidthProvider, Layout } from "react-grid-layout";
-import { DraggableChart } from "./DraggableChart";
+import { DraggableChart } from "@/components/charts/DraggableChart";
 import { DataPoint } from "@/types";
 import _ from "lodash";
 import { DateRange } from "react-day-picker";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { Suspense } from 'react';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -881,5 +882,25 @@ export function DynamicLayout({
         </ResponsiveGridLayout>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+// Main page component
+export default function TemplatesAddPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DynamicLayout
+        charts={[]}
+        activeKPIs={new Set()}
+        kpiColors={{}}
+        globalDateRange={undefined}
+        theme={{ name: "Default", colors: ["#000000", "#000000"] }}
+        onLayoutChange={() => {}}
+        hideControls={false}
+        onDeleteGraph={() => {}}
+        onEditGraph={() => {}}
+        resolution="auto"
+      />
+    </Suspense>
   );
 }

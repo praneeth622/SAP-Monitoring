@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { BarChart, LineChart, Plus, X } from "lucide-react";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -150,6 +150,70 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
 
   const baseUrl = "https://shwsckbvbt.a.pinggy.link";
 
+  // Define callback functions before they're used in useEffect
+  const fetchCorrelationKpiGroups = useCallback(async (monitoringArea: string) => {
+    if (!monitoringArea || correlationKpiGroups[monitoringArea]) return;
+
+    try {
+      // Get all KPI groups for the selected monitoring area
+      const response = await axios.get(
+        `${baseUrl}/api/kpigrp?mon_area=${monitoringArea}`
+      );
+      
+      // Don't filter by monitoring area to allow selecting any KPI group
+      // Just get all unique KPI groups the user has access to 
+      const uniqueKpiGroups = [...new Set(
+        userAccess.map(ua => ua.kpi_group)
+      )];
+      
+      const filteredGroups = (response.data || []).filter((group: KpiGroup) => 
+        uniqueKpiGroups.includes(group.kpi_grp_name)
+      );
+      
+      setCorrelationKpiGroups((prev) => ({
+        ...prev,
+        [monitoringArea]: filteredGroups,
+      }));
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch correlation KPI groups",
+        variant: "destructive",
+      });
+    }
+  }, [correlationKpiGroups, userAccess, baseUrl, toast]);
+
+  const fetchCorrelationKpis = useCallback(async (kpiGroup: string) => {
+    if (!kpiGroup || correlationKpis[kpiGroup]) return;
+
+    try {
+      const response = await axios.get(
+        `${baseUrl}/api/kpi?kpi_grp=${kpiGroup}`
+      );
+      
+      // Get all KPIs the user has access to for this KPI group regardless of monitoring area
+      const userAccessKpis = userAccess
+        .filter(ua => ua.kpi_group === kpiGroup)
+        .map(ua => ua.kpi_id);
+
+      // Only show KPIs that are in the user's access list
+      const filteredKpis = (response.data || []).filter((kpi: Kpi) =>
+          userAccessKpis.includes(kpi.kpi_name)
+        );
+
+      setCorrelationKpis((prev) => ({
+        ...prev,
+        [kpiGroup]: filteredKpis,
+      }));
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch correlation KPIs",
+        variant: "destructive",
+      });
+    }
+  }, [correlationKpis, userAccess, baseUrl, toast]);
+
   const [formData, setFormData] = useState<FormData>(() => {
     if (editingGraph) {
       // Initialize correlation KPIs as objects with required structure
@@ -212,27 +276,47 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   useEffect(() => {
     const fetchMonitoringAreas = async () => {
       try {
+        // Set loading state to indicate we're fetching data
         setIsLoading(true);
+        
+        // Fetch monitoring areas first regardless of user access
         const response = await axios.get(`${baseUrl}/api/ma`);
-        // Filter monitoring areas based on user access
-        const uniqueMonitoringAreas = [...new Set(userAccess.map(ua => ua.mon_area))];
-        const filteredAreas = (response.data || []).filter((area: MonitoringArea) => 
-          uniqueMonitoringAreas.includes(area.mon_area_name)
-        );
-        setMonitoringAreas(filteredAreas);
+        
+        // If no user access data yet, just load all monitoring areas initially
+        // This ensures the dropdown is populated and not disabled
+        if (userAccess.length === 0) {
+          setMonitoringAreas(response.data || []);
+          console.log("Loading all monitoring areas initially:", response.data);
+        } else {
+          // Once we have user access, filter the monitoring areas
+          const uniqueMonitoringAreas = [...new Set(userAccess.map(ua => ua.mon_area))];
+          const filteredAreas = (response.data || []).filter((area: MonitoringArea) =>
+            uniqueMonitoringAreas.includes(area.mon_area_name)
+          );
+          
+          console.log("Filtered monitoring areas by user access:", filteredAreas);
+          setMonitoringAreas(filteredAreas);
+          
+          // Pre-fetch KPI groups for each monitoring area
+          filteredAreas.forEach((area: MonitoringArea) => {
+            fetchCorrelationKpiGroups(area.mon_area_name);
+          });
+        }
       } catch (error) {
+        console.error("Error fetching monitoring areas:", error);
         toast({
           title: "Error",
           description: "Failed to fetch monitoring areas",
           variant: "destructive",
         });
       } finally {
+        // Always set loading to false when done
         setIsLoading(false);
       }
     };
 
     fetchMonitoringAreas();
-  }, [userAccess]);
+  }, [userAccess, baseUrl, fetchCorrelationKpiGroups]);
 
   // Step 2: Fetch KPI groups when monitoring area is selected
   useEffect(() => {
@@ -313,70 +397,6 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     fetchKpis();
   }, [formData.kpiGroup, formData.monitoringArea, userAccess]);
 
-  // Fetch data for correlation KPIs when needed
-  const fetchCorrelationKpiGroups = async (monitoringArea: string) => {
-    if (!monitoringArea || correlationKpiGroups[monitoringArea]) return;
-
-    try {
-      const response = await axios.get(
-        `${baseUrl}/api/kpigrp?mon_area=${monitoringArea}`
-      );
-      // Filter KPI groups based on user access
-      const uniqueKpiGroups = [...new Set(
-        userAccess
-          .filter(ua => ua.mon_area === monitoringArea)
-          .map(ua => ua.kpi_group)
-      )];
-      const filteredGroups = (response.data || []).filter((group: KpiGroup) => 
-        uniqueKpiGroups.includes(group.kpi_grp_name)
-      );
-      setCorrelationKpiGroups((prev) => ({
-        ...prev,
-        [monitoringArea]: filteredGroups,
-      }));
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch correlation KPI groups",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const fetchCorrelationKpis = async (kpiGroup: string) => {
-    if (!kpiGroup || correlationKpis[kpiGroup]) return;
-
-    try {
-      const response = await axios.get(
-        `${baseUrl}/api/kpi?kpi_grp=${kpiGroup}`
-      );
-      
-      // Get all KPIs the user has access to for this monitoring area and KPI group
-      const userAccessKpis = userAccess
-        .filter(ua => 
-          ua.mon_area === formData.monitoringArea && 
-          ua.kpi_group === kpiGroup
-        )
-        .map(ua => ua.kpi_id);
-
-      // Only show KPIs that are in the user's access list
-      const filteredKpis = (response.data || []).filter((kpi: Kpi) =>
-          userAccessKpis.includes(kpi.kpi_name)
-        );
-
-      setCorrelationKpis((prev) => ({
-        ...prev,
-        [kpiGroup]: filteredKpis,
-      }));
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch correlation KPIs",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleMonitoringAreaChange = (value: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -445,13 +465,15 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       return;
     }
 
+    // Create a new correlation KPI entry with an empty monitoring area
+    // This allows the user to select any monitoring area
     setFormData((prev) => ({
       ...prev,
       correlationKpis: [
         ...prev.correlationKpis,
         {
           id: `corr-${Date.now()}-${prev.correlationKpis.length}`,
-          monitoringArea: "",
+          monitoringArea: "", // Leave empty for user to select any monitoring area
           kpiGroup: "",
           kpi: "",
         },
@@ -476,7 +498,8 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           kpiGroup: "",
           kpi: "",
         };
-        // Fetch KPI groups for this monitoring area
+        
+        // Always fetch KPI groups for this monitoring area, regardless of primary KPI
         fetchCorrelationKpiGroups(value);
       } else if (field === "kpiGroup") {
         newCorrelationKpis[index] = {
@@ -1024,6 +1047,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
+                          {/* Show all monitoring areas without filtering */}
                           {monitoringAreas.map((ma) => (
                             <SelectItem key={ma.mon_area_name} value={ma.mon_area_name}>
                               <span className="text-xs">{ma.mon_area_name} - {ma.mon_area_desc}</span>

@@ -69,6 +69,7 @@ export interface TemplateConfig {
   name: string;
   description: string;
   charts: number[];
+  graphs: any[];
 }
 
 export interface DynamicLayoutProps {

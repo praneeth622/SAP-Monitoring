@@ -50,12 +50,12 @@ import {
   ChartConfig,
   ChartType,
   DataPoint,
-  TemplateConfig,
   TemplateKey,
   Template,
   ThemeKey,
   ChartTheme,
   Graph,
+  TemplateConfig
 } from "@/types";
 import { toast } from "sonner";
 import { useChartTheme } from "@/components/charts/hooks/useChartTheme";
@@ -303,54 +303,63 @@ const templateData: Record<TemplateKey, TemplateConfig> = {
     name: "Default View",
     description: "Complete monitoring dashboard",
     charts: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    graphs: [],
   },
   single: {
     id: "2",
     name: "Single Chart",
     description: "Detailed view of revenue analysis",
     charts: [0],
+    graphs: [],
   },
   dual: {
     id: "3",
     name: "Two Charts",
     description: "Revenue and user growth comparison",
     charts: [0, 1],
+    graphs: [],
   },
   triple: {
     id: "4",
     name: "Three Charts",
     description: "Key performance indicators",
     charts: [0, 1, 2],
+    graphs: [],
   },
   quad: {
     id: "5",
     name: "Four Charts",
     description: "Four key metric dashboard",
     charts: [0, 1, 2, 3],
+    graphs: [],
   },
   five: {
     id: "6",
     name: "Five Charts",
     description: "Comprehensive performance view",
     charts: [0, 1, 2, 3, 4],
+    graphs: [],
   },
   six: {
     id: "7",
     name: "Six Charts",
     description: "Extended metrics overview",
     charts: [0, 1, 2, 3, 4, 5],
+    graphs: [],
   },
   seven: {
     id: "8",
     name: "Seven Charts",
     description: "Detailed metrics dashboard",
     charts: [0, 1, 2, 3, 4, 5, 6],
+    graphs: [],
   },
   eight: {
     id: "9",
     name: "Eight Charts",
     description: "Comprehensive analytics",
     charts: [0, 1, 2, 3, 4, 5, 6, 7],
+    graphs: [],
   },
 };
 
@@ -566,6 +575,9 @@ const DashboardContent = React.memo(
     selectedTheme,
     resolution,
     handleLayoutChange,
+    selectedApiTemplate,
+    apiTemplates,
+    hasSavedLayouts,
   }: {
     charts: ChartConfig[];
     isContentLoading: boolean;
@@ -578,6 +590,9 @@ const DashboardContent = React.memo(
     selectedTheme: string;
     resolution: string;
     handleLayoutChange: (layout: any) => void;
+    selectedApiTemplate: string;
+    apiTemplates: NormalizedTemplate[];
+    hasSavedLayouts: boolean;
   }) => {
     if (isContentLoading) {
       return (
@@ -1819,6 +1834,7 @@ export default function Dashboard() {
     return Object.keys(templateData).includes(value);
   };
 
+  // Completely replace the saveLayout function with this new implementation
   const saveLayout = useCallback(async () => {
     if (!selectedApiTemplate) {
       console.warn("No template selected, cannot save layout");
@@ -1826,51 +1842,159 @@ export default function Dashboard() {
     }
 
     try {
+      setIsSaving(true);
+      
       // Find the current template data
       const currentTemplate = apiTemplates.find(
         (t) => t.id === selectedApiTemplate
       );
+      
       if (!currentTemplate) {
         throw new Error("Template data not found");
       }
 
-      // Get current layout from charts
-      const updatedGraphs = charts.map((chart) => {
-        // Find original template graph to preserve all properties
-        const originalGraph = templateData?.graphs?.find((g: any) => g.graph_id === chart.id);
+      console.log("Starting to save layout for template:", selectedApiTemplate);
+      console.log("Template has", currentTemplate.graphs.length, "original graphs");
+
+      // Step 1: Save to local storage first
+      const layoutKey = `template-layout-${selectedApiTemplate}`;
+      
+      try {
+        // Format for local storage - just save positions
+        const localStorageLayout = charts.map(chart => ({
+          id: chart.id,
+          layout: chart.layout || { x: 0, y: 0, w: 4, h: 4 }
+        }));
+        
+        safeLocalStorage.setItem(layoutKey, JSON.stringify(localStorageLayout));
+        console.log("Layout saved to localStorage successfully");
+      } catch (error) {
+        console.warn("Could not save layout to localStorage:", error);
+      }
+
+      // Step 2: Prepare payload for database
+      // Build two collections - one for updated graphs, one for original untouched graphs
+      
+      // First, create a map of all original graphs by ID for lookup
+      const originalGraphsById = new Map();
+      if (currentTemplate.graphs && Array.isArray(currentTemplate.graphs)) {
+        currentTemplate.graphs.forEach(graph => {
+          originalGraphsById.set(graph.id, { ...graph });
+        });
+      }
+      
+      // Next, map charts to updated graph entries
+      const updatedGraphs = charts.map(chart => {
+        // Find the original graph to preserve all its properties
+        const originalGraph = originalGraphsById.get(chart.id);
+        
+        // If we don't have an original, this is likely a new graph
         if (!originalGraph) {
-          console.warn(`No original graph found for chart ${chart.id}`);
-          return null;
+          console.warn(`No original graph found for chart ${chart.id}, using defaults`);
+          
+          // Use default layout if chart.layout is undefined
+          const layout = chart.layout || { x: 0, y: 0, w: 4, h: 4 };
+          
+          // Calculate positions for API format
+          const topX = layout.x * 10;
+          const topY = layout.y * 10;
+          const bottomX = (layout.x + layout.w) * 10;
+          const bottomY = (layout.y + layout.h) * 10;
+          
+          // Create a new graph entry
+          return {
+            graph_id: chart.id,
+            graph_name: chart.title || "New Graph",
+            top_xy_pos: `${topY}:${topX}`,
+            bottom_xy_pos: `${bottomY}:${bottomX}`,
+            primary_kpi_id: Array.from(chart.activeKPIs || new Set<string>())[0] || "",
+            secondary_kpis: Array.from(chart.activeKPIs || new Set<string>())
+              .slice(1)
+              .map((kpi: string) => ({ kpi_id: kpi })),
+            frequency: "auto",
+            resolution: "auto",
+            graph_type: chart.type || "line"
+          };
         }
-
-        // Use default layout if chart.layout is undefined
-        const layout = chart.layout || {
-          x: 0,
-          y: 0,
-          w: 4,
-          h: 4,
-        };
-
-        // Calculate positions (multiplied by 10 as per API format)
+        
+        // For existing graphs, update with new layout while preserving other props
+        
+        // Use chart's layout if available, or original, or default
+        const layout = chart.layout || 
+          (originalGraph.position ? {
+            x: originalGraph.position.x,
+            y: originalGraph.position.y,
+            w: originalGraph.position.w, 
+            h: originalGraph.position.h
+          } : { x: 0, y: 0, w: 4, h: 4 });
+        
+        // Calculate positions for API format
         const topX = layout.x * 10;
         const topY = layout.y * 10;
         const bottomX = (layout.x + layout.w) * 10;
         const bottomY = (layout.y + layout.h) * 10;
-
-        // Update graph with new positions, preserving all other properties
-        return {
-          ...originalGraph,
+        
+        // Create an updated graph entry
+        const updatedGraph = {
+          graph_id: originalGraph.id,
+          graph_name: originalGraph.name,
+          primary_kpi_id: originalGraph.primaryKpi,
+          secondary_kpis: originalGraph.secondaryKpis?.map((kpi: string) => ({ kpi_id: kpi })) || [],
           top_xy_pos: `${topY}:${topX}`,
           bottom_xy_pos: `${bottomY}:${bottomX}`,
-          primary_kpi_id: Array.isArray(chart.activeKPIs)
-            ? chart.activeKPIs[0] || originalGraph.primary_kpi_id
-            : Array.from(chart.activeKPIs || new Set())[0] || originalGraph.primary_kpi_id,
-          secondary_kpis: originalGraph.secondary_kpis // Preserve original secondary_kpis
+          graph_type: originalGraph.type || "line",
+          systems: originalGraph.systems || [],
+          frequency: originalGraph.frequency || "auto",
+          resolution: originalGraph.resolution || "auto"
         };
-      }).filter(Boolean);
-
-      // Prepare the complete template payload
-      const templatePayload = {
+        
+        // If there are active KPIs in the chart, update those
+        if (chart.activeKPIs && (chart.activeKPIs instanceof Set ? chart.activeKPIs.size > 0 : chart.activeKPIs.length > 0)) {
+          const activeKpiArray = Array.from(chart.activeKPIs);
+          if (activeKpiArray.length > 0) {
+            updatedGraph.primary_kpi_id = activeKpiArray[0];
+            updatedGraph.secondary_kpis = activeKpiArray.slice(1).map((kpi: string) => ({ kpi_id: kpi }));
+          }
+        }
+        
+        // Remove from map to track which original graphs were updated
+        originalGraphsById.delete(chart.id);
+        
+        return updatedGraph;
+      });
+      
+      // Now, preserve all graphs that weren't updated (not in current view)
+      const preservedGraphs: any[] = [];
+      originalGraphsById.forEach(graph => {
+        // Convert to the API format
+        const preservedGraph = {
+          graph_id: graph.id,
+          graph_name: graph.name,
+          primary_kpi_id: graph.primaryKpi,
+          secondary_kpis: graph.secondaryKpis?.map((kpi: string) => ({ kpi_id: kpi })) || [],
+          top_xy_pos: graph.position ? 
+            `${graph.position.y * 10}:${graph.position.x * 10}` : "0:0",
+          bottom_xy_pos: graph.position ? 
+            `${(graph.position.y + graph.position.h) * 10}:${(graph.position.x + graph.position.w) * 10}` : "0:0",
+          graph_type: graph.type || "line",
+          systems: graph.systems || [],
+          frequency: graph.frequency || "auto",
+          resolution: graph.resolution || "auto"
+        };
+        
+        preservedGraphs.push(preservedGraph);
+      });
+      
+      // Combine the updated and preserved graphs
+      const allGraphs = [...updatedGraphs, ...preservedGraphs];
+      
+      console.log(
+        `Sending ${allGraphs.length} total graphs to API: ` + 
+        `${updatedGraphs.length} updated, ${preservedGraphs.length} preserved`
+      );
+      
+      // Step 3: Create the API payload and send it
+      const payload = {
         user_id: "USER_TEST_1",
         template_id: selectedApiTemplate,
         template_name: currentTemplate.name,
@@ -1878,13 +2002,14 @@ export default function Dashboard() {
         default: currentTemplate.isDefault || false,
         favorite: currentTemplate.isFavorite || false,
         frequency: currentTemplate.frequency || "auto",
-        systems: currentTemplate.systems.map((systemId: string) => ({ system_id: systemId })) || [],
-        graphs: updatedGraphs,
+        resolution: currentTemplate.resolution || "auto",
+        systems: currentTemplate.systems.map((systemId) => ({ system_id: systemId })) || [],
+        graphs: allGraphs,
       };
-
-      console.log("Saving template with payload:", templatePayload);
-
-      // Now use the correct API URL
+      
+      console.log("Saving template with payload:", payload);
+      
+      // Send to API
       const apiUrl = `https://shwsckbvbt.a.pinggy.link/api/ut`;
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -1895,16 +2020,48 @@ export default function Dashboard() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save layout");
+        throw new Error(`Failed to save layout: ${response.statusText}`);
       }
 
       const data = await response.json();
       console.log("Layout saved successfully:", data);
+      
+      // Validation: Verify graphs were saved properly
+      try {
+        const verifyResponse = await fetch(
+          `https://shwsckbvbt.a.pinggy.link/api/ut?templateId=${selectedApiTemplate}`
+        );
+        if (verifyResponse.ok) {
+          const verifyData = await verifyResponse.json();
+          if (verifyData && verifyData.length > 0) {
+            const savedTemplate = verifyData[0];
+            const savedGraphCount = savedTemplate.graphs?.length || 0;
+            const originalGraphCount = currentTemplate.graphs.length;
+            const sentGraphCount = allGraphs.length;
+            
+            console.log(`VALIDATION: Sent ${sentGraphCount} graphs, saved ${savedGraphCount}, original had ${originalGraphCount}`);
+            
+            if (savedGraphCount < originalGraphCount) {
+              console.error(`VALIDATION FAILED: Some graphs were lost (saved: ${savedGraphCount}, original: ${originalGraphCount})`);
+              toast.warning(`Warning: Some graphs may have been lost during save (${savedGraphCount}/${originalGraphCount})`);
+            } else {
+              console.log(`VALIDATION PASSED: All graphs saved successfully (${savedGraphCount})`);
+            }
+          }
+        }
+      } catch (verifyError) {
+        console.warn("Could not verify saved template:", verifyError);
+      }
+
       setLayoutChanged(false);
+      toast.success("Dashboard layout saved successfully");
     } catch (error) {
       console.error("Error saving layout:", error);
+      toast.error(`Failed to save layout: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsSaving(false);
     }
-  }, [charts, selectedApiTemplate]);
+  }, [charts, selectedApiTemplate, apiTemplates]);
 
   // Modify the handleLayoutChange function
   const handleLayoutChange = useCallback(
@@ -2168,22 +2325,8 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Modify the render dashboard content function to use content-only loading
+  // Create a modified version of renderDashboardContent function
   const renderDashboardContent = () => {
-    //  <DashboardContent
-    //     charts={charts}
-    //     isContentLoading={isContentLoading}
-    //     hasError={hasError}
-    //     errorMessage={errorMessage}
-    //     fetchTemplates={fetchTemplates}
-    //     activeKPIs={activeKPIs}
-    //     themedKpiColors={themedKpiColors}
-    //     globalDateRange={globalDateRange}
-    //     selectedTheme={selectedTheme}
-    //     resolution={resolution}
-    //     handleLayoutChange={handleLayoutChange}
-    //  />
-
     if (isContentLoading) {
       return (
         <div className="flex items-center justify-center h-[70vh] w-full">
@@ -2249,10 +2392,10 @@ export default function Dashboard() {
     }
 
     // Check if these charts have saved layouts
-    const hasSavedLayouts = charts.some((chart) => !!chart.layout);
+    const layoutSaved = hasSavedLayouts();
 
     return (
-      <div className="relative min-h-[70vh]">
+      <div className="relative min-h-[70vh] ">
         <DynamicLayout
           charts={charts}
           activeKPIs={activeKPIs}
@@ -2310,7 +2453,7 @@ export default function Dashboard() {
               };
             }),
           }}
-          useDynamicLayout={!hasSavedLayouts} // Tell DynamicLayout whether to use saved or dynamic layout
+          useDynamicLayout={!layoutSaved} // Tell DynamicLayout whether to use saved or dynamic layout
         />
       </div>
     );

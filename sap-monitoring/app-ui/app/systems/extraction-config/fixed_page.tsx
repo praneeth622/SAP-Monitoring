@@ -1129,9 +1129,6 @@ export default function ConfigDashboard() {
     </Card>
   )
 
-  // Add this state at the component level
-  const [showKpiChildren, setShowKpiChildren] = useState(false)
-
   // Render the KPIs section
   const renderKPIs = () => {
     const parentKpis = filteredKpis([...osKpis, ...jobsKpis].filter((kpi) => kpi.parent === true))
