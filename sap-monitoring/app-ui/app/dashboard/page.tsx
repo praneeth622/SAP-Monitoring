@@ -172,12 +172,13 @@ declare module "@/components/charts/DynamicLayout" {
     onLayoutChange?: (layout: any) => void;
     templateId?: string;
     templateData?: any;
-    useDynamicLayout?: boolean;
     onDeleteGraph?: (id: string) => void;
     onEditGraph?: (id: string) => void;
     hideLayoutControls?: boolean;
     isEditMode?: boolean;
     onLayoutReset?: (newLayout: any) => Promise<void>;
+    useDynamicLayout?: boolean;
+    onSaveLayout?: () => void;
   }
 }
 
@@ -578,6 +579,7 @@ const DashboardContent = React.memo(
     selectedApiTemplate,
     apiTemplates,
     hasSavedLayouts,
+    saveLayout,
   }: {
     charts: ChartConfig[];
     isContentLoading: boolean;
@@ -593,6 +595,7 @@ const DashboardContent = React.memo(
     selectedApiTemplate: string;
     apiTemplates: NormalizedTemplate[];
     hasSavedLayouts: boolean;
+    saveLayout: () => Promise<void>;
   }) => {
     if (isContentLoading) {
       return (
@@ -717,7 +720,8 @@ const DashboardContent = React.memo(
               };
             }),
           }}
-          useDynamicLayout={!hasSavedLayouts} // Tell DynamicLayout whether to use saved or dynamic layout
+          useDynamicLayout={!hasSavedLayouts} 
+          onSaveLayout={saveLayout}
         />
       </div>
     );
@@ -742,6 +746,9 @@ export default function Dashboard() {
     useState<TemplateKey>("default");
   const [resolution, setResolution] = useState("auto");
   const [selectedTheme, setSelectedTheme] = useState("default");
+
+  // Add state to track selected quick date label
+  const [selectedQuickDate, setSelectedQuickDate] = useState<string>("Select period");
 
   // Add state for API templates
   const [apiTemplates, setApiTemplates] = useState<NormalizedTemplate[]>([]);
@@ -810,72 +817,32 @@ export default function Dashboard() {
   }, [nextRefreshTime]);
 
   // Add function to check for saved layouts and handle graph changes
-  const hasSavedLayouts = useCallback(() => {
+  const hasSavedLayouts = useCallback((): boolean => {
     if (!selectedApiTemplate) return false;
 
     try {
-      // Check if we have layout info in localStorage
+      // Step 1: First check if we have layout info in localStorage
       const layoutKey = `template-layout-${selectedApiTemplate}`;
       const savedLayout = localStorage.getItem(layoutKey);
-
-      // Check if this template already had its layout processed after a graph change
-      const processedKey = `graph-change-processed-${selectedApiTemplate}`;
-      const lastProcessed = localStorage.getItem(processedKey);
-
-      // Check if there's a pending graph change for this template
-      const graphChangeInfo = localStorage.getItem("template-graph-change");
-      if (graphChangeInfo) {
-        try {
-          const { templateId, needsReset, action, changeId } =
-            JSON.parse(graphChangeInfo);
-
-          // If this is a graph change for the current template and we haven't processed it yet
-          if (templateId === selectedApiTemplate && needsReset) {
-            console.log(
-              `Detected graph ${action} in template ${templateId}, handling layout reset once`
-            );
-
-            // Check if we've already processed this exact change
-            if (lastProcessed && changeId) {
-              try {
-                const processedData = JSON.parse(lastProcessed);
-                if (processedData.changeId === changeId) {
-                  console.log(
-                    "Already processed this exact change, using saved layout"
-                  );
-                  return !!savedLayout;
-                }
-              } catch (e) {
-                // If parsing fails, proceed with the change
-              }
-            }
-
-            // Immediately clear the change notification to prevent other components from processing it
-            localStorage.removeItem("template-graph-change");
-
-            // Mark this template as processed for this session to prevent continuous resets
-            localStorage.setItem(
-              processedKey,
-              JSON.stringify({
-                timestamp: new Date().toISOString(),
-                changeId,
-              })
-            );
-
-            // The DynamicLayout will use resetToDynamicLayout for the initial render
-            return false;
-          }
-        } catch (error) {
-          console.error("Error parsing graph change info:", error);
-        }
+      if (savedLayout) {
+        return true;
       }
-
-      return !!savedLayout;
+      
+      // Step 2: If no localStorage data, check if charts have valid layout data from API
+      return charts.some(chart => 
+        chart.layout && 
+        typeof chart.layout.x === 'number' && 
+        typeof chart.layout.y === 'number' && 
+        typeof chart.layout.w === 'number' && 
+        typeof chart.layout.h === 'number' &&
+        chart.layout.w > 0 && 
+        chart.layout.h > 0
+      );
     } catch (error) {
       console.error("Error checking for saved layouts:", error);
       return false;
     }
-  }, [selectedApiTemplate]);
+  }, [selectedApiTemplate, charts]);
 
   // Auto-refresh options in seconds
   const autoRefreshOptions = [
@@ -2125,20 +2092,9 @@ export default function Dashboard() {
       if (isSignificantChange) {
         setLayoutChanged(true);
         console.log("Layout has been modified by user");
-
-        // Auto-save the layout after a delay
-        const saveTimeout = setTimeout(async () => {
-          try {
-            await saveLayout();
-          } catch (error) {
-            console.error("Error auto-saving layout:", error);
-          }
-        }, 1000);
-
-        return () => clearTimeout(saveTimeout);
       }
     },
-    [charts, isContentLoading, saveLayout]
+    [charts, isContentLoading]
   );
 
   // Modify handleThemeChange to prevent full reload and API calls
@@ -2453,7 +2409,8 @@ export default function Dashboard() {
               };
             }),
           }}
-          useDynamicLayout={!layoutSaved} // Tell DynamicLayout whether to use saved or dynamic layout
+          useDynamicLayout={!layoutSaved} 
+          onSaveLayout={saveLayout}
         />
       </div>
     );
@@ -2879,13 +2836,15 @@ export default function Dashboard() {
                           if (preset) {
                             const newDate = preset.getDate();
                             setGlobalDateRange(newDate);
+                            // Update the selected quick date label
+                            setSelectedQuickDate(preset.label);
                           }
                         }}
                       >
                         <SelectTrigger className="h-8 px-2 text-xs bg-background/50 min-w-[120px] border-muted">
                           <div className="flex items-center gap-1.5">
                             <CalendarRange className="h-3 w-3 text-muted-foreground" />
-                            <SelectValue placeholder="Select period" />
+                            <SelectValue placeholder={selectedQuickDate} />
                           </div>
                         </SelectTrigger>
                         <SelectContent className="z-[50]">
@@ -3049,33 +3008,7 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Save button */}
-                    {layoutChanged && selectedTemplate && (
-                      <div className="flex flex-col">
-                        <label className="text-xs text-muted-foreground mb-1">
-                          Save Layout
-                        </label>
-                        <Button
-                          onClick={saveLayout}
-                          disabled={
-                            !layoutChanged || isSaving || !selectedTemplate
-                          }
-                          variant="outline"
-                          size="sm"
-                          className={cn(
-                            "h-8 px-2 text-xs flex items-center gap-1.5 bg-background/50 border-muted",
-                            isSaving && "opacity-70 cursor-not-allowed"
-                          )}
-                        >
-                          {isSaving ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Save className="h-3.5 w-3.5" />
-                          )}
-                          <span>{isSaving ? "Saving..." : "Save Layout"}</span>
-                        </Button>
-                      </div>
-                    )}
+                    
                   </div>
                 </div>
               </div>
@@ -3083,7 +3016,7 @@ export default function Dashboard() {
           </motion.div>
 
           {/* Add padding to account for fixed header and ensure dropdowns are visible */}
-          <div className="pt-[120px]">
+          <div className="pt-[100px]">
             {/* Charts grid */}
             <motion.div
               initial={{ opacity: 0 }}
