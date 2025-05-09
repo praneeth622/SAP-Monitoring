@@ -85,8 +85,51 @@ interface EmptyStateProps {
   onAdd: () => void;
 }
 
-// Add helper function to normalize template data
+// Helper function to safely fetch complete template data
+const fetchCompleteTemplateData = async (templateId: string, baseUrl: string): Promise<Template | null> => {
+  try {
+    // Fetch the detailed template data to ensure we have all systems and graphs
+    const detailResponse = await fetch(
+      `${baseUrl}/api/ut?templateId=${templateId}`
+    );
+    
+    if (!detailResponse.ok) {
+      console.error(`Failed to fetch detailed template data for template ${templateId}: ${detailResponse.statusText}`);
+      return null;
+    }
+    
+    const detailData = await detailResponse.json();
+    if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+      console.error(`No detailed data returned for template ${templateId}`);
+      return null;
+    }
+    
+    // Normalize and return the complete template
+    return normalizeTemplate(detailData[0]);
+  } catch (error) {
+    console.error(`Error fetching complete template data for ${templateId}:`, error);
+    return null;
+  }
+};
+
+// Update normalizeTemplate function to handle edge cases
 const normalizeTemplate = (template: Template): Template => {
+  // Make sure we have valid systems data
+  let systems = template.systems || [];
+  
+  // Handle case where systems might be an array of arrays
+  if (Array.isArray(systems) && systems.length > 0 && Array.isArray(systems[0])) {
+    systems = systems[0];
+  }
+  
+  // Make sure all systems have a valid system_id
+  // Use type assertion since we know the structure we're expecting
+  systems = (systems as any[]).filter(system => 
+    system && 
+    typeof system === 'object' && 
+    'system_id' in system
+  );
+  
   return {
     template_id: Array.isArray(template.template_id)
       ? template.template_id[0]
@@ -108,7 +151,7 @@ const normalizeTemplate = (template: Template): Template => {
         ? template.frequency[0]
         : template.frequency
       : "5m",
-    systems: template.systems || [],
+    systems: systems,
     graphs: template.graphs || [],
   };
 };
@@ -167,8 +210,19 @@ export default function Mainscreen() {
             return template; // Return the basic template if no details are returned
           }
 
-          // Normalize and return the detailed template data
-          return normalizeTemplate(detailData[0]);
+          // Make sure to preserve systems data
+          const detailedTemplate = detailData[0];
+          
+          // Log systems data for debugging
+          console.log(`Template ${templateId} systems:`, detailedTemplate.systems);
+          
+          // Explicitly ensure systems data is preserved
+          const normalizedTemplate = normalizeTemplate(detailedTemplate);
+          
+          // Double-check systems data after normalization
+          console.log(`Template ${templateId} normalized systems:`, normalizedTemplate.systems);
+          
+          return normalizedTemplate;
         } catch (error) {
           console.error(
             `Error fetching details for template ${templateId}:`,
@@ -204,6 +258,8 @@ export default function Mainscreen() {
 
   const handleToggleFavorite = async (template: Template) => {
     try {
+      setLoading(true);
+
       // Get the normalized values for the API request
       const templateId = Array.isArray(template.template_id)
         ? template.template_id[0]
@@ -225,19 +281,45 @@ export default function Mainscreen() {
           ? template.frequency[0]
           : template.frequency
         : "5m";
+      
+      // Fetch the detailed template data to ensure we have all systems and graphs
+      const detailResponse = await fetch(
+        `${baseUrl}/api/ut?templateId=${templateId}`
+      );
+      
+      if (!detailResponse.ok) {
+        throw new Error("Failed to fetch detailed template data");
+      }
+      
+      const detailData = await detailResponse.json();
+      if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+        throw new Error("No detailed data returned");
+      }
+      
+      // Use the complete data from the API
+      const completeTemplate = detailData[0];
+      
+      // Normalize systems data
+      let systems = completeTemplate.systems || [];
+      if (Array.isArray(systems) && systems.length > 0 && Array.isArray(systems[0])) {
+        systems = systems[0];
+      }
+      systems = systems.filter((system: any) => system && typeof system === 'object' && 'system_id' in system);
 
+      // Prepare the update payload with all necessary data
       const updatedTemplate = {
         user_id: "USER_TEST_1",
         template_id: templateId,
         template_name: templateName,
         template_desc: templateDesc,
         default: isDefault,
-        favorite: !isFavorite,
+        favorite: !isFavorite, // Toggle the favorite status
         frequency: frequency,
-        systems: template.systems || [],
-        graphs: template.graphs || [],
+        systems: systems,
+        graphs: completeTemplate.graphs || [],
       };
 
+      // Update the template via API
       const response = await fetch(`${baseUrl}/api/ut`, {
         method: "POST",
         headers: {
@@ -247,7 +329,9 @@ export default function Mainscreen() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update template");
+        throw new Error(
+          `Failed to update favorite status: ${response.statusText}`
+        );
       }
 
       // Update local state after successful API call
@@ -264,13 +348,15 @@ export default function Mainscreen() {
       );
 
       toast.success(
-        `Template ${isFavorite ? "removed from" : "added to"} favorites`
+        `Template ${!isFavorite ? "added to" : "removed from"} favorites`
       );
     } catch (error) {
-      console.error("Error updating template:", error);
-      toast.error("Failed to update template", {
-        description: "Please try again or contact support",
+      console.error("Error updating favorite status:", error);
+      toast.error("Failed to update favorite status", {
+        description: "Please try again",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -477,12 +563,6 @@ export default function Mainscreen() {
       // First, update all other templates to not be default
       const promises = templates.map(async (t) => {
         const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
-        const tName = Array.isArray(t.template_name) ? t.template_name[0] : t.template_name;
-        const tDesc = Array.isArray(t.template_desc) ? t.template_desc[0] : t.template_desc;
-        const tIsFavorite = Array.isArray(t.favorite) ? t.favorite[0] : t.favorite;
-        const tFrequency = t.frequency
-          ? Array.isArray(t.frequency) ? t.frequency[0] : t.frequency
-          : "5m";
         
         // Skip the template we're setting as default
         if (tId === templateId) return;
@@ -491,36 +571,26 @@ export default function Mainscreen() {
         const tIsDefault = Array.isArray(t.default) ? t.default[0] : t.default;
         if (!tIsDefault) return;
 
-        // Fetch the FULL detailed template data to ensure we have all graphs
-        const detailResponse = await fetch(
-          `${baseUrl}/api/ut?templateId=${tId}`
-        );
-        
-        if (!detailResponse.ok) {
-          throw new Error("Failed to fetch detailed template data for the previous default template");
+        // Fetch the complete detailed data of the template
+        const completeTemplate = await fetchCompleteTemplateData(tId, baseUrl);
+
+        if (!completeTemplate) {
+          throw new Error("Failed to fetch complete template data");
         }
-        
-        const detailData = await detailResponse.json();
-        if (!detailData || !Array.isArray(detailData) || !detailData.length) {
-          throw new Error("No data returned for the previous default template");
-        }
-        
-        // Use the complete detailed data of the template
-        const completeTemplate = detailData[0];
 
         const updatePayload = {
           user_id: "USER_TEST_1",
           template_id: tId,
-          template_name: tName,
-          template_desc: tDesc,
+          template_name: completeTemplate.template_name,
+          template_desc: completeTemplate.template_desc,
           default: false,
-          favorite: tIsFavorite,
-          frequency: tFrequency,
-          systems: completeTemplate.systems || [],
-          graphs: completeTemplate.graphs || [] // Use the complete graphs from the fetched data
+          favorite: completeTemplate.favorite,
+          frequency: completeTemplate.frequency,
+          systems: completeTemplate.systems,
+          graphs: completeTemplate.graphs
         };
 
-        console.log(`Updating template ${tId} with ${updatePayload.graphs?.length || 0} graphs`);
+        console.log(`Updating template ${tId} with ${updatePayload.graphs?.length || 0} graphs and ${updatePayload.systems?.length || 0} systems`);
 
         const response = await fetch(`${baseUrl}/api/ut`, {
           method: "POST",
@@ -541,21 +611,11 @@ export default function Mainscreen() {
       await Promise.all(promises.filter(Boolean));
 
       // Fetch the complete data for the template we're setting as default
-      const detailResponse = await fetch(
-        `${baseUrl}/api/ut?templateId=${templateId}`
-      );
-      
-      if (!detailResponse.ok) {
-        throw new Error("Failed to fetch detailed data for template being set as default");
+      const completeTemplate = await fetchCompleteTemplateData(templateId, baseUrl);
+
+      if (!completeTemplate) {
+        throw new Error("Failed to fetch complete template data");
       }
-      
-      const detailData = await detailResponse.json();
-      if (!detailData || !Array.isArray(detailData) || !detailData.length) {
-        throw new Error("No detailed data returned for the template being set as default");
-      }
-      
-      // Use the complete template data
-      const completeTemplate = detailData[0];
 
       // Then set the selected template as default with complete data
       const updatedTemplate = {
@@ -566,11 +626,11 @@ export default function Mainscreen() {
         default: true,
         favorite: isFavorite,
         frequency: frequency,
-        systems: completeTemplate.systems || [],
-        graphs: completeTemplate.graphs || [], // Use complete graph data
+        systems: completeTemplate.systems,
+        graphs: completeTemplate.graphs,
       };
       
-      console.log(`Setting template ${templateId} as default with ${updatedTemplate.graphs?.length || 0} graphs`);
+      console.log(`Setting template ${templateId} as default with ${updatedTemplate.graphs?.length || 0} graphs and ${updatedTemplate.systems?.length || 0} systems`);
 
       const response = await fetch(`${baseUrl}/api/ut`, {
         method: "POST",
@@ -731,15 +791,19 @@ export default function Mainscreen() {
                         <TableCell>{templateDesc}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {(template.systems || []).map((system) => (
-                              <Badge
-                                key={system.system_id}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {system.system_id.toUpperCase()}
-                              </Badge>
-                            ))}
+                            {Array.isArray(template.systems) && template.systems.length > 0 ? (
+                              template.systems.map((system) => (
+                                <Badge
+                                  key={system.system_id}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {system.system_id.toUpperCase()}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground">No systems</span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>{frequency}</TableCell>

@@ -1411,6 +1411,14 @@ export default function ConfigDashboard() {
               value={kpiSearchTerm}
               onChange={(e) => setKpiSearchTerm(e.target.value)}
               className="w-full"
+              onKeyDown={(e) => {
+                // Prevent select events from handling keyboard events
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                // Prevent losing focus when clicking inside the input
+                e.stopPropagation();
+              }}
             />
             </div>
           </div>
@@ -1791,7 +1799,9 @@ export default function ConfigDashboard() {
                           onValueChange={(value) => handleAlertKpiSelection(value)}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Please select a KPI" />
+                            <SelectValue placeholder="Select KPI">
+                              {newAlert.kpiName ? newAlert.kpiDesc : "Select KPI"}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <div className="p-2 sticky top-0 bg-popover z-10">
@@ -1800,6 +1810,14 @@ export default function ConfigDashboard() {
                                 className="mb-2"
                                 value={kpiAlertSearchTerm}
                                 onChange={(e) => setKpiAlertSearchTerm(e.target.value)}
+                                onKeyDown={(e) => {
+                                  // Prevent select events from handling keyboard events
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  // Prevent losing focus when clicking inside the input
+                                  e.stopPropagation();
+                                }}
                               />
                             </div>
                             <SelectGroup>
@@ -2122,7 +2140,9 @@ export default function ConfigDashboard() {
                           onValueChange={(value) => handleKpiSelection(value)}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Please select a KPI" />
+                            <SelectValue placeholder="Select KPI">
+                              {newFilter.kpiName ? newFilter.kpiDesc : "Select KPI"}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <div className="p-2 sticky top-0 bg-popover z-10">
@@ -2131,6 +2151,14 @@ export default function ConfigDashboard() {
                                 className="mb-2"
                                 value={kpiFilterSearchTerm}
                                 onChange={(e) => setKpiFilterSearchTerm(e.target.value)}
+                                onKeyDown={(e) => {
+                                  // Prevent select events from handling keyboard events
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  // Prevent losing focus when clicking inside the input
+                                  e.stopPropagation();
+                                }}
                               />
                             </div>
                             <SelectGroup>

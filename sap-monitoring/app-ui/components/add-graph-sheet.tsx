@@ -104,6 +104,7 @@ interface AddGraphSheetProps {
     id?: string;
     activeKPIs?: Set<string> | string[];
     kpiColors?: Record<string, { color: string; name: string }>;
+    kpisChanged: boolean;
   }) => void;
 }
 
@@ -132,7 +133,15 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   onAddGraph,
 }) => {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(true);
+  // Only set initial loading if editing
+  const [loadingStates, setLoadingStates] = useState({
+    initialLoad: editingGraph !== null,
+    monitoringAreas: false,
+    kpiGroups: false,
+    kpis: false
+  });
+  // Add a dataReady state to prevent flickering
+  const [dataReady, setDataReady] = useState(editingGraph === null); // Data is ready immediately for new graphs
   const [userAccess, setUserAccess] = useState<UserAccess[]>([]);
 
   // API data states
@@ -255,6 +264,11 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   useEffect(() => {
     const fetchUserAccess = async () => {
       try {
+        // Only show loading indicator when editing an existing graph
+        if (editingGraph) {
+          setLoadingStates(prev => ({ ...prev, initialLoad: true }));
+        }
+        
         const response = await axios.get(
           `${baseUrl}/api/ua?userId=${app_globals.default_user_id}`
         );
@@ -267,17 +281,21 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           variant: "destructive",
         });
       }
+      // For new graphs, we'll continue loading monitoring areas in background
+      // For edit mode, full loading state is managed in the editingGraph effect
     };
 
     fetchUserAccess();
-  }, []);
+  }, [baseUrl, toast, editingGraph]);
 
   // Step 1: Fetch monitoring areas on component mount
   useEffect(() => {
     const fetchMonitoringAreas = async () => {
       try {
-        // Set loading state to indicate we're fetching data
-        setIsLoading(true);
+        // For new graphs, don't show loading indicator
+        if (editingGraph) {
+          setLoadingStates(prev => ({ ...prev, monitoringAreas: true }));
+        }
         
         // Fetch monitoring areas first regardless of user access
         const response = await axios.get(`${baseUrl}/api/ma`);
@@ -310,13 +328,21 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           variant: "destructive",
         });
       } finally {
-        // Always set loading to false when done
-        setIsLoading(false);
+        // Only update loading states when editing a graph
+        // For new graphs, we don't show loading indicators
+        if (editingGraph) {
+          setLoadingStates(prev => ({ 
+            ...prev, 
+            monitoringAreas: false,
+            // Only mark initial loading as complete here if not in edit mode
+            initialLoad: editingGraph ? prev.initialLoad : false
+          }));
+        }
       }
     };
 
     fetchMonitoringAreas();
-  }, [userAccess, baseUrl, fetchCorrelationKpiGroups]);
+  }, [userAccess, baseUrl, fetchCorrelationKpiGroups, toast, editingGraph]);
 
   // Step 2: Fetch KPI groups when monitoring area is selected
   useEffect(() => {
@@ -327,7 +353,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       }
 
       try {
-        setIsLoading(true);
+        setLoadingStates(prev => ({ ...prev, kpiGroups: true }));
         const response = await axios.get(
           `${baseUrl}/api/kpigrp?mon_area=${formData.monitoringArea}`
         );
@@ -348,12 +374,12 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           variant: "destructive",
         });
       } finally {
-        setIsLoading(false);
+        setLoadingStates(prev => ({ ...prev, kpiGroups: false }));
       }
     };
 
     fetchKpiGroups();
-  }, [formData.monitoringArea, userAccess]);
+  }, [formData.monitoringArea, userAccess, baseUrl, toast]);
 
   // Step 3: Fetch KPIs when KPI group is selected
   useEffect(() => {
@@ -364,7 +390,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       }
 
       try {
-        setIsLoading(true);
+        setLoadingStates(prev => ({ ...prev, kpis: true }));
         const response = await axios.get(
           `${baseUrl}/api/kpi?kpi_grp=${formData.kpiGroup}`
         );
@@ -390,12 +416,12 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           variant: "destructive",
         });
       } finally {
-        setIsLoading(false);
+        setLoadingStates(prev => ({ ...prev, kpis: false }));
       }
     };
 
     fetchKpis();
-  }, [formData.kpiGroup, formData.monitoringArea, userAccess]);
+  }, [formData.kpiGroup, formData.monitoringArea, userAccess, baseUrl, toast]);
 
   const handleMonitoringAreaChange = (value: string) => {
     setFormData((prev) => ({
@@ -549,10 +575,12 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     e.preventDefault();
 
     // Prevent multiple submissions
-    if (isLoading) {
+    if (loadingStates.initialLoad) {
       return;
     }
-    setIsLoading(true);
+    
+    // Set a temporary submission loading state
+    setLoadingStates(prev => ({ ...prev, initialLoad: true }));
 
     // Check if any required field is empty
     if (
@@ -567,7 +595,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         description: "Please fill in all required fields",
         variant: "destructive",
       });
-      setIsLoading(false);
+      setLoadingStates(prev => ({ ...prev, initialLoad: false }));
       return;
     }
 
@@ -583,7 +611,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         description: "Please fill in all correlation KPI fields",
         variant: "destructive",
       });
-      setIsLoading(false);
+      setLoadingStates(prev => ({ ...prev, initialLoad: false }));
       return;
     }
 
@@ -608,6 +636,17 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
 
     // For edit mode, we only need to validate that the name is provided
     if (editingGraph) {
+      // Determine if KPIs have changed by comparing old and new KPI lists
+      const oldKpis = [editingGraph.primaryKpi, ...editingGraph.correlationKpis].filter(Boolean).map(k => k.toLowerCase()).sort();
+      const newKpis = [formData.kpi, ...formData.correlationKpis.filter(k => k.kpi).map(k => k.kpi)].filter(Boolean).map(k => k.toLowerCase()).sort();
+      
+      // Check if KPIs have changed by comparing sorted, lowercase arrays
+      const kpisChanged = JSON.stringify(oldKpis) !== JSON.stringify(newKpis);
+      
+      console.log("Graph update - KPIs changed:", kpisChanged);
+      console.log("Old KPIs:", oldKpis);
+      console.log("New KPIs:", newKpis);
+      
       // Create the graph data with updated fields and descriptions
       const graphData = {
         name: formData.graphName,
@@ -626,6 +665,8 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         id: editingGraph.id,
         activeKPIs: editingGraph.activeKPIs || new Set(),
         kpiColors: editingGraph.kpiColors || {},
+        // Add a flag to indicate KPIs have changed - this will be used by the parent component
+        kpisChanged: kpisChanged,
       };
 
       // Pass the data back to the parent component
@@ -639,6 +680,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         title: "Graph Updated",
         description: "Graph has been updated successfully",
       });
+      
+      // Reset loading state
+      setLoadingStates(prev => ({ ...prev, initialLoad: false }));
       return;
     }
 
@@ -657,6 +701,8 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         .map((kpi) => kpi.kpi),
       correlationKpisDesc: correlationKpisDesc,
       layout: { x: 0, y: 0, w: 4, h: 4 },
+      // For new graphs, KPIs are always considered "changed" since there's no previous state
+      kpisChanged: true,
     };
 
     // Pass the data back to the parent component
@@ -670,6 +716,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       title: "Graph Added",
       description: "Graph has been added successfully",
     });
+    
+    // Reset loading state
+    setLoadingStates(prev => ({ ...prev, initialLoad: false }));
   };
 
   const handleChange = (
@@ -698,84 +747,176 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     visible: { opacity: 1, y: 0 },
   };
 
-  // Update the submit button text based on whether editing or adding
-  const submitButtonText = editingGraph ? "Update Graph" : "Add Graph";
-
   // Make sure this useEffect runs when editingGraph changes
   useEffect(() => {
     if (editingGraph) {
+      // Set data as not ready at the start of loading
+      setDataReady(false);
+      
       const loadEditData = async () => {
         try {
-          setIsLoading(true);
+          // Set initial loading state
+          setLoadingStates({
+            initialLoad: true,
+            monitoringAreas: true,
+            kpiGroups: true,
+            kpis: true
+          });
 
-          // Step 1: Fetch monitoring areas first
-          const monAreasResponse = await axios.get(`${baseUrl}/api/ma`);
-          const monAreas = monAreasResponse.data || [];
-          setMonitoringAreas(monAreas);
-
-          // Step 2: Fetch KPI groups for the editing graph's monitoring area
+          // Load everything in parallel to speed up loading
+          const fetchPromises = [];
+          
+          // Step 1: Fetch user access if not already loaded
+          let userAccessData = userAccess;
+          if (userAccess.length === 0) {
+            const userAccessPromise = axios.get(
+              `${baseUrl}/api/ua?userId=${app_globals.default_user_id}`
+            ).then(response => {
+              userAccessData = response.data || [];
+              setUserAccess(userAccessData);
+            });
+            fetchPromises.push(userAccessPromise);
+          }
+          
+          // Step 2: Fetch all monitoring areas
+          let allMonitoringAreas: MonitoringArea[] = [];
+          const monAreasPromise = axios.get(`${baseUrl}/api/ma`)
+            .then(response => {
+              allMonitoringAreas = response.data || [];
+            });
+          fetchPromises.push(monAreasPromise);
+          
+          // Step 3: Fetch KPI groups for the editing graph's monitoring area
+          let allKpiGroups: KpiGroup[] = [];
           if (editingGraph.monitoringArea) {
-            const kpiGroupsResponse = await axios.get(
+            const kpiGroupsPromise = axios.get(
               `${baseUrl}/api/kpigrp?mon_area=${editingGraph.monitoringArea}`
+            ).then(response => {
+              allKpiGroups = response.data || [];
+            });
+            fetchPromises.push(kpiGroupsPromise);
+          }
+          
+          // Step 4: Fetch KPIs for the editing graph's KPI group
+          let primaryKpis: Kpi[] = [];
+          if (editingGraph.kpiGroup) {
+            const kpiPromise = axios.get(
+              `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
+            ).then(response => {
+              primaryKpis = response.data || [];
+            });
+            fetchPromises.push(kpiPromise);
+          }
+          
+          // Step 5: Prepare and fetch correlation KPI data
+          const tempCorrelationKpiGroups: Record<string, KpiGroup[]> = {};
+          const tempCorrelationKpis: Record<string, Kpi[]> = {};
+          
+          // Initialize correlation KPIs with proper structure
+          const correlationKpisForForm = editingGraph.correlationKpis.map((kpi, index) => ({
+            id: `corr-${Date.now()}-${index}`,
+            monitoringArea: editingGraph.monitoringArea,
+            kpiGroup: editingGraph.kpiGroup,
+            kpi: kpi
+          }));
+          
+          // Fetch correlation data for the main monitoring area
+          if (editingGraph.monitoringArea) {
+            const maGroupsPromise = axios.get(`${baseUrl}/api/kpigrp?mon_area=${editingGraph.monitoringArea}`)
+              .then(response => {
+                tempCorrelationKpiGroups[editingGraph.monitoringArea] = response.data || [];
+              });
+            fetchPromises.push(maGroupsPromise);
+          }
+          
+          // Fetch correlation KPIs for the main KPI group
+          if (editingGraph.kpiGroup) {
+            const maKpisPromise = axios.get(`${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`)
+              .then(response => {
+                tempCorrelationKpis[editingGraph.kpiGroup] = response.data || [];
+              });
+            fetchPromises.push(maKpisPromise);
+          }
+          
+          // Wait for all parallel fetches to complete
+          await Promise.all(fetchPromises);
+          
+          // Now process and update all states at once
+          
+          // 1. Filter monitoring areas based on user access
+          if (userAccessData.length > 0) {
+            const uniqueMonitoringAreas = [...new Set(userAccessData.map(ua => ua.mon_area))];
+            const filteredAreas = allMonitoringAreas.filter(area => 
+              uniqueMonitoringAreas.includes(area.mon_area_name)
             );
-            const groups = kpiGroupsResponse.data || [];
-            setKpiGroups(groups);
-
-            // Step 3: Fetch KPIs for the editing graph's KPI group
-            if (editingGraph.kpiGroup) {
-              const kpiResponse = await axios.get(
-                `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
-              );
-              const kpis = kpiResponse.data || [];
-              setKpis(kpis);
-            }
+            setMonitoringAreas(filteredAreas);
+          } else {
+            setMonitoringAreas(allMonitoringAreas);
           }
-
-          // Step 4: Load data for correlation KPIs
-          if (editingGraph.correlationKpis && editingGraph.correlationKpis.length > 0) {
-            // Initialize correlation KPIs with proper structure
-            const correlationKpis = editingGraph.correlationKpis.map((kpi, index) => ({
-              id: `corr-${Date.now()}-${index}`,
-              monitoringArea: editingGraph.monitoringArea,
-              kpiGroup: editingGraph.kpiGroup,
-              kpi: kpi
-            }));
-
-            // Update form data with correlation KPIs
-            setFormData(prev => ({
-              ...prev,
-              correlationKpis
-            }));
-
-            // Fetch KPI groups and KPIs for correlation KPIs
-            for (const corrKpi of correlationKpis) {
-              if (corrKpi.monitoringArea) {
-                await fetchCorrelationKpiGroups(corrKpi.monitoringArea);
-                if (corrKpi.kpiGroup) {
-                  await fetchCorrelationKpis(corrKpi.kpiGroup);
-                }
-              }
-            }
+          
+          // 2. Filter KPI groups based on user access
+          if (userAccessData.length > 0 && editingGraph.monitoringArea) {
+            const uniqueKpiGroups = [...new Set(
+              userAccessData
+                .filter(ua => ua.mon_area === editingGraph.monitoringArea)
+                .map(ua => ua.kpi_group)
+            )];
+            const filteredGroups = allKpiGroups.filter(group => 
+              uniqueKpiGroups.includes(group.kpi_grp_name)
+            );
+            setKpiGroups(filteredGroups);
+          } else {
+            setKpiGroups(allKpiGroups);
           }
-
-          // Update form data with editing graph values and descriptions
-          setFormData(prev => ({
-            ...prev,
+          
+          // 3. Filter KPIs based on user access
+          if (userAccessData.length > 0 && editingGraph.monitoringArea && editingGraph.kpiGroup) {
+            const userAccessKpis = userAccessData
+              .filter(ua => 
+                ua.mon_area === editingGraph.monitoringArea && 
+                ua.kpi_group === editingGraph.kpiGroup
+              )
+              .map(ua => ua.kpi_id);
+            const filteredKpis = primaryKpis.filter(kpi => 
+              userAccessKpis.includes(kpi.kpi_name)
+            );
+            setKpis(filteredKpis);
+          } else {
+            setKpis(primaryKpis);
+          }
+          
+          // 4. Update correlation KPI data
+          setCorrelationKpiGroups(prev => {
+            const newData = { ...prev };
+            Object.keys(tempCorrelationKpiGroups).forEach(key => {
+              newData[key] = tempCorrelationKpiGroups[key];
+            });
+            return newData;
+          });
+          
+          setCorrelationKpis(prev => {
+            const newData = { ...prev };
+            Object.keys(tempCorrelationKpis).forEach(key => {
+              newData[key] = tempCorrelationKpis[key];
+            });
+            return newData;
+          });
+          
+          // 5. Finally update form data
+          setFormData({
             monitoringArea: editingGraph.monitoringArea,
             kpiGroup: editingGraph.kpiGroup,
             kpi: editingGraph.primaryKpi,
+            correlationKpis: correlationKpisForForm,
             graphType: editingGraph.type,
+            timeInterval: template.timeRange,
+            resolution: template.resolution,
             graphName: editingGraph.name
-          }));
-
-          // Log the descriptions we're working with
-          console.log("Editing graph with descriptions:", {
-            monitoringAreaDesc: editingGraph.monitoringAreaDesc,
-            kpiGroupDesc: editingGraph.kpiGroupDesc,
-            primaryKpiDesc: editingGraph.primaryKpiDesc,
-            correlationKpisDesc: editingGraph.correlationKpisDesc
           });
 
+          // Mark data as ready to show UI
+          setDataReady(true);
+          
         } catch (error) {
           console.error("Error loading data for edit graph:", error);
           toast({
@@ -783,14 +924,32 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             description: "Failed to load data for editing graph",
             variant: "destructive",
           });
+          
+          // Even on error, mark data as ready to show something
+          setDataReady(true);
         } finally {
-          setIsLoading(false);
+          // Mark all loading as complete
+          setLoadingStates({
+            initialLoad: false,
+            monitoringAreas: false,
+            kpiGroups: false,
+            kpis: false
+          });
         }
       };
 
       loadEditData();
+    } else {
+      // If not editing, mark as ready immediately
+      setDataReady(true);
+      setLoadingStates({
+        initialLoad: false,
+        monitoringAreas: false,
+        kpiGroups: false,
+        kpis: false
+      });
     }
-  }, [editingGraph, baseUrl]);
+  }, [editingGraph, baseUrl, toast, template.timeRange, template.resolution, userAccess]);
 
   return (
     <TooltipProvider>
@@ -801,7 +960,6 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         onSubmit={handleSubmit}
         className="space-y-6"
       >
-        {/* Form fields */}
         <motion.div variants={itemVariants} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-foreground/90 mb-2">
@@ -813,12 +971,22 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 handleMonitoringAreaChange(value);
                 setShowValidationErrors(false);
               }}
-              disabled={isLoading || monitoringAreas.length === 0}
+              disabled={loadingStates.initialLoad || monitoringAreas.length === 0}
             >
-              <SelectTrigger className={`${showValidationErrors && !formData.monitoringArea ? "border-destructive focus:ring-destructive" : ""}`}>
-                <SelectValue placeholder="Select monitoring area">
-                  {formData.monitoringArea || "Select Monitoring Area"}
-                </SelectValue>
+              <SelectTrigger 
+                className={`${showValidationErrors && !formData.monitoringArea ? "border-destructive focus:ring-destructive" : ""} 
+                  ${(editingGraph !== null && !dataReady) ? "opacity-70 backdrop-blur-sm animate-pulse" : ""}`}
+              >
+                {loadingStates.monitoringAreas || (editingGraph !== null && !dataReady) ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                    <span className="text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <SelectValue placeholder="Select monitoring area">
+                    {formData.monitoringArea || "Select Monitoring Area"}
+                  </SelectValue>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {monitoringAreas.map((area) => (
@@ -847,13 +1015,23 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 setShowValidationErrors(false);
               }}
               disabled={
-                !formData.monitoringArea || isLoading || kpiGroups.length === 0
+                !formData.monitoringArea || loadingStates.initialLoad || kpiGroups.length === 0
               }
             >
-              <SelectTrigger className={`${showValidationErrors && !formData.kpiGroup ? "border-destructive focus:ring-destructive" : ""}`}>
-                <SelectValue placeholder="Select KPI group">
-                  {formData.kpiGroup || "Select KPI Group"}
-                </SelectValue>
+              <SelectTrigger 
+                className={`${showValidationErrors && !formData.kpiGroup ? "border-destructive focus:ring-destructive" : ""}
+                  ${(editingGraph !== null && !dataReady) ? "opacity-70 backdrop-blur-sm animate-pulse" : ""}`}
+              >
+                {loadingStates.kpiGroups || (editingGraph !== null && !dataReady) ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                    <span className="text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <SelectValue placeholder="Select KPI group">
+                    {formData.kpiGroup || "Select KPI Group"}
+                  </SelectValue>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {kpiGroups.map((group) => (
@@ -881,15 +1059,25 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 handleKPIChange(value);
                 setShowValidationErrors(false);
               }}
-              disabled={!formData.kpiGroup || isLoading || kpis.length === 0}
+              disabled={!formData.kpiGroup || loadingStates.initialLoad || kpis.length === 0}
             >
-              <SelectTrigger className={`${showValidationErrors && !formData.kpi ? "border-destructive focus:ring-destructive" : ""}`}>
-                <SelectValue placeholder="Select KPI">
-                  {formData.kpi ? (() => {
-                    const selectedKpi = kpis.find(k => k.kpi_name === formData.kpi);
-                    return selectedKpi ? `${selectedKpi.kpi_name} - ${selectedKpi.kpi_desc}` : formData.kpi;
-                  })() : "Select KPI"}
-                </SelectValue>
+              <SelectTrigger 
+                className={`${showValidationErrors && !formData.kpi ? "border-destructive focus:ring-destructive" : ""}
+                  ${(editingGraph !== null && !dataReady) ? "opacity-70 backdrop-blur-sm animate-pulse" : ""}`}
+              >
+                {loadingStates.kpis || (editingGraph !== null && !dataReady) ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                    <span className="text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <SelectValue placeholder="Select KPI">
+                    {formData.kpi ? (() => {
+                      const selectedKpi = kpis.find(k => k.kpi_name === formData.kpi);
+                      return selectedKpi?.kpi_desc || formData.kpi;
+                    })() : "Select KPI"}
+                  </SelectValue>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {kpis
@@ -916,7 +1104,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             )}
           </div>
 
-          <div>
+          <div className={`${(editingGraph !== null && !dataReady) ? "opacity-70 filter blur-[1px]" : ""}`}>
             <label className="block text-sm font-medium text-foreground/90 mb-2">
               Graph Type
             </label>
@@ -928,6 +1116,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, graphType: "line" }))
                 }
+                disabled={editingGraph !== null && !dataReady}
                 className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border transition-all duration-200 ${
                   formData.graphType === "line"
                     ? "border-primary bg-primary/10 text-primary"
@@ -944,6 +1133,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, graphType: "bar" }))
                 }
+                disabled={editingGraph !== null && !dataReady}
                 className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border transition-all duration-200 ${
                   formData.graphType === "bar"
                     ? "border-primary bg-primary/10 text-primary"
@@ -956,7 +1146,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid grid-cols-2 gap-4 ${(editingGraph !== null && !dataReady) ? "opacity-70 filter blur-[1px]" : ""}`}>
             <div>
               <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Time Interval
@@ -967,6 +1157,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                   setFormData((prev) => ({ ...prev, timeInterval: value }));
                   setShowValidationErrors(false);
                 }}
+                disabled={editingGraph !== null && !dataReady}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select time interval" />
@@ -994,6 +1185,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                   setFormData((prev) => ({ ...prev, resolution: value }));
                   setShowValidationErrors(false);
                 }}
+                disabled={editingGraph !== null && !dataReady}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select resolution" />
@@ -1027,7 +1219,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             </div>
             <div className="space-y-3">
               {formData.correlationKpis.map((corrKpi, index) => (
-                <div key={corrKpi.id} className="flex items-center gap-2">
+                <div key={corrKpi.id} className={`flex items-center gap-2 ${(editingGraph !== null && !dataReady) ? "opacity-70 backdrop-blur-sm animate-pulse" : ""}`}>
                   <div className="grid grid-cols-3 gap-2 flex-grow">
                     <div className="space-y-1">
                       <Select
@@ -1040,6 +1232,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                           // Fetch KPI groups for this monitoring area
                           fetchCorrelationKpiGroups(value);
                         }}
+                        disabled={editingGraph !== null && !dataReady}
                       >
                         <SelectTrigger className={`${showValidationErrors && !corrKpi.monitoringArea ? "border-destructive focus:ring-destructive" : ""}`}>
                           <SelectValue placeholder="Monitoring Area">
@@ -1070,7 +1263,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                           // Fetch KPIs for this KPI group
                           fetchCorrelationKpis(value);
                         }}
-                        disabled={!corrKpi.monitoringArea}
+                        disabled={!corrKpi.monitoringArea || (editingGraph !== null && !dataReady)}
                       >
                         <SelectTrigger className={`${showValidationErrors && !corrKpi.kpiGroup ? "border-destructive focus:ring-destructive" : ""}`}>
                           <SelectValue placeholder="KPI Group">
@@ -1096,14 +1289,14 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                         onValueChange={(value) =>
                           handleCorrelationKpiChange(index, "kpi", value)
                         }
-                        disabled={!corrKpi.kpiGroup}
+                        disabled={!corrKpi.kpiGroup || (editingGraph !== null && !dataReady)}
                       >
                         <SelectTrigger className={`${showValidationErrors && !corrKpi.kpi ? "border-destructive focus:ring-destructive" : ""}`}>
                           <SelectValue placeholder="Select KPI">
                             {corrKpi.kpi && correlationKpis[corrKpi.kpiGroup] 
                               ? (() => {
                                   const selectedKpi = correlationKpis[corrKpi.kpiGroup].find(k => k.kpi_name === corrKpi.kpi);
-                                  return selectedKpi ? `${selectedKpi.kpi_name} - ${selectedKpi.kpi_desc}` : corrKpi.kpi;
+                                  return selectedKpi?.kpi_desc || corrKpi.kpi;
                                 })() 
                               : "Select KPI"}
                           </SelectValue>
@@ -1114,7 +1307,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                             .filter(kpi => !isKpiSelected(kpi.kpi_name, corrKpi.monitoringArea, corrKpi.kpiGroup))
                             .map((kpi) => (
                               <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
-                                {kpi.kpi_name} - {kpi.kpi_desc}
+                                {kpi.kpi_desc}
                               </SelectItem>
                             ))}
                         </SelectContent>
@@ -1129,6 +1322,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    disabled={editingGraph !== null && !dataReady}
                     onClick={() => removeCorrelationKpi(index)}
                   >
                     <X className="h-4 w-4" />
@@ -1144,8 +1338,10 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 disabled={
                   formData.correlationKpis.length >= 4 ||
                   !formData.kpiGroup ||
-                  !canAddMoreCorrelationKpis()
+                  !canAddMoreCorrelationKpis() ||
+                  (editingGraph !== null && !dataReady)
                 }
+                className={`${(editingGraph !== null && !dataReady) ? "opacity-70" : ""}`}
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Add Correlation KPI
@@ -1153,7 +1349,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             </div>
           </div>
 
-          <div>
+          <div className={`${(editingGraph !== null && !dataReady) ? "opacity-70 filter blur-[1px]" : ""}`}>
             <label className="block text-sm font-medium text-foreground/90 mb-2">
               Graph Name
             </label>
@@ -1163,6 +1359,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               value={formData.graphName}
               onChange={handleChange}
               placeholder="Enter graph name"
+              disabled={editingGraph !== null && !dataReady}
               className={`w-full px-4 py-2 rounded-lg border transition-all duration-200 ${
                 showValidationErrors && !formData.graphName.trim()
                   ? "border-destructive focus:ring-destructive"
@@ -1185,7 +1382,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit">{submitButtonText}</Button>
+          <Button type="submit" disabled={editingGraph !== null && !dataReady}>
+            {editingGraph ? "Update Graph" : "Add Graph"}
+          </Button>
         </motion.div>
       </motion.form>
     </TooltipProvider>

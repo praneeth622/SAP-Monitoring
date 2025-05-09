@@ -137,6 +137,8 @@ function NavItem({
   onClick,
 }: NavItemProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const itemRef = useRef<HTMLDivElement>(null);
 
   const handleClick = () => {
     if (isCollapsed && onExpand) {
@@ -145,7 +147,40 @@ function NavItem({
     if (onClick) {
       onClick();
     }
+    // Only toggle if not hovering for systems management
+    if (isCollapsible && label !== "Manage Systems") {
+      setIsOpen(!isOpen);
+    }
   };
+
+  // Handle mouse enter/leave for hover effect
+  const handleMouseEnter = () => {
+    if (isCollapsible && label === "Manage Systems") {
+      setIsHovering(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (isCollapsible && label === "Manage Systems") {
+      setIsHovering(false);
+    }
+  };
+
+  useEffect(() => {
+    // Additional effect for mouse events outside component bounds
+    if (label === "Manage Systems") {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (itemRef.current && !itemRef.current.contains(event.target as Node)) {
+          setIsHovering(false);
+        }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [label]);
 
   const content = (
     <Button
@@ -175,7 +210,7 @@ function NavItem({
         <ChevronDown
           className={cn(
             "h-4 w-4 flex-shrink-0 transition-transform",
-            isOpen && "rotate-180"
+            (isOpen || isHovering) && "rotate-180"
           )}
         />
       )}
@@ -201,6 +236,27 @@ function NavItem({
   }
 
   if (isCollapsible) {
+    if (label === "Manage Systems") {
+      return (
+        <div 
+          ref={itemRef}
+          className="relative" 
+          onMouseEnter={handleMouseEnter} 
+          onMouseLeave={handleMouseLeave}
+        >
+          {content}
+          <div 
+            className={cn(
+              "pl-6 overflow-hidden transition-all duration-200 max-h-0",
+              (isOpen || isHovering) && "max-h-[200px]" // Use max-height for smoother animation
+            )}
+          >
+            {children}
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>{content}</CollapsibleTrigger>
@@ -351,7 +407,7 @@ export function Sidebar() {
             className={cn(
               "flex items-center",
               isCollapsed && !isHovering
-                ? "justify-center w-full pr-6"
+                ? "justify-center w-full"
                 : "gap-2"
             )}
           >
@@ -381,21 +437,6 @@ export function Sidebar() {
               )}
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "rounded-full p-2 hover:bg-accent/50",
-              isCollapsed && !isHovering && "absolute right-1 top-4"
-            )}
-            onClick={toggleCollapsed}
-          >
-            {isCollapsed && !isHovering ? (
-              <TbLayoutSidebarRightCollapse className="h-5 w-5" />
-            ) : (
-              <TbLayoutSidebarLeftCollapse className="h-5 w-5" />
-            )}
-          </Button>
         </div>
 
         {/* Navigation */}
@@ -530,7 +571,7 @@ export function Sidebar() {
           </nav>
         </div>
 
-        {/* Footer */}
+        {/* Footer with hover profile menu */}
         <div className="border-t p-3 mt-auto bg-card/50">
           <div className="space-y-1">
             {isCollapsed && !isHovering ? (
@@ -554,55 +595,71 @@ export function Sidebar() {
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start p-3 h-auto hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src="/avatars/user.png" alt="User" />
-                        <AvatarFallback>JD</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">John Doe</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          johndoe@gmail.com
-                        </div>
+              <div className="relative group">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start p-3 h-auto hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src="/avatars/user.png" alt="User" />
+                      <AvatarFallback>JD</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">John Doe</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        johndoe@gmail.com
                       </div>
                     </div>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" side="right">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => router.push("/profile")}>
-                      <UserCircle className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => router.push("/settings")}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => router.push("/notifications")}
+                  </div>
+                </Button>
+
+                {/* Hover menu for profile */}
+                <div className="absolute bottom-full mb-1 right-0 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="bg-popover rounded-md shadow-md border border-border p-1">
+                    <div className="text-sm font-medium px-2 py-1.5">My Account</div>
+                    <div className="h-px bg-muted my-1" />
+                    <div className="space-y-1">
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start text-sm px-2 h-9"
+                        onClick={() => router.push("/profile")}
+                      >
+                        <UserCircle className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start text-sm px-2 h-9"
+                        onClick={() => router.push("/settings")}
+                      >
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Settings</span>
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        className="w-full justify-start text-sm px-2 h-9"
+                        onClick={() => router.push("/notifications")}
+                      >
+                        <Bell className="mr-2 h-4 w-4" />
+                        <span>Notifications</span>
+                        <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+                          3
+                        </span>
+                      </Button>
+                    </div>
+                    <div className="h-px bg-muted my-1" />
+                    <Button 
+                      variant="ghost" 
+                      className="w-full justify-start text-sm px-2 h-9"
+                      onClick={() => router.push("/logout")}
                     >
-                      <Bell className="mr-2 h-4 w-4" />
-                      <span>Notifications</span>
-                      <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
-                        3
-                      </span>
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push("/logout")}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Log out</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -102,6 +102,18 @@ const timeRangeOptions = [
   "custom",
 ];
 
+// Add a map for display labels
+const timeRangeLabels: Record<string, string> = {
+  "auto": "Auto",
+  "last 1 hour": "Last 1 Hour",
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "last 7 days": "Last 7 Days",
+  "last 30 days": "Last 30 Days",
+  "last 90 days": "Last 90 Days",
+  "custom": "Custom"
+};
+
 const dummyData = generateDummyData();
 
 // Add this near the top of the file with other constants
@@ -123,11 +135,21 @@ const generateConsistentColors = (kpis: string[]) => {
   const activeKPIs = new Set<string>();
 
   kpis.forEach((kpi, index) => {
+    if (!kpi) return; // Skip empty KPIs
+    
     const kpiLower = kpi.toLowerCase();
     activeKPIs.add(kpiLower);
+    
+    // Format the KPI name to be more user-friendly for display
+    const displayName = kpi
+      .replace(/_/g, ' ')  // Replace underscores with spaces
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Title case each word
+      .join(' ');
+    
     kpiColors[kpiLower] = {
       color: colorPalette[index % colorPalette.length],
-      name: kpi,
+      name: displayName || kpi,  // Use formatted display name or original if formatting fails
     };
   });
 
@@ -643,15 +665,36 @@ function TemplatePageContent() {
       const chartData = chartDataRef.current[cacheKey];
       const isLoading = chartDataLoadState[cacheKey] === "loading";
 
-      // Ensure we have activeKPIs and kpiColors - stable reference
-      if (!graph.stableKpiColors) {
-        graph.stableKpiColors = allKpis.reduce((colors, kpi, index) => {
-          colors[kpi] = {
-            color: defaultChartTheme.colors[index % defaultChartTheme.colors.length],
-            name: kpi,
-          };
+      // Check if we need to regenerate stable colors
+      // Either we don't have them yet OR the KPIs have changed since last render
+      let kpiColors;
+      if (!graph.stableKpiColors || 
+          // Check if the keys in stableKpiColors match our current KPIs
+          !allKpis.every(kpi => kpi in (graph.stableKpiColors || {}))) {
+        
+        // Generate new stable colors
+        const newStableColors = allKpis.reduce((colors, kpi, index) => {
+          // Try to preserve existing color if available
+          if (graph.kpiColors && kpi in graph.kpiColors) {
+            colors[kpi] = graph.kpiColors[kpi];
+          } else {
+            // Otherwise generate a new color
+            colors[kpi] = {
+              color: defaultChartTheme.colors[index % defaultChartTheme.colors.length],
+              name: kpi, // Use the KPI as name (will be displayed in legend)
+            };
+          }
           return colors;
         }, {} as Record<string, { color: string; name: string }>);
+        
+        // Update the graph with new stable colors
+        graph.stableKpiColors = newStableColors;
+        kpiColors = newStableColors;
+        
+        console.log(`Generated new stable colors for graph ${graph.id}:`, newStableColors);
+      } else {
+        // Use existing stable colors
+        kpiColors = graph.stableKpiColors;
       }
 
       return {
@@ -662,7 +705,7 @@ function TemplatePageContent() {
         width: graph.layout.w * 100,
         height: graph.layout.h * 60,
         activeKPIs: new Set(allKpis),
-        kpiColors: graph.stableKpiColors,
+        kpiColors: kpiColors,
         hideControls: true,
         onDeleteGraph: handleDeleteGraph,
         onEditGraph: handleEditGraph,
@@ -1463,17 +1506,37 @@ function TemplatePageContent() {
   // Modify the handleUpdateGraph function to update descriptions
   const handleUpdateGraph = (graphId: string, graphData: any) => {
     try {
+      // Create a list of all KPIs (primary + correlation)
       const allKpis = [graphData.primaryKpi, ...graphData.correlationKpis];
-      const { kpiColors: newKpiColors, activeKPIs: newActiveKPIs } =
-        generateConsistentColors(allKpis);
-
+      
       // Find the existing graph to preserve properties not included in graphData
       const existingGraph = graphs.find((graph) => graph.id === graphId);
-
       if (!existingGraph) {
         console.error(`Could not find graph with ID ${graphId} for updating`);
         toast.error("Failed to update graph: Graph not found");
         return;
+      }
+      
+      // Use the kpisChanged flag from graphData to determine if we need to regenerate colors
+      const kpisChanged = graphData.kpisChanged ?? false;
+      console.log("KPIs changed flag from graph sheet:", kpisChanged);
+      
+      // Only regenerate colors if KPIs have changed
+      let newKpiColors, newActiveKPIs;
+      if (kpisChanged) {
+        // Generate new colors for changed KPIs
+        const { kpiColors, activeKPIs } = generateConsistentColors(allKpis);
+        newKpiColors = kpiColors;
+        newActiveKPIs = activeKPIs;
+        
+        console.log("Generated new KPI colors and active KPIs:", {
+          kpiColors,
+          activeKPIsArray: Array.from(activeKPIs)
+        });
+      } else {
+        // If KPIs haven't changed, preserve the existing colors and active KPIs
+        newKpiColors = existingGraph.kpiColors;
+        newActiveKPIs = existingGraph.activeKPIs;
       }
 
       // Log what we're updating for debugging
@@ -1509,9 +1572,12 @@ function TemplatePageContent() {
                 primaryFilterValues: graphData.primaryFilterValues || existingGraph.primaryFilterValues || [],
                 secondaryKpisData: graphData.secondaryKpisData || existingGraph.secondaryKpisData || [],
                 
-                // Update active KPIs and KPI colors
+                // Update active KPIs and KPI colors - important for displaying the right data
                 activeKPIs: newActiveKPIs,
                 kpiColors: newKpiColors,
+                
+                // Clear stableKpiColors to force regeneration with the new KPI names
+                stableKpiColors: kpisChanged ? undefined : graph.stableKpiColors,
                 
                 // Preserve time interval and resolution if provided, otherwise keep existing
                 timeInterval: graphData.timeInterval || existingGraph.timeInterval || templateData.timeRange,
@@ -1526,11 +1592,24 @@ function TemplatePageContent() {
         )
       );
 
+      // Set graph change flag in localStorage to trigger dashboard refresh if needed
+      if (kpisChanged && params.id) {
+        localStorage.setItem('template-graph-change', JSON.stringify({
+          templateId: params.id,
+          graphCount: graphs.length,
+          timestamp: new Date().toISOString(),
+          needsReset: true,
+          action: 'update',
+          changeId: `update-${graphId}-${Date.now()}`
+        }));
+      }
+
       setIsAddGraphSheetOpen(false);
       setEditingGraph(null);
       setHasChanges(true);
       toast.success("Graph updated successfully");
 
+      // Force re-render of charts with new data
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 200);
@@ -1591,334 +1670,353 @@ function TemplatePageContent() {
   const pageTitle = isEditMode ? "Edit Template" : "Create Template";
 
   // Instead of early return for loading state, we'll use conditional rendering
-  return (
+    return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
       <main className="flex-1 overflow-y-auto">
         {isLoading ? (
           // Loading state
           <div className="flex h-screen items-center justify-center">
-            <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl p-8 max-w-md">
-              <LoadingSpinner
-                message={`${isEditMode ? "Loading" : "Creating"} template...`}
-              />
-            </div>
-          </div>
+        <div className="bg-card/90 backdrop-blur-sm border border-border/40 shadow-xl p-8 max-w-md">
+          <LoadingSpinner
+            message={`${isEditMode ? "Loading" : "Creating"} template...`}
+          />
+        </div>
+      </div>
         ) : (
           // Main content when not loading
-          <div className="container mx-auto px-2 py-6">
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="fixed top-0 left-0 right-0 z-50 px-2 py-4 bg-background/95 backdrop-blur-sm border-b border-border/40"
-            >
-              {/* Combined header with all controls in a single row */}
-              <div className="container mx-auto rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
-                <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0">
-                  {/* Left side - title */}
-                  <div className="md:w-1/5 flex-shrink-0">
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
-                      {pageTitle}
-                    </h1>
-                    <p className="text-muted-foreground/90 text-sm mt-1 hidden md:block">
-                      Create and manage your monitoring templates
-                    </p>
-                  </div>
+        <div className="container mx-auto px-2 py-6">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed top-0 left-0 right-0 z-50 px-2 py-4 bg-background/95 backdrop-blur-sm border-b border-border/40"
+          >
+            {/* Combined header with all controls in a single row */}
+            <div className="container mx-auto rounded-lg bg-card/90 border border-border/40 shadow-md p-4 backdrop-blur-sm">
+              <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0">
+                {/* Left side - title */}
+                <div className="md:w-1/5 flex-shrink-0">
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-purple-500 to-purple-600 bg-clip-text text-transparent tracking-tight">
+                    {pageTitle}
+                  </h1>
+                  <p className="text-muted-foreground/90 text-sm mt-1 hidden md:block">
+                    Create and manage your monitoring templates
+                  </p>
+                </div>
 
-                  {/* Right side - all controls in a row */}
-                  <div className="flex-1 grid grid-cols-2 md:grid-cols-12 gap-3">
-                    {/* Template Name */}
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-foreground/70 mb-1">
-                        Template Name <span className="text-red-500">*</span>
-                      </label>
-                      <Input
+                {/* Right side - all controls in a row */}
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-12 gap-3">
+                  {/* Template Name */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-foreground/70 mb-1">
+                      Template Name <span className="text-red-500">*</span>
+                    </label>
+                    <Input
                         className={`h-9 text-sm ${
                           errors.name ? "border-red-500 focus-visible:ring-red-500" : ""
                         }`}
                         placeholder="Enter name"
-                        value={templateData.name}
-                        onChange={(e) => {
+                      value={templateData.name}
+                      onChange={(e) => {
                           setTemplateData((prev) => ({
                             ...prev,
                             name: e.target.value,
                           }));
                           setErrors((prev) => ({ ...prev, name: false }));
                         }}
-                      />
-                    </div>
+                    />
+                  </div>
 
                     {/* System */}
-                    <div className="md:col-span-3">
-                      <label className="block text-xs font-medium text-foreground/70 mb-1">
-                        System <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={templateData.system}
-                        onValueChange={(value) => {
+                    <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-foreground/70 mb-1">
+                      System <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={templateData.system}
+                      onValueChange={(value) => {
                           setTemplateData((prev) => ({
                             ...prev,
                             system: value,
                           }));
                           setErrors((prev) => ({ ...prev, system: false }));
-                        }}
+                      }}
                         disabled={loadingState.fetchingSystems}
-                      >
-                        <SelectTrigger
-                          className={`h-9 text-sm ${
+                    >
+                      <SelectTrigger
+                        className={`h-9 text-sm ${
                             errors.system ? "border-red-500 focus-visible:ring-red-500" : ""
-                          }`}
-                        >
+                        }`}
+                        onMouseEnter={(e) => {
+                          // Find the button and programmatically click it on hover
+                          const button = e.currentTarget.querySelector('button');
+                          if (button) button.click();
+                        }}
+                      >
                           <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {systems.map((system) => (
+                      </SelectTrigger>
+                      <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                        {systems.map((system) => (
                             <SelectItem key={system.system_id} value={system.system_id}>
-                              {system.system_id} - {system.description || "Unknown"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                              {system.system_id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    {/* Time Range */}
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-foreground/70 mb-1">
-                        Time Range <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={templateData.timeRange}
-                        onValueChange={(value) => {
-                          setTemplateData((prev) => ({
-                            ...prev,
-                            timeRange: value,
-                          }));
-                          setErrors((prev) => ({ ...prev, timeRange: false }));
+                  {/* Time Range */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-foreground/70 mb-1">
+                      Time Range <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={templateData.timeRange}
+                      onValueChange={(value) => {
+                        setTemplateData((prev) => ({
+                          ...prev,
+                          timeRange: value,
+                        }));
+                        setErrors((prev) => ({ ...prev, timeRange: false }));
+                      }}
+                    >
+                      <SelectTrigger
+                        className={`h-9 text-sm ${
+                          errors.timeRange
+                            ? "border-red-500 focus-visible:ring-red-500"
+                            : ""
+                        }`}
+                        onMouseEnter={(e) => {
+                          // Find the button and programmatically click it on hover
+                          const button = e.currentTarget.querySelector('button');
+                          if (button) button.click();
                         }}
                       >
-                        <SelectTrigger
-                          className={`h-9 text-sm ${
-                            errors.timeRange
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }`}
-                        >
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {timeRangeOptions.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                        <SelectValue placeholder="Select">
+                          {templateData.timeRange ? timeRangeLabels[templateData.timeRange] || templateData.timeRange : "Select"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                        {timeRangeOptions.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {timeRangeLabels[option] || option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    {/* Resolution */}
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-foreground/70 mb-1">
-                        Resolution <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={templateData.resolution}
-                        onValueChange={(value) => {
-                          setTemplateData((prev) => ({
-                            ...prev,
-                            resolution: value,
-                          }));
-                          setErrors((prev) => ({ ...prev, resolution: false }));
+                  {/* Resolution */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-foreground/70 mb-1">
+                      Resolution <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={templateData.resolution}
+                      onValueChange={(value) => {
+                        setTemplateData((prev) => ({
+                          ...prev,
+                          resolution: value,
+                        }));
+                        setErrors((prev) => ({ ...prev, resolution: false }));
+                      }}
+                    >
+                      <SelectTrigger
+                        className={`h-9 text-sm ${
+                          errors.resolution
+                            ? "border-red-500 focus-visible:ring-red-500"
+                            : ""
+                        }`}
+                        onMouseEnter={(e) => {
+                          // Find the button and programmatically click it on hover
+                          const button = e.currentTarget.querySelector('button');
+                          if (button) button.click();
                         }}
                       >
-                        <SelectTrigger
-                          className={`h-9 text-sm ${
-                            errors.resolution
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }`}
-                        >
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {resolutionOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                        <SelectValue placeholder="Select">
+                          {templateData.resolution ? resolutionOptions.find(opt => opt.value === templateData.resolution)?.label || templateData.resolution : "Select"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                        {resolutionOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    {/* Switches and Save Button */}
-                    <div className="md:col-span-2 flex flex-row items-end justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            id="default-toggle"
-                            checked={templateData.isDefault}
-                            onCheckedChange={(checked) =>
-                              setTemplateData((prev) => ({
-                                ...prev,
-                                isDefault: checked,
-                              }))
-                            }
-                            className="scale-90"
-                          />
-                          <label
-                            htmlFor="default-toggle"
-                            className="text-xs font-medium cursor-pointer"
-                          >
-                            Default
-                          </label>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            id="favorite-toggle"
-                            checked={templateData.isFavorite}
-                            onCheckedChange={(checked) =>
-                              setTemplateData((prev) => ({
-                                ...prev,
-                                isFavorite: checked,
-                              }))
-                            }
-                            className="scale-90"
-                          />
-                          <label
-                            htmlFor="favorite-toggle"
-                            className="text-xs font-medium cursor-pointer"
-                          >
-                            Favorite
-                          </label>
-                        </div>
+                  {/* Switches and Save Button */}
+                  <div className="md:col-span-2 flex flex-row items-end justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <Switch
+                          id="default-toggle"
+                          checked={templateData.isDefault}
+                          onCheckedChange={(checked) =>
+                            setTemplateData((prev) => ({
+                              ...prev,
+                              isDefault: checked,
+                            }))
+                          }
+                          className="scale-90"
+                        />
+                        <label
+                          htmlFor="default-toggle"
+                          className="text-xs font-medium cursor-pointer"
+                        >
+                          Default
+                        </label>
                       </div>
-
-                      <Button
-                        variant="default"
-                        onClick={handleSaveTemplate}
-                        type="submit"
-                        disabled={
-                          !isFormValid || (showGraphs && graphs.length === 0)
-                        }
-                        className="h-9 px-4 whitespace-nowrap ml-2"
-                        size="sm"
-                      >
-                        {isEditMode ? "Update Template" : "Save Template"}
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Switch
+                          id="favorite-toggle"
+                          checked={templateData.isFavorite}
+                          onCheckedChange={(checked) =>
+                            setTemplateData((prev) => ({
+                              ...prev,
+                              isFavorite: checked,
+                            }))
+                          }
+                          className="scale-90"
+                        />
+                        <label
+                          htmlFor="favorite-toggle"
+                          className="text-xs font-medium cursor-pointer"
+                        >
+                          Favorite
+                        </label>
+                      </div>
                     </div>
+
+                    <Button
+                      variant="default"
+                      onClick={handleSaveTemplate}
+                      type="submit"
+                      disabled={
+                        !isFormValid || (showGraphs && graphs.length === 0)
+                      }
+                      className="h-9 px-4 whitespace-nowrap ml-2"
+                      size="sm"
+                    >
+                      {isEditMode ? "Update Template" : "Save Template"}
+                    </Button>
                   </div>
                 </div>
               </div>
+            </div>
+          </motion.div>
+
+          {/* Add padding to account for fixed header */}
+          <div className="pt-[120px]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-2"
+            >
+              {/* Add Graph section with border */}
+              <div className="border border-border rounded-lg p-4">
+                <Card
+                  className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
+                  onClick={handleAddGraph}
+                >
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <Plus className="w-8 h-8 text-muted-foreground mb-2" />
+                    <h3 className="text-base font-medium text-foreground/90">
+                      {showGraphs && graphs.length > 0
+                        ? "Add Another Graph"
+                        : "Add Graph"}
+                    </h3>
+                    {!showGraphs && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Click to add a new graph to your template
+                      </p>
+                    )}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Graphs container */}
+              {showGraphs && graphs.length > 0 && (
+                <div className="mt-6">
+                  <DynamicLayout
+                    charts={memoizedCharts}
+                    theme={defaultChartTheme}
+                    resolution={templateData.resolution}
+                    onDeleteGraph={handleDeleteGraph}
+                    onEditGraph={handleEditGraph}
+                    onLayoutReset={handleLayoutReset}
+                    isTemplatePage={true}
+                    hideControls={true}
+                  />
+                </div>
+              )}
             </motion.div>
 
-            {/* Add padding to account for fixed header */}
-            <div className="pt-[120px]">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="mt-2"
-              >
-                {/* Add Graph section with border */}
-                <div className="border border-border rounded-lg p-4">
-                  <Card
-                    className="p-6 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl hover:shadow-2xl transition-shadow duration-300 cursor-pointer"
-                    onClick={handleAddGraph}
-                  >
-                    <div className="flex flex-col items-center justify-center py-4">
-                      <Plus className="w-8 h-8 text-muted-foreground mb-2" />
-                      <h3 className="text-base font-medium text-foreground/90">
-                        {showGraphs && graphs.length > 0
-                          ? "Add Another Graph"
-                          : "Add Graph"}
-                      </h3>
-                      {!showGraphs && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                          Click to add a new graph to your template
-                        </p>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-
-                {/* Graphs container */}
-                {showGraphs && graphs.length > 0 && (
-                  <div className="mt-6">
-                    <DynamicLayout
-                      charts={memoizedCharts}
-                      theme={defaultChartTheme}
-                      resolution={templateData.resolution}
-                      onDeleteGraph={handleDeleteGraph}
-                      onEditGraph={handleEditGraph}
-                      onLayoutReset={handleLayoutReset}
-                      isTemplatePage={true}
-                      hideControls={true}
-                    />
-                  </div>
-                )}
-              </motion.div>
-
               {/* Always render the Sheet component, but control visibility with isOpen prop */}
-              <Sheet
-                isOpen={isAddGraphSheetOpen}
-                onClose={() => {
-                  setIsAddGraphSheetOpen(false);
-                  setEditingGraph(null);
-                }}
-                title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
-              >
+            <Sheet
+              isOpen={isAddGraphSheetOpen}
+              onClose={() => {
+                setIsAddGraphSheetOpen(false);
+                setEditingGraph(null);
+              }}
+              title={editingGraph ? "Edit Graph" : "Add Graph to Template"}
+            >
                 {/* Create the content conditionally, not the whole component */}
                 {selectedTemplate ? (
-                  <AddGraphSheet
-                    template={selectedTemplate}
-                    editingGraph={
-                      editingGraph
-                        ? {
-                            id: editingGraph.id || "",
-                            name: editingGraph.name,
-                            type: editingGraph.type,
-                            monitoringArea: editingGraph.monitoringArea,
+                <AddGraphSheet
+                  template={selectedTemplate}
+                  editingGraph={
+                    editingGraph
+                      ? {
+                          id: editingGraph.id || "",
+                          name: editingGraph.name,
+                          type: editingGraph.type,
+                          monitoringArea: editingGraph.monitoringArea,
                             monitoringAreaDesc: editingGraph.monitoringAreaDesc,
-                            kpiGroup: editingGraph.kpiGroup,
+                          kpiGroup: editingGraph.kpiGroup,
                             kpiGroupDesc: editingGraph.kpiGroupDesc,
-                            primaryKpi: editingGraph.primaryKpi,
+                          primaryKpi: editingGraph.primaryKpi,
                             primaryKpiDesc: editingGraph.primaryKpiDesc,
-                            correlationKpis: editingGraph.correlationKpis,
+                          correlationKpis: editingGraph.correlationKpis,
                             correlationKpisDesc: editingGraph.correlationKpisDesc,
-                            layout: editingGraph.layout,
-                            activeKPIs: editingGraph.activeKPIs,
+                          layout: editingGraph.layout,
+                          activeKPIs: editingGraph.activeKPIs,
                             kpiColors: editingGraph.kpiColors
-                          }
-                        : null
-                    }
-                    onClose={() => {
-                      setIsAddGraphSheetOpen(false);
-                      setEditingGraph(null);
-                    }}
-                    onAddGraph={(graphData) => {
-                      // Prevent multiple calls by immediately disabling the sheet
-                      setIsAddGraphSheetOpen(false);
+                        }
+                      : null
+                  }
+                  onClose={() => {
+                    setIsAddGraphSheetOpen(false);
+                    setEditingGraph(null);
+                  }}
+                  onAddGraph={(graphData) => {
+                    // Prevent multiple calls by immediately disabling the sheet
+                    setIsAddGraphSheetOpen(false);
 
-                      if (editingGraph) {
-                        // Update existing graph
-                        handleUpdateGraph(editingGraph.id!, graphData);
-                      } else {
-                        // Add new graph
-                        const completeGraphData: Graph = {
-                          ...graphData,
-                          activeKPIs: graphData.activeKPIs || new Set<string>(),
-                          kpiColors: graphData.kpiColors || {},
-                        };
-                        handleAddGraphToTemplate(completeGraphData);
-                      }
-                    }}
-                  />
+                    if (editingGraph) {
+                      // Update existing graph
+                      handleUpdateGraph(editingGraph.id!, graphData);
+                    } else {
+                      // Add new graph
+                      const completeGraphData: Graph = {
+                        ...graphData,
+                        activeKPIs: graphData.activeKPIs || new Set<string>(),
+                        kpiColors: graphData.kpiColors || {},
+                      };
+                      handleAddGraphToTemplate(completeGraphData);
+                    }
+                  }}
+                />
                 ) : (
                   <div className="p-4 text-center text-muted-foreground">
                     Please complete the template details first.
                   </div>
-                )}
-              </Sheet>
-            </div>
+              )}
+            </Sheet>
           </div>
+        </div>
         )}
       </main>
     </div>
