@@ -721,7 +721,7 @@ export function DynamicLayout({
       const graphChangeInfo = localStorage.getItem('template-graph-change');
       const isNewTemplate = !layoutRef.current.length;
       
-      if (graphChangeInfo || isNewTemplate || (templateId && useDynamicLayout)) {
+      if (graphChangeInfo || isNewTemplate) {
         console.log("Applying automatic layout reset due to chart count change");
       
         // Apply dynamic layout
@@ -945,7 +945,6 @@ export function DynamicLayout({
       // Map localStorage positions to layout format
       const storedLayout = charts.map((chart) => {
         const position = localStoragePositions[chart.id];
-        
         if (!position) {
           // Fallback to default position
           return {
@@ -1055,7 +1054,14 @@ export function DynamicLayout({
     }
 
     // If no localStorage layout and not using dynamic, check for API-provided layouts
-    const hasSavedAPILayouts = determineIfHasSavedLayouts();
+    const hasSavedAPILayouts = charts.some(chart => 
+      chart.layout &&
+      typeof chart.layout.x === 'number' && 
+      typeof chart.layout.y === 'number' && 
+      typeof chart.layout.w === 'number' && 
+      typeof chart.layout.h === 'number' && 
+      chart.layout.h > 0
+    );
 
     if (hasSavedAPILayouts) {
       console.log("LAYOUT INIT: Initializing layouts from API position data");
@@ -1168,7 +1174,6 @@ export function DynamicLayout({
     charts, 
     initializedWithSavedLayouts, 
     useDynamicLayout, 
-    determineIfHasSavedLayouts, 
     resetToDynamicLayout, 
     getLayoutFromLocalStorage, 
     saveLayoutToLocalStorage,
