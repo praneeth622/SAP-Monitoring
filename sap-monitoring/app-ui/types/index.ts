@@ -92,3 +92,8 @@ export interface ChartTheme {
 export interface ChartThemes {
   [key: string]: ChartTheme;
 }
+
+export interface AutoRefreshOption {
+  label: string;
+  value: number;
+}

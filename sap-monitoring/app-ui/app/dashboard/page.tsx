@@ -55,7 +55,7 @@ import {
   ThemeKey,
   ChartTheme,
   Graph,
-  TemplateConfig
+  TemplateConfig,
 } from "@/types";
 import { toast } from "sonner";
 import { useChartTheme } from "@/components/charts/hooks/useChartTheme";
@@ -139,6 +139,12 @@ interface TemplateGraph {
   secondaryKpis: string[];
   frequency?: string;
   systems?: { system_id: string }[];
+}
+
+// Add this near the other interfaces
+interface AutoRefreshOption {
+  label: string;
+  value: number;
 }
 
 const chartThemes = {
@@ -372,6 +378,15 @@ const resolutionOptions = [
   { value: "15m", label: "15 Minutes", seconds: 900 },
   { value: "1h", label: "1 Hour", seconds: 3600 },
   { value: "1d", label: "1 Day", seconds: 86400 },
+];
+
+// in page.tsx
+const autoRefreshOptions = [
+  { label: "1 minute", value: 60 },
+  { label: "5 minutes", value: 300 },
+  { label: "15 minutes", value: 900 },
+  { label: "1 hour", value: 3600 },
+  { label: "24 hours", value: 86400 },
 ];
 
 const generateChartConfigs = (resolution = "auto") => {
@@ -748,7 +763,9 @@ export default function Dashboard() {
   const [selectedTheme, setSelectedTheme] = useState("default");
 
   // Add state to track selected quick date label
-  const [selectedQuickDate, setSelectedQuickDate] = useState<string>("Select period");
+  const [selectedQuickDate, setSelectedQuickDate] = useState<string>(
+    "Select period"
+  );
 
   // Add state for API templates
   const [apiTemplates, setApiTemplates] = useState<NormalizedTemplate[]>([]);
@@ -827,15 +844,15 @@ export default function Dashboard() {
       if (savedLayout) {
         return true;
       }
-      
+
       // Step 2: If no localStorage data, check if charts have valid layout data from API
-      return charts.some(chart => 
-        chart.layout && 
-        typeof chart.layout.x === 'number' && 
-        typeof chart.layout.y === 'number' && 
-        typeof chart.layout.w === 'number' && 
-        typeof chart.layout.h === 'number' &&
-        chart.layout.w > 0 && 
+      return charts.some((chart) =>
+        chart.layout &&
+        typeof chart.layout.x === "number" &&
+        typeof chart.layout.y === "number" &&
+        typeof chart.layout.w === "number" &&
+        typeof chart.layout.h === "number" &&
+        chart.layout.w > 0 &&
         chart.layout.h > 0
       );
     } catch (error) {
@@ -1218,11 +1235,42 @@ export default function Dashboard() {
 
         try {
           // Generate charts from the fetched template with the selected theme
+          const currentTheme = selectedTheme;
+          const themeObj = chartThemes[currentTheme as keyof typeof chartThemes];
+
           const templateCharts = await generateChartsFromTemplate(
             normalizedTemplate,
             resolution,
             dateRangeForAPI
-          );
+          )
+            .then((charts) => charts.filter(Boolean))
+            .then((charts) => {
+              if (themeObj) {
+                // Apply the current theme to all newly created charts
+                return charts.map((chart) => {
+                  if (chart.kpiColors) {
+                    const activeKpiArray = Array.from(
+                      chart.activeKPIs || new Set<string>()
+                    );
+                    const updatedKpiColors = { ...chart.kpiColors };
+
+                    activeKpiArray.forEach((kpi, index) => {
+                      if (updatedKpiColors[kpi]) {
+                        updatedKpiColors[kpi] = {
+                          ...updatedKpiColors[kpi],
+                          color: themeObj.colors[index % themeObj.colors.length],
+                        };
+                      }
+                    });
+
+                    // Return the chart with updated colors
+                    return { ...chart, kpiColors: updatedKpiColors };
+                  }
+                  // return chart;
+                });
+              }
+              return charts;
+            });
 
           console.log(
             `Generated ${templateCharts.length} charts from template`,
@@ -1234,6 +1282,9 @@ export default function Dashboard() {
 
           if (theme && Array.isArray(templateCharts)) {
             templateCharts.forEach((chart) => {
+              // Skip undefined charts
+              if (!chart) return;
+              
               // Update chart KPI colors with current theme colors
               if ("kpiColors" in chart && chart.kpiColors) {
                 const kpiEntries = Object.entries(
@@ -1245,7 +1296,8 @@ export default function Dashboard() {
                     if (kpiInfo && typeof kpiInfo === "object") {
                       (chart.kpiColors as Record<string, { color: string }>)[
                         kpiId
-                      ].color = theme.colors[colorIndex % theme.colors.length];
+                      ].color =
+                        theme.colors[colorIndex % theme.colors.length];
                     }
                   }
                 );
@@ -1255,7 +1307,9 @@ export default function Dashboard() {
 
           // Important: Update the charts state with the new charts
           if (Array.isArray(templateCharts)) {
-            setCharts(templateCharts);
+            // Filter out any undefined values to ensure type compatibility
+            const validCharts = templateCharts.filter(chart => chart !== undefined) as ChartConfig[];
+            setCharts(validCharts);
           } else {
             console.error("templateCharts is not an array:", templateCharts);
             setCharts([]);
@@ -1509,23 +1563,19 @@ export default function Dashboard() {
 
       // Store current theme selection for later application
       const currentTheme = selectedTheme;
-      const themeColors =
-        chartThemes[currentTheme as keyof typeof chartThemes]?.colors || [];
+      const themeObj = chartThemes[currentTheme as keyof typeof chartThemes];
 
       // Explicitly call fetchTemplateById to ensure loading the new template
       fetchTemplateById(templateId)
         .then(() => {
           // After template loads, ensure the theme is properly applied to new charts
-          if (currentTheme) {
+          if (currentTheme && themeObj) {
+            console.log("Applying theme after template change:", currentTheme);
+            
             // Use a small delay to ensure the charts are loaded first
             setTimeout(() => {
               // Re-apply the current theme to the new template's charts
               setCharts((prevCharts: ChartConfig[]) => {
-                const themeObj =
-                  chartThemes[currentTheme as keyof typeof chartThemes];
-
-                if (!themeObj) return prevCharts;
-
                 return prevCharts.map((chart) => {
                   // Only update colors for KPIs that are actually active in this chart
                   const updatedKpiColors = { ...chart.kpiColors };
@@ -1545,11 +1595,15 @@ export default function Dashboard() {
                     }
                   });
 
-                  return {
-                    ...chart,
-                    kpiColors: updatedKpiColors,
-                  };
+                  // Return the chart with updated colors
+                  return { ...chart, kpiColors: updatedKpiColors };
                 });
+              });
+
+              // Also update the ThemeContext
+              setTheme({
+                name: currentTheme,
+                colors: themeObj.colors
               });
 
               // Force charts to redraw with the new theme
@@ -1810,29 +1864,33 @@ export default function Dashboard() {
 
     try {
       setIsSaving(true);
-      
+
       // Find the current template data
       const currentTemplate = apiTemplates.find(
         (t) => t.id === selectedApiTemplate
       );
-      
+
       if (!currentTemplate) {
         throw new Error("Template data not found");
       }
 
       console.log("Starting to save layout for template:", selectedApiTemplate);
-      console.log("Template has", currentTemplate.graphs.length, "original graphs");
+      console.log(
+        "Template has",
+        currentTemplate.graphs.length,
+        "original graphs"
+      );
 
       // Step 1: Save to local storage first
       const layoutKey = `template-layout-${selectedApiTemplate}`;
-      
+
       try {
         // Format for local storage - just save positions
-        const localStorageLayout = charts.map(chart => ({
+        const localStorageLayout = charts.map((chart) => ({
           id: chart.id,
-          layout: chart.layout || { x: 0, y: 0, w: 4, h: 4 }
+          layout: chart.layout || { x: 0, y: 0, w: 4, h: 4 },
         }));
-        
+
         safeLocalStorage.setItem(layoutKey, JSON.stringify(localStorageLayout));
         console.log("Layout saved to localStorage successfully");
       } catch (error) {
@@ -1841,11 +1899,11 @@ export default function Dashboard() {
 
       // Step 2: Prepare payload for database
       // Build two collections - one for updated graphs, one for original untouched graphs
-      
+
       // First, create a map of all original graphs by ID for lookup
       const originalGraphsById = new Map();
       if (currentTemplate.graphs && Array.isArray(currentTemplate.graphs)) {
-        currentTemplate.graphs.forEach(graph => {
+        currentTemplate.graphs.forEach((graph) => {
           originalGraphsById.set(graph.id, { ...graph });
         });
       }
@@ -2104,72 +2162,68 @@ export default function Dashboard() {
     isChangingThemeRef.current = true;
 
     // Get the theme object directly from chartThemes
-    const themeObj =
-      chartThemes[selectedThemeName as keyof typeof chartThemes] ||
-      chartThemes.default;
+    const themeObj = chartThemes[selectedThemeName as keyof typeof chartThemes] || chartThemes.default;
 
     console.log("Changing theme to:", selectedThemeName, themeObj);
 
-    // Update the KPI colors with the new theme colors without causing re-renders
-    const updatedKpiColors = { ...themedKpiColors };
-    Object.entries(updatedKpiColors).forEach(([kpiId, kpiInfo], index) => {
-      if (kpiInfo && typeof kpiInfo === "object") {
-        updatedKpiColors[kpiId as keyof typeof kpiColors] = {
-          ...kpiInfo,
-          color: themeObj.colors[index % themeObj.colors.length],
-        };
-      }
+    // Update the ThemeContext first to ensure consistent theme application
+    setTheme({
+      name: selectedThemeName,
+      colors: themeObj.colors
     });
 
-    // Update charts with new colors without causing full re-renders
-    const updatedCharts = charts.map((chart) => {
-      // Create a shallow copy of chart properties
-      const updatedChart = { ...chart };
+    // Update the selected theme state
+    setSelectedTheme(selectedThemeName);
 
-      // Only make a new copy of kpiColors if it exists
-      if (chart.kpiColors) {
-        const chartKpiColors = { ...chart.kpiColors };
-
-        // Update each KPI color in place
-        Object.keys(chartKpiColors).forEach((kpi, index) => {
-          if (chartKpiColors[kpi] && typeof chartKpiColors[kpi] === "object") {
-            chartKpiColors[kpi] = {
-              ...chartKpiColors[kpi],
-              color: themeObj.colors[index % themeObj.colors.length],
+    // Update charts with new colors in a single batch update
+    setCharts(prevCharts => {
+      return prevCharts.map(chart => {
+        if (!chart.kpiColors || !chart.activeKPIs) return chart;
+        
+        const updatedKpiColors = {...chart.kpiColors};
+        const activeKpiArray = Array.from(chart.activeKPIs);
+        
+        // Apply theme colors to active KPIs
+        activeKpiArray.forEach((kpi, index) => {
+          if (updatedKpiColors[kpi]) {
+            updatedKpiColors[kpi] = {
+              ...updatedKpiColors[kpi],
+              color: themeObj.colors[index % themeObj.colors.length]
             };
           }
         });
-
-        // Assign updated colors to chart copy
-        updatedChart.kpiColors = chartKpiColors;
-      }
-
-      return updatedChart;
+        
+        return {...chart, kpiColors: updatedKpiColors};
+      });
+    });
+    
+    // Update global KPI colors to match the new theme
+    setThemedKpiColors(prevColors => {
+      const updatedColors = {...prevColors};
+      Object.keys(updatedColors).forEach((kpiId, index) => {
+        if (updatedColors[kpiId as keyof typeof updatedColors]) {
+          updatedColors[kpiId as keyof typeof updatedColors] = {
+            ...updatedColors[kpiId as keyof typeof updatedColors],
+            color: themeObj.colors[index % themeObj.colors.length]
+          };
+        }
+      });
+      return updatedColors;
     });
 
-    // Use requestAnimationFrame to batch updates in the next render cycle
-    requestAnimationFrame(() => {
-      // Apply all state updates in a batch to minimize renders
-      setThemedKpiColors(updatedKpiColors);
-      setCharts(updatedCharts);
-      setSelectedTheme(selectedThemeName);
-
-      // End theme change mode to allow other operations
+    // Force redraw of charts after a short delay
+    setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+      // End theme change mode
       setIsChangingTheme(false);
       isChangingThemeRef.current = false;
-
-      // Use a short timeout to trigger a resize event for chart re-rendering
-      // This ensures the charts pick up the new colors without a full reload
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-
-        // Show success notification
-        toast.success(`Theme changed to ${themeObj.name}`, {
-          duration: 1500,
-          position: "bottom-right",
-        });
-      }, 50);
-    });
+      
+      // Show success notification
+      toast.success(`Theme changed to ${themeObj.name}`, {
+        duration: 1500,
+        position: "bottom-right",
+      });
+    }, 100);
   };
 
   // Find the actual getThemeColors function and add the useEffect right after it
@@ -2832,7 +2886,7 @@ export default function Dashboard() {
                       </label>
                       <Select
                         onValueChange={(value) => {
-                          const preset = presets.find(p => p.value === value);
+                          const preset = presets.find((p) => p.value === value);
                           if (preset) {
                             const newDate = preset.getDate();
                             setGlobalDateRange(newDate);
@@ -3008,7 +3062,6 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    
                   </div>
                 </div>
               </div>

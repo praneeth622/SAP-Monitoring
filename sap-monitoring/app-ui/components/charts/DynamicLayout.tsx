@@ -350,28 +350,84 @@ export function DynamicLayout({
 
   // Enhanced theme change detection in DynamicLayout component
   useEffect(() => {
-    if (prevThemeRef.current !== theme) {
+    if (theme && prevThemeRef.current !== theme) {
       console.log("Theme changed in DynamicLayout:", 
         prevThemeRef.current?.name, "->", theme?.name);
       
       prevThemeRef.current = theme;
       
-      // Force a resize to ensure charts update properly with new theme
+      // Apply theme to chart kpiColors directly
+      if (charts.length > 0) {
+        charts.forEach(chart => {
+          if (chart.kpiColors && chart.activeKPIs && theme?.colors) {
+            const activeKpiArray = Array.from(chart.activeKPIs || []);
+            
+            // Apply theme colors to active KPIs
+            activeKpiArray.forEach((kpi, index) => {
+              if (chart.kpiColors && chart.kpiColors[kpi]) {
+                chart.kpiColors[kpi].color = theme.colors[index % theme.colors.length];
+              }
+            });
+          }
+        });
+      }
+      
+      // Force resize after theme application
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
       }
       
-      // Use a sequence of resize events for more reliable updates
       resizeTimeoutRef.current = setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
-        
-        // Second resize after a delay to ensure all charts are updated
-        setTimeout(() => {
-          window.dispatchEvent(new Event("resize"));
-        }, 100);
       }, 50);
     }
-  }, [theme]);
+  }, [theme, charts]);
+
+// Enhanced theme application that directly modifies chart KPI colors
+useEffect(() => {
+  if (!charts || charts.length === 0 || !theme || !theme.colors) return;
+  
+  console.log("Applying theme colors to all charts:", theme.name);
+  
+  // Create a deep copy to avoid reference issues
+  const updatedCharts = [...charts];
+  let modified = false;
+  
+  // Apply theme colors to each chart's KPIs
+  updatedCharts.forEach(chart => {
+    if (!chart.kpiColors || !chart.activeKPIs) return;
+    
+    const activeKpiArray = Array.from(chart.activeKPIs);
+    if (activeKpiArray.length === 0) return;
+    
+    // Update each KPI's color based on theme
+    activeKpiArray.forEach((kpi, index) => {
+      if (chart.kpiColors && chart.kpiColors[kpi] && typeof chart.kpiColors[kpi] === 'object') {
+        // Compare to check if we need to update
+        const currentColor = chart.kpiColors[kpi].color;
+        const themeColor = theme.colors[index % theme.colors.length];
+        
+        if (currentColor !== themeColor) {
+          // Important: create a new object to ensure React detects the change
+          if (chart.kpiColors) {
+            chart.kpiColors[kpi] = {
+              ...chart.kpiColors[kpi],
+              color: themeColor
+            };
+          }
+          modified = true;
+        }
+      }
+    });
+  });
+  
+  if (modified) {
+    // Trigger redraw of charts with updated colors
+    console.log("Theme colors updated, triggering redraw");
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 200);
+  }
+}, [charts, theme]);
 
   // Add a flag to track if we've already initialized with saved layouts
   const [initializedWithSavedLayouts, setInitializedWithSavedLayouts] =
