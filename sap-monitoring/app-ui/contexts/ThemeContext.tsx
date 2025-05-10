@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { useTheme as useNextTheme } from 'next-themes';
 
 interface Theme {
   name: string;
@@ -10,6 +11,8 @@ interface Theme {
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  currentTheme: string;
+  setCurrentTheme: (theme: string) => void;
 }
 
 const defaultTheme: Theme = {
@@ -19,7 +22,9 @@ const defaultTheme: Theme = {
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: defaultTheme,
-  setTheme: () => {}
+  setTheme: () => {},
+  currentTheme: 'system',
+  setCurrentTheme: () => {}
 });
 
 export const ThemeProvider: React.FC<{ children: ReactNode, initialTheme?: Theme }> = ({ 
@@ -27,9 +32,19 @@ export const ThemeProvider: React.FC<{ children: ReactNode, initialTheme?: Theme
   initialTheme = defaultTheme 
 }) => {
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const { theme: nextTheme, setTheme: setNextTheme } = useNextTheme();
+
+  const setCurrentTheme = (newTheme: string) => {
+    setNextTheme(newTheme);
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ 
+      theme, 
+      setTheme,
+      currentTheme: nextTheme || 'system',
+      setCurrentTheme 
+    }}>
       {children}
     </ThemeContext.Provider>
   );

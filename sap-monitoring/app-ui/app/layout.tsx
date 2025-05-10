@@ -1,3 +1,4 @@
+import { ThemeProvider as NextThemeProvider } from "@/components/theme-provider";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ThemeToggleProvider } from "@/contexts/ThemeToggleContext";
 import { FontProvider } from "@/contexts/FontContext";
@@ -21,22 +22,24 @@ export default function RootLayout({
           fontSans.variable
         )}
       >
-        <ThemeProvider>
-          <ThemeToggleProvider>
-            <FontProvider>
-              <SidebarProvider>
-                <div className="bg-background min-h-screen">
-                  <div className="flex relative">
-                    <Sidebar />
-                    <div className="flex flex-col w-full min-h-screen transition-all duration-300" id="main-content-wrapper">
-                      {children}
+        <NextThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <ThemeProvider>
+            <ThemeToggleProvider>
+              <FontProvider>
+                <SidebarProvider>
+                  <div className="bg-background min-h-screen">
+                    <div className="flex relative">
+                      <Sidebar />
+                      <div className="flex flex-col w-full min-h-screen transition-all duration-300" id="main-content-wrapper">
+                        {children}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </SidebarProvider>
-            </FontProvider>
-          </ThemeToggleProvider>
-        </ThemeProvider>
+                </SidebarProvider>
+              </FontProvider>
+            </ThemeToggleProvider>
+          </ThemeProvider>
+        </NextThemeProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

@@ -29,6 +29,10 @@ export const ThemeToggleProvider: React.FC<{ children: ReactNode }> = ({ childre
     setIsDarkMode(newTheme === 'dark');
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <ThemeToggleContext.Provider value={{ isDarkMode, toggleTheme }}>
       {children}
