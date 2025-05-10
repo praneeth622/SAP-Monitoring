@@ -348,6 +348,23 @@ function TemplatePageContent() {
     }, 300);
   }, []);
 
+  // Improved validation function that ensures all required fields are completed
+  const validateRequiredFields = () => {
+    const newErrors: Record<string, boolean> = {};
+    
+    // Check each required field
+    if (!templateData.name.trim()) newErrors.name = true;
+    if (!templateData.system) newErrors.system = true;
+    if (!templateData.timeRange) newErrors.timeRange = true;
+    if (!templateData.resolution) newErrors.resolution = true;
+    
+    // Update the errors state
+    setErrors(newErrors);
+    
+    // Return whether all fields are valid
+    return Object.keys(newErrors).length === 0;
+  };
+
   // Update the useEffect for isFormValid to properly handle templates with graphs
   useEffect(() => {
     const isValid =
@@ -782,7 +799,7 @@ function TemplatePageContent() {
         if (data.length === 1) {
           setTemplateData((prev) => ({
             ...prev,
-            system: data[0].system_id,
+            system: data[0].system_id.toUpperCase(),
           }));
         }
       } catch (error) {
@@ -838,23 +855,24 @@ function TemplatePageContent() {
       let systemId = "";
 
       if (template.systems && template.systems.length > 0) {
-        // Get the system ID from the first system in the array
-        systemId = template.systems[0].system_id || "";
+        // Get the system ID from the first system in the array and ensure it's uppercase
+        systemId = (template.systems[0].system_id || "").toUpperCase();
         console.log("Found system ID in template:", systemId);
       } else {
         console.warn("No systems found in template data");
       }
 
       // Map the API response to our local state format
-      setTemplateData({
+      setTemplateData((prev) => ({
+        ...prev,
         name: template.template_name || "",
         system: systemId, // Set the system ID here
         timeRange: template.frequency || "auto",
-        resolution: template.resolution || "auto", // Added fallback
+        resolution: template.resolution || "auto",
         isDefault: template.default || false,
         isFavorite: template.favorite || false,
         graphs: [], // We'll populate this separately
-      });
+      }));
 
       console.log("Template data set with system:", systemId);
 
@@ -968,31 +986,19 @@ function TemplatePageContent() {
   };
 
   const handleAddGraph = () => {
-    if (!isFormValid) {
-      // Update to set specific error states for missing fields
-      const newErrors: Record<string, boolean> = {};
-      if (!templateData.name.trim()) newErrors.name = true;
-
-      if (!templateData.system) newErrors.system = true;
-      if (!templateData.timeRange) newErrors.timeRange = true;
-      if (!templateData.resolution) newErrors.resolution = true;
-      setErrors(newErrors);
-
-      toast.error(ERROR_MESSAGES.REQUIRED_FIELDS);
+    if (!validateRequiredFields()) {
+      toast.error(ERROR_MESSAGES.REQUIRED_FIELDS, {
+        dismissible: true,
+        description: "Please complete all fields marked with an asterisk (*)"
+      });
       return;
     }
-
+    
     if (graphs.length >= 9) {
       toast.error(ERROR_MESSAGES.MAX_GRAPHS);
       return;
     }
-
-    // Prevent opening the sheet more than once
-    if (isAddGraphSheetOpen) {
-      return;
-
-    }
-
+  
     setSelectedTemplate({
       id: Date.now().toString(),
       ...templateData,
@@ -1001,17 +1007,15 @@ function TemplatePageContent() {
     setIsAddGraphSheetOpen(true);
   };
 
-
   // Modify the handleSaveTemplate function to check for unique template name
   const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
-    // First check if basic form data is valid
-    if (!isFormValid) {
+    // First validate all required fields
+    if (!validateRequiredFields()) {
       toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
-
-        dismissible: true, // Add dismissible property for the X button
-
+        dismissible: true,
+        description: "Please complete all fields marked with an asterisk (*)"
       });
       return;
     }
@@ -1019,7 +1023,7 @@ function TemplatePageContent() {
     // Then check if we have graphs
     if (graphs.length === 0) {
       toast.error(ERROR_MESSAGES.MIN_GRAPHS, {
-
+        dismissible: true
       });
       return;
     }
