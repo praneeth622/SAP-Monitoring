@@ -38,8 +38,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { app_globals } from "@/config/config";
 
 // Interface definitions
+interface User {
+  user_id: string;
+  name: string;
+  mail_id: string;
+  role: string;
+}
+
 interface Template {
   user_id?: string; // May not be in the response
   template_id: string[] | string;
@@ -162,8 +170,32 @@ export default function Mainscreen() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>("");
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "https://shwsckbvbt.a.pinggy.link";
+
+  // Fetch user role on component mount
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch(`${baseUrl}/api/um`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+        const users: User[] = await response.json();
+        const currentUser = users.find(user => user.user_id === app_globals.default_user_id);
+        if (currentUser) {
+          setUserRole(currentUser.role);
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+        // Set a default role if fetch fails
+        setUserRole("user");
+      }
+    };
+
+    fetchUserRole();
+  }, [baseUrl]);
 
   useEffect(() => {
     fetchTemplates();
@@ -856,6 +888,7 @@ export default function Mainscreen() {
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            {userRole.toLowerCase() === "super admin" && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -863,6 +896,7 @@ export default function Mainscreen() {
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

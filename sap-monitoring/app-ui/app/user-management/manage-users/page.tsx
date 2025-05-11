@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { cn } from "@/lib/utils";
+import { app_globals } from "../../../config/config"; 
 
 interface User {
   user_id: string;
@@ -115,6 +116,7 @@ interface UpdateUserSheetProps {
   setRole: (role: string) => void;
 }
 
+// Update roleColorMap keys to match the exact case used in the API
 const roleColorMap: Record<
   string,
   {
@@ -124,29 +126,23 @@ const roleColorMap: Record<
     darkText: string;
   }
 > = {
-  admin: {
-    bg: "bg-purple-100",
-    text: "text-purple-700",
-    darkBg: "dark:bg-purple-900/40",
-    darkText: "dark:text-purple-400",
+  "user": {
+    bg: "bg-green-100",
+    text: "text-green-700",
+    darkBg: "dark:bg-green-900/40",
+    darkText: "dark:text-green-400",
   },
-  user: {
+  "admin": {
     bg: "bg-blue-100",
     text: "text-blue-700",
     darkBg: "dark:bg-blue-900/40",
     darkText: "dark:text-blue-400",
   },
-  editor: {
-    bg: "bg-amber-100",
-    text: "text-amber-700",
-    darkBg: "dark:bg-amber-900/40",
-    darkText: "dark:text-amber-400",
-  },
-  viewer: {
-    bg: "bg-green-100",
-    text: "text-green-700",
-    darkBg: "dark:bg-green-900/40",
-    darkText: "dark:text-green-400",
+  "super admin": {
+    bg: "bg-purple-100", 
+    text: "text-purple-700",
+    darkBg: "dark:bg-purple-900/40",
+    darkText: "dark:text-purple-400",
   },
   // Default color for any other role
   default: {
@@ -171,6 +167,7 @@ export default function ManageUsersPage() {
   const [isAddUserSheetOpen, setIsAddUserSheetOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [role, setRole] = useState<string>("");
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const [stats, setStats] = useState<UserStats>({
     totalUsers: 0,
     roleBreakdown: [],
@@ -186,14 +183,13 @@ export default function ManageUsersPage() {
 
   useEffect(() => {
     fetchUsers();
+    fetchCurrentUserRole();
   }, []);
 
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      const response = await axios.get(
-        "https://shwsckbvbt.a.pinggy.link/api/um"
-      );
+      const response = await axios.get(`${app_globals.base_url}/api/um`);
 
       if (response.status === 200) {
         setUsers(response.data);
@@ -203,7 +199,7 @@ export default function ManageUsersPage() {
           totalUsers: response.data.length,
           roleBreakdown: calculateRoleBreakdown(response.data),
           userStatus: {
-            active: response.data.length, // Assuming all users are active
+            active: response.data.length,
             inactive: 0,
           },
         });
@@ -218,6 +214,23 @@ export default function ManageUsersPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchCurrentUserRole = async () => {
+    try {
+      const response = await axios.get(`${app_globals.base_url}/api/um`);
+      if (response.status === 200) {
+        const users = response.data;
+        const currentUser = users.find((user: any) => user.user_id === app_globals.default_user_id);
+        if (currentUser) {
+          setCurrentUserRole(currentUser.role);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching current user role:", error);
+      // Set a default role if fetch fails
+      setCurrentUserRole("user");
     }
   };
 
@@ -252,11 +265,11 @@ export default function ManageUsersPage() {
         role: role,
       };
 
-      // Wrap the userData in an array
+      // Wrap the userData in an array as required by the API
       const requestData = [userData];
 
       const response = await axios.post(
-        "https://shwsckbvbt.a.pinggy.link/api/um",
+        `${app_globals.base_url}/api/um`,
         requestData,
         {
           headers: {
@@ -272,41 +285,12 @@ export default function ManageUsersPage() {
       // Close the form first
       setIsAddUserSheetOpen(false);
 
-      // Add the new user to the current users list for immediate display
-      setUsers((prevUsers) => [...prevUsers, userData as User]);
-
-      // Update stats to reflect the new user
-      setStats((prev) => {
-        // Find if this role already exists in the breakdown
-        const roleExists = prev.roleBreakdown.some(
-          (item) => item.role === userData.role
-        );
-
-        const updatedBreakdown = roleExists
-          ? prev.roleBreakdown.map((item) => {
-              if (item.role === userData.role) {
-                return { ...item, count: item.count + 1 };
-              }
-              return item;
-            })
-          : [...prev.roleBreakdown, { role: userData.role, count: 1 }];
-
-        return {
-          totalUsers: prev.totalUsers + 1,
-          roleBreakdown: updatedBreakdown,
-          userStatus: {
-            active: prev.userStatus.active + 1,
-            inactive: prev.userStatus.inactive,
-          },
-        };
-      });
-
       // Show success message
       toast.success("User added successfully", {
         description: `User ${userData.name} has been created`,
       });
 
-      // Also fetch fresh data from the server to ensure consistency
+      // Fetch fresh data from the server
       fetchUsers();
     } catch (error) {
       console.error("Error adding user:", error);
@@ -322,7 +306,7 @@ export default function ManageUsersPage() {
   const handleDeleteUser = async (userId: string) => {
     try {
       const response = await axios.delete(
-        `https://shwsckbvbt.a.pinggy.link/api/um/${userId}`
+        `${app_globals.base_url}/api/um/${userId}`
       );
 
       if (response.status !== 200) {
@@ -359,9 +343,13 @@ export default function ManageUsersPage() {
         role: role,
       };
 
-      const response = await axios.put(
-        `https://shwsckbvbt.a.pinggy.link/api/um/${userToEdit.user_id}`,
-        userData,
+      // Wrap the userData in an array as required by the API
+      const requestData = [userData];
+
+      // Use POST for update instead of PUT
+      const response = await axios.post(
+        `${app_globals.base_url}/api/um`,
+        requestData,
         {
           headers: {
             "Content-Type": "application/json",
@@ -446,6 +434,7 @@ export default function ManageUsersPage() {
               onDelete={setUserToDelete}
               onEdit={handleEditUser}
               onSettings={handleUserSettings}
+              currentUserRole={currentUserRole}
             />
           )}
         </Card>
@@ -525,6 +514,7 @@ interface UsersTableProps {
   onDelete: (id: string) => void;
   onEdit: (user: User) => void;
   onSettings: (id: string) => void;
+  currentUserRole: string;
 }
 
 const UsersTable = ({
@@ -532,6 +522,7 @@ const UsersTable = ({
   onDelete,
   onEdit,
   onSettings,
+  currentUserRole,
 }: UsersTableProps) => {
   return (
     <div className="overflow-x-auto">
@@ -580,22 +571,16 @@ const UsersTable = ({
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onDelete(user.user_id)}
-                    title="Delete User"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  {/* <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onSettings(user.user_id)}
-                    title="User Settings"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button> */}
+                  {currentUserRole.toLowerCase() === "super admin" && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDelete(user.user_id)}
+                      title="Delete User"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
@@ -687,7 +672,7 @@ const RoleSelect = ({
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {["Admin", "User", "Editor", "Viewer"].map((roleOption) => (
+        {["User", "Admin", "Super Admin"].map((roleOption) => (
           <SelectItem
             key={roleOption}
             value={roleOption}
@@ -839,15 +824,23 @@ const UpdateUserSheet = ({
   role,
   setRole,
 }: UpdateUserSheetProps) => {
-  // State to manage multiple role selections
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(
-    role ? [role] : userToEdit?.role ? [userToEdit.role] : []
-  );
+  // State to manage multiple role selections - with proper initialization
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  
+  // Update selectedRoles when userToEdit changes
+  useEffect(() => {
+    if (userToEdit?.role) {
+      // Initialize with the user's existing role
+      setSelectedRoles([userToEdit.role]);
+    } else {
+      setSelectedRoles([]);
+    }
+  }, [userToEdit]);
 
   // Update parent component's role state when selections change
   useEffect(() => {
     if (selectedRoles.length > 0) {
-      setRole(selectedRoles.join(", ")); // Format for API as comma-separated
+      setRole(selectedRoles[0]); // Use first role since API only accepts a single role
     } else {
       setRole("");
     }
@@ -928,30 +921,60 @@ const UpdateUserSheet = ({
               />
             </div>
 
-            {/* Role field - Multi-select */}
+            {/* Role field - Multi-select with proper handling */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label htmlFor="role">
-                  Role(s) <span className="text-red-500">*</span>
+                  Role <span className="text-red-500">*</span>
                 </Label>
               </div>
 
-              <MultiSelect
-                options={[
-                  { label: "Admin", value: "Admin" },
-                  { label: "User", value: "User" },
-                  { label: "Editor", value: "Editor" },
-                  { label: "Viewer", value: "Viewer" },
-                ]}
-                value={selectedRoles}
-                onChange={setSelectedRoles}
-                placeholder="Select roles"
-                disabled={isLoading}
-              />
+              <Select 
+                value={selectedRoles.length > 0 ? selectedRoles[0] : ""} 
+                onValueChange={(value) => setSelectedRoles([value])}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select role">
+                    {selectedRoles.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={cn(
+                            "w-2 h-2 rounded-full",
+                            roleColorMap[selectedRoles[0].toLowerCase()]?.bg ||
+                              roleColorMap.default.bg
+                          )}
+                        />
+                        {selectedRoles[0]}
+                      </div>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {["User", "Admin", "Super Admin"].map((roleOption) => (
+                    <SelectItem
+                      key={roleOption}
+                      value={roleOption}
+                      className="flex items-center gap-2"
+                    >
+                      <div className="flex items-center gap-2 w-full">
+                        <div
+                          className={cn(
+                            "w-3 h-3 rounded-full",
+                            getRoleColor(roleOption).bg
+                          )}
+                        />
+                        <span className={getRoleColor(roleOption).text}>
+                          {roleOption}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {selectedRoles.length === 0 && (
                 <p className="text-xs text-red-500">
-                  Please select at least one role
+                  Please select a role
                 </p>
               )}
             </div>

@@ -351,18 +351,27 @@ function TemplatePageContent() {
   // Improved validation function that ensures all required fields are completed
   const validateRequiredFields = () => {
     const newErrors: Record<string, boolean> = {};
-    
-    // Check each required field
-    if (!templateData.name.trim()) newErrors.name = true;
-    if (!templateData.system) newErrors.system = true;
-    if (!templateData.timeRange) newErrors.timeRange = true;
-    if (!templateData.resolution) newErrors.resolution = true;
-    
-    // Update the errors state
+    let isValid = true;
+
+    if (!templateData.name.trim()) {
+      newErrors.name = true;
+      isValid = false;
+    }
+    if (!templateData.system) {
+      newErrors.system = true;
+      isValid = false;
+    }
+    if (!templateData.timeRange) {
+      newErrors.timeRange = true;
+      isValid = false;
+    }
+    if (!templateData.resolution) {
+      newErrors.resolution = true;
+      isValid = false;
+    }
+
     setErrors(newErrors);
-    
-    // Return whether all fields are valid
-    return Object.keys(newErrors).length === 0;
+    return isValid;
   };
 
   // Update the useEffect for isFormValid to properly handle templates with graphs
@@ -795,12 +804,13 @@ function TemplatePageContent() {
 
         setSystems(data);
 
-        // Auto-select if there's only one system
-        if (data.length === 1) {
+        // Auto-select if there's only one system and no system is currently selected
+        if (data.length === 1 && !templateData.system) {
           setTemplateData((prev) => ({
             ...prev,
             system: data[0].system_id.toUpperCase(),
           }));
+          setErrors((prev) => ({ ...prev, system: false }));
         }
       } catch (error) {
         console.error("Error fetching systems:", error);
@@ -860,18 +870,23 @@ function TemplatePageContent() {
         console.log("Found system ID in template:", systemId);
       } else {
         console.warn("No systems found in template data");
+        // If no system in template, try to use the first available system
+        if (systems.length > 0) {
+          systemId = systems[0].system_id.toUpperCase();
+          console.log("Using first available system:", systemId);
+        }
       }
 
       // Map the API response to our local state format
       setTemplateData((prev) => ({
         ...prev,
         name: template.template_name || "",
-        system: systemId, // Set the system ID here
+        system: systemId,
         timeRange: template.frequency || "auto",
         resolution: template.resolution || "auto",
         isDefault: template.default || false,
         isFavorite: template.favorite || false,
-        graphs: [], // We'll populate this separately
+        graphs: [],
       }));
 
       console.log("Template data set with system:", systemId);
@@ -987,9 +1002,9 @@ function TemplatePageContent() {
 
   const handleAddGraph = () => {
     if (!validateRequiredFields()) {
-      toast.error(ERROR_MESSAGES.REQUIRED_FIELDS, {
+      toast.error("Please fill in all required fields", {
+        description: "Template name, System, Time Range, and Resolution are required",
         dismissible: true,
-        description: "Please complete all fields marked with an asterisk (*)"
       });
       return;
     }
@@ -1011,11 +1026,11 @@ function TemplatePageContent() {
   const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
-    // First validate all required fields
+    // Validate required fields first
     if (!validateRequiredFields()) {
-      toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
+      toast.error("Please fill in all required fields", {
+        description: "Template name, System, Time Range, and Resolution are required",
         dismissible: true,
-        description: "Please complete all fields marked with an asterisk (*)"
       });
       return;
     }
