@@ -44,6 +44,9 @@ import {
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 import styles from "./TemplateChartStyles.module.css";
+import { fetchTemplateChartData } from "@/utils/data";
+import isEqual from "lodash/isEqual";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 // Add onEditGraph to the props interface
 interface DraggableChartProps {
@@ -127,6 +130,10 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const transitionTimeoutRef = useRef<NodeJS.Timeout>();
   const prevThemeRef = useRef(theme);
+  const [localData, setLocalData] = useState<DataPoint[] | null>(null);
+  const [localLoading, setLocalLoading] = useState(false);
+  const prevLocalRangeRef = useRef<DateRange | undefined>();
+  const [showLocalDatePicker, setShowLocalDatePicker] = useState(false);
 
   const {
     attributes,
@@ -447,6 +454,46 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     };
   }, [isFullscreen]);
 
+  // Helper to check if local range is outside global range
+  function isOutsideGlobal(local: DateRange | undefined, global: DateRange | undefined) {
+    if (!local?.from || !local?.to || !global?.from || !global?.to) return false;
+    return local.from < global.from || local.to > global.to;
+  }
+
+  useEffect(() => {
+    if (!useGlobalDate && localDateRange && globalDateRange) {
+      if (isOutsideGlobal(localDateRange, globalDateRange)) {
+        if (isEqual(prevLocalRangeRef.current, localDateRange)) return;
+        prevLocalRangeRef.current = localDateRange;
+        // Only call fetchTemplateChartData if both from and to are defined
+        if (localDateRange.from && localDateRange.to) {
+          setLocalLoading(true);
+          const kpiList = Array.isArray(activeKPIs)
+            ? activeKPIs
+            : Array.from(localActiveKPIs);
+          fetchTemplateChartData(
+            kpiList[0] || title,
+            kpiList.slice(1),
+            "OS",
+            { from: localDateRange.from, to: localDateRange.to },
+            resolution,
+            { graphId: id }
+          ).then((result) => {
+            setLocalData(result);
+            setLocalLoading(false);
+          }).catch(() => {
+            setLocalData([]);
+            setLocalLoading(false);
+          });
+        }
+      } else {
+        setLocalData(null);
+      }
+    } else {
+      setLocalData(null);
+    }
+  }, [localDateRange, useGlobalDate, globalDateRange, resolution, id, title, activeKPIs, localActiveKPIs]);
+
   return (
     <>
       {isFullscreen && (
@@ -549,226 +596,229 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               <div className="flex items-center gap-2">
                 {!hideControls ? (
                   <>
-                    <DropdownMenu
-                      open={!useGlobalDate}
-                      onOpenChange={(open) => !open && setUseGlobalDate(true)}
-                    >
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className={cn(
-                            isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5",
-                            !useGlobalDate && "bg-accent/20"
-                          )}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setUseGlobalDate(!useGlobalDate);
-                            if (!localDateRange && globalDateRange) {
-                              setLocalDateRange(globalDateRange);
+                    <div className="flex items-center gap-2">
+                      <Popover open={showLocalDatePicker} onOpenChange={setShowLocalDatePicker}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={cn(
+                              isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5",
+                              !useGlobalDate && "bg-accent/20"
+                            )}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (useGlobalDate) {
+                                setUseGlobalDate(false);
+                                setShowLocalDatePicker(true);
+                              } else {
+                                setShowLocalDatePicker((prev) => !prev);
+                              }
+                            }}
+                            title={
+                              useGlobalDate
+                                ? "Use Local Date Range"
+                                : "Use Global Date Range"
                             }
-                          }}
-                          title={
-                            useGlobalDate
-                              ? "Use Local Date Range"
-                              : "Use Global Date Range"
-                          }
-                        >
-                          <Calendar
+                          >
+                            <Calendar
+                              className={
+                                isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                              }
+                            />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" side="bottom" className="p-0 w-auto">
+                          <DateRangePicker
+                            date={localDateRange}
+                            onDateChange={(range) => {
+                              setLocalDateRange(range);
+                              if (range?.from && range?.to) {
+                                setUseGlobalDate(false); // Stay in local mode after apply
+                                setShowLocalDatePicker(false); // Close popover after apply
+                              }
+                            }}
+                            align="end"
+                            showTime={true}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                        onClick={() =>
+                          setChartType(chartType === "line" ? "bar" : "line")
+                        }
+                        title={`Switch to ${
+                          chartType === "line" ? "Bar" : "Line"
+                        } Chart`}
+                      >
+                        {chartType === "line" ? (
+                          <BarChart3
                             className={
                               isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
                             }
                           />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        side="bottom"
-                        className="p-0 w-auto"
-                      >
-                        <DateRangePicker
-                          date={localDateRange}
-                          onDateChange={setLocalDateRange}
+                        ) : (
+                          <LineChart
+                            className={
+                              isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                            }
+                          />
+                        )}
+                      </Button>
+
+                      {/* Tools Button with Dropdown */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                          >
+                            <Settings2
+                              className={
+                                isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                              }
+                            />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
                           align="end"
-                          showTime={true}
-                        />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
-                      onClick={() =>
-                        setChartType(chartType === "line" ? "bar" : "line")
-                      }
-                      title={`Switch to ${
-                        chartType === "line" ? "Bar" : "Line"
-                      } Chart`}
-                    >
-                      {chartType === "line" ? (
-                        <BarChart3
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      ) : (
-                        <LineChart
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      )}
-                    </Button>
-
-                    {/* Tools Button with Dropdown */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                          side="bottom"
+                          className="w-auto"
                         >
-                          <Settings2
-                            className={
-                              isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                            }
-                          />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        side="bottom"
-                        className="w-auto"
+                          <div className="flex items-center gap-1 p-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleZoomIn}
+                              title="Zoom In"
+                            >
+                              <ZoomIn className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleZoomOut}
+                              title="Zoom Out"
+                            >
+                              <ZoomOut className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleResetZoom}
+                              title="Reset Zoom"
+                            >
+                              <RotateCcw className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <div className="h-4 w-[1px] bg-border" />
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleBoxSelect}
+                              title="Box Selection"
+                            >
+                              <Square className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleLassoSelect}
+                              title="Lasso Selection"
+                            >
+                              <Lasso className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleClearSelection}
+                              title="Clear Selection"
+                            >
+                              <Trash2 className="h-2.5 w-2.5" />
+                            </Button>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      {/* Download Button */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                          >
+                            <Download
+                              className={
+                                isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                              }
+                            />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => handleDownload("png")}>
+                            <ImageIcon className="mr-2 h-3.5 w-3.5" />
+                            <span>Download PNG</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload("pdf")}>
+                            <File className="mr-2 h-3.5 w-3.5" />
+                            <span>Download PDF</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload("csv")}>
+                            <FileSpreadsheet className="mr-2 h-3.5 w-3.5" />
+                            <span>Download CSV</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDownload("json")}
+                          >
+                            <FileJson className="mr-2 h-3.5 w-3.5" />
+                            <span>Download JSON</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                        onClick={toggleFullscreen}
+                        title={
+                          isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
+                        }
+                        aria-label={
+                          isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
+                        }
                       >
-                        <div className="flex items-center gap-1 p-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleZoomIn}
-                            title="Zoom In"
-                          >
-                            <ZoomIn className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleZoomOut}
-                            title="Zoom Out"
-                          >
-                            <ZoomOut className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleResetZoom}
-                            title="Reset Zoom"
-                          >
-                            <RotateCcw className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <div className="h-4 w-[1px] bg-border" />
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleBoxSelect}
-                            title="Box Selection"
-                          >
-                            <Square className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleLassoSelect}
-                            title="Lasso Selection"
-                          >
-                            <Lasso className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleClearSelection}
-                            title="Clear Selection"
-                          >
-                            <Trash2 className="h-2.5 w-2.5" />
-                          </Button>
-                        </div>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Download Button */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
-                        >
-                          <Download
+                        {isFullscreen ? (
+                          <Minimize2
                             className={
                               isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
                             }
                           />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => handleDownload("png")}>
-                          <ImageIcon className="mr-2 h-3.5 w-3.5" />
-                          <span>Download PNG</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDownload("pdf")}>
-                          <File className="mr-2 h-3.5 w-3.5" />
-                          <span>Download PDF</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDownload("csv")}>
-                          <FileSpreadsheet className="mr-2 h-3.5 w-3.5" />
-                          <span>Download CSV</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDownload("json")}
-                        >
-                          <FileJson className="mr-2 h-3.5 w-3.5" />
-                          <span>Download JSON</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
-                      onClick={toggleFullscreen}
-                      title={
-                        isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
-                      }
-                      aria-label={
-                        isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
-                      }
-                    >
-                      {isFullscreen ? (
-                        <Minimize2
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      ) : (
-                        <Maximize2
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      )}
-                    </Button>
+                        ) : (
+                          <Maximize2
+                            className={
+                              isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                            }
+                          />
+                        )}
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   // Show only chart type toggle and delete button in template editor mode
@@ -847,7 +897,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
             >
               <ChartContainer
                 ref={chartRef as any}
-                data={data}
+                data={localData !== null ? localData : data}
                 type={chartType}
                 title=""
                 activeKPIs={localActiveKPIs}
@@ -860,6 +910,11 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                   isFullscreen ? "h-[calc(100vh-10rem)]" : "h-full"
                 )}
               />
+              {localLoading && (
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              )}
             </motion.div>
 
             {/* KPI Parameters */}
