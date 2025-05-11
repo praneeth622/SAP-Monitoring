@@ -27,6 +27,9 @@ import {
   Box,
   X,
   RotateCcw,
+  Clock,
+  Check,
+  Zap,
 } from "lucide-react";
 import ChartContainer from "./ChartContainer";
 import { DataPoint, ChartType } from "@/types";
@@ -47,6 +50,7 @@ import styles from "./TemplateChartStyles.module.css";
 import { fetchTemplateChartData } from "@/utils/data";
 import isEqual from "lodash/isEqual";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { addDays, subDays, startOfDay, endOfDay } from "date-fns";
 
 // Add onEditGraph to the props interface
 interface DraggableChartProps {
@@ -73,6 +77,37 @@ interface DraggableChartProps {
   isLoading?: boolean; // Add this line
   isTemplatePage?: boolean; // Add this new prop for templates page detection
 }
+
+// Add resolution options
+const RESOLUTION_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "1m", label: "1 min" },
+  { value: "5m", label: "5 min" },
+  { value: "15m", label: "15 min" },
+  { value: "1h", label: "1 hour" },
+  { value: "1d", label: "1 day" },
+];
+
+// Add quick date options (same as dashboard header)
+const QUICK_DATE_OPTIONS = [
+  { label: "Today", getRange: () => ({ from: startOfDay(new Date()), to: endOfDay(new Date()) }) },
+  { label: "Yesterday", getRange: () => {
+    const y = subDays(new Date(), 1);
+    return { from: startOfDay(y), to: endOfDay(y) };
+  } },
+  { label: "Last 7 Days", getRange: () => ({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) }) },
+  { label: "Last 30 Days", getRange: () => ({ from: startOfDay(subDays(new Date(), 29)), to: endOfDay(new Date()) }) },
+  { label: "This Month", getRange: () => {
+    const now = new Date();
+    return { from: startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: endOfDay(new Date()) };
+  } },
+  { label: "Last Month", getRange: () => {
+    const now = new Date();
+    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayLastMonth = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+    return { from: startOfDay(firstDayLastMonth), to: lastDayLastMonth };
+  } },
+];
 
 // Then update the component parameters with default values
 export const DraggableChart: React.FC<DraggableChartProps> = ({
@@ -134,6 +169,8 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   const [localLoading, setLocalLoading] = useState(false);
   const prevLocalRangeRef = useRef<DateRange | undefined>();
   const [showLocalDatePicker, setShowLocalDatePicker] = useState(false);
+  // Add local state for per-chart resolution
+  const [localResolution, setLocalResolution] = useState<string>(resolution);
 
   const {
     attributes,
@@ -169,7 +206,9 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
         to: globalDateRange.to ? new Date(globalDateRange.to) : undefined,
       });
     }
-  }, [globalDateRange, localDateRange, useGlobalDate]);
+    // Sync prop change
+    setLocalResolution(resolution);
+  }, [globalDateRange, localDateRange, useGlobalDate, resolution]);
 
   // Sync with parent's fullscreen state
   useEffect(() => {
@@ -467,24 +506,24 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
         prevLocalRangeRef.current = localDateRange;
         // Only call fetchTemplateChartData if both from and to are defined
         if (localDateRange.from && localDateRange.to) {
-          setLocalLoading(true);
-          const kpiList = Array.isArray(activeKPIs)
-            ? activeKPIs
-            : Array.from(localActiveKPIs);
-          fetchTemplateChartData(
-            kpiList[0] || title,
-            kpiList.slice(1),
-            "OS",
-            { from: localDateRange.from, to: localDateRange.to },
-            resolution,
-            { graphId: id }
-          ).then((result) => {
-            setLocalData(result);
-            setLocalLoading(false);
-          }).catch(() => {
-            setLocalData([]);
-            setLocalLoading(false);
-          });
+        setLocalLoading(true);
+        const kpiList = Array.isArray(activeKPIs)
+          ? activeKPIs
+          : Array.from(localActiveKPIs);
+        fetchTemplateChartData(
+          kpiList[0] || title,
+          kpiList.slice(1),
+          "OS",
+          { from: localDateRange.from, to: localDateRange.to },
+          localResolution,
+          { graphId: id }
+        ).then((result) => {
+          setLocalData(result);
+          setLocalLoading(false);
+        }).catch(() => {
+          setLocalData([]);
+          setLocalLoading(false);
+        });
         }
       } else {
         setLocalData(null);
@@ -492,7 +531,42 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     } else {
       setLocalData(null);
     }
-  }, [localDateRange, useGlobalDate, globalDateRange, resolution, id, title, activeKPIs, localActiveKPIs]);
+  }, [localDateRange, useGlobalDate, globalDateRange, localResolution, id, title, activeKPIs, localActiveKPIs]);
+
+  // Add effect to fetch data when localResolution changes (and on mount)
+  useEffect(() => {
+    // Only fetch if not in template page (dashboard only)
+    if (!isTemplatePage) {
+      const kpiList = Array.isArray(activeKPIs)
+        ? activeKPIs
+        : Array.from(localActiveKPIs);
+      // Use global or local date range
+      const dateRange = useGlobalDate && globalDateRange
+        ? globalDateRange
+        : localDateRange;
+      if (!kpiList.length || !dateRange?.from || !dateRange?.to) return;
+      setLocalData(null); // Always reset data before fetching
+      setLocalLoading(true);
+      console.log(`[DraggableChart] Fetching data for resolution:`, localResolution);
+      fetchTemplateChartData(
+        kpiList[0] || title,
+        kpiList.slice(1),
+        "OS",
+        { from: dateRange.from, to: dateRange.to },
+        localResolution.trim(),
+        { graphId: id }
+      )
+        .then((result) => {
+          setLocalData(result);
+          setLocalLoading(false);
+        })
+        .catch(() => {
+          setLocalData([]);
+          setLocalLoading(false);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localResolution, id, title, activeKPIs, localActiveKPIs, globalDateRange, localDateRange, useGlobalDate, isTemplatePage]);
 
   return (
     <>
@@ -557,15 +631,6 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                     <GripHorizontal className="w-2.5 h-2.5 text-muted-foreground" />
                   </div>
                 )}
-                {selectedTool && (
-                  <div className="flex items-center gap-1 text-primary">
-                    {selectedTool === "box" ? (
-                      <Square className="h-2.5 w-2.5" />
-                    ) : (
-                      <Lasso className="h-2.5 w-2.5" />
-                    )}
-                  </div>
-                )}
                 <h3
                   ref={titleRef}
                   className={cn(
@@ -591,6 +656,15 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                   title={title.replace(/\./g, '')} // Show full title on hover
                 >
                   {title.replace(/\./g, '')}
+                  {selectedTool && (
+                    <span className="ml-2 align-middle text-primary">
+                      {selectedTool === "box" ? (
+                        <Square className="inline h-2.5 w-2.5" />
+                      ) : (
+                        <Lasso className="inline h-2.5 w-2.5" />
+                      )}
+                    </span>
+                  )}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -643,6 +717,59 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                           />
                         </PopoverContent>
                       </Popover>
+                      {/* Quick Dates Dropdown Icon */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                            title="Quick Dates"
+                          >
+                            <Zap className={isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="bottom" className="w-36">
+                          {QUICK_DATE_OPTIONS.map((option) => (
+                            <DropdownMenuItem
+                              key={option.label}
+                              onClick={() => {
+                                setLocalDateRange(option.getRange());
+                                setUseGlobalDate(false);
+                              }}
+                            >
+                              {option.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {/* Resolution Dropdown Icon */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                            title={`Resolution: ${RESOLUTION_OPTIONS.find(opt => opt.value === localResolution)?.label || localResolution}`}
+                          >
+                            <Clock className={isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="bottom" className="w-32">
+                          {RESOLUTION_OPTIONS.map((option) => (
+                            <DropdownMenuItem
+                              key={option.value}
+                              onClick={() => setLocalResolution(prev => prev !== option.value ? option.value : option.value + " ")}
+                              className={localResolution === option.value ? "font-semibold text-primary flex items-center" : "flex items-center"}
+                            >
+                              {option.label}
+                              {localResolution === option.value && (
+                                <Check className="ml-auto h-4 w-4 text-primary" />
+                              )}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -904,7 +1031,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                 kpiColors={kpiColors}
                 dateRange={effectiveDateRange}
                 theme={theme}
-                resolution={resolution}
+                resolution={localResolution}
                 className={cn(
                   "p-0",
                   isFullscreen ? "h-[calc(100vh-10rem)]" : "h-full"

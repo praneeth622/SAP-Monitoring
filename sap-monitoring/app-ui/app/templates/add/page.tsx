@@ -1011,26 +1011,22 @@ function TemplatePageContent() {
   const handleSaveTemplate = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
 
-    // First validate all required fields
-    if (!validateRequiredFields()) {
-      toast.error(ERROR_MESSAGES.VALIDATION_ERROR, {
-        dismissible: true,
-        description: "Please complete all fields marked with an asterisk (*)"
-      });
+    if (!validateFields()) {
+      toast.error("Validation Error", { description: "Please fill in all required fields" });
       return;
     }
 
-    // Then check if we have graphs
-    if (graphs.length === 0) {
-      toast.error(ERROR_MESSAGES.MIN_GRAPHS, {
-        dismissible: true
-      });
-      return;
-    }
-
-    // Rest of the function stays the same...
     try {
       setLoadingState((prev) => ({ ...prev, savingTemplate: true }));
+
+      // Get the initial graph count from localStorage if in edit mode
+      const templateId = isEditMode ? searchParams.get("templateId") : null;
+      const initialGraphCount = templateId ? 
+        parseInt(localStorage.getItem(`template-${templateId}-initial-graph-count`) || '0') : 0;
+      const currentGraphCount = graphs.length;
+
+      // Check if graph count has changed
+      const hasGraphCountChanged = isEditMode && initialGraphCount !== currentGraphCount;
 
       // First, check if the template name is unique
       const templatesResponse = await fetch(
@@ -1072,10 +1068,7 @@ function TemplatePageContent() {
       });
 
       if (nameExists) {
-        toast.error("Template name already exists", {
-          description: "Please choose a different name for your template",
-          dismissible: true,
-        });
+        toast.error("Template name already exists", { description: "Please choose a different name for your template" });
         setLoadingState((prev) => ({ ...prev, savingTemplate: false }));
         return;
       }
@@ -1086,20 +1079,18 @@ function TemplatePageContent() {
         : `USER_TEST_1_${templateData.name
             .toUpperCase()
             .replace(/\s+/g, "_")}_${Date.now()}`;
-            
-      // Make sure all graphs have valid layout positions
-      const graphsWithValidLayout = graphs.map((graph, index) => {
+
+      // If graph count has changed, clear all graph positions
+      let graphsWithValidLayout = graphs.map((graph, index) => {
         // If graph doesn't have layout or has invalid layout values, assign default values
         if (!graph.layout || 
             typeof graph.layout.x !== 'number' || 
             typeof graph.layout.y !== 'number' || 
             typeof graph.layout.w !== 'number' || 
             typeof graph.layout.h !== 'number') {
-          
           // Calculate default position based on index
           const row = Math.floor(index / 3);
           const col = index % 3;
-          
           return {
             ...graph,
             layout: {
@@ -1113,14 +1104,26 @@ function TemplatePageContent() {
         return graph;
       });
 
+      if (hasGraphCountChanged) {
+        // Overwrite with default layout for all graphs
+        graphsWithValidLayout = getDefaultLayouts(graphsWithValidLayout);
+      }
+
+      // If graph count has changed, clear localStorage positions
+      if (hasGraphCountChanged && templateId) {
+        const layoutKey = `sap-monitor-layout-${templateId}`;
+        localStorage.removeItem(layoutKey);
+        localStorage.removeItem(`template-${templateId}-initial-graph-count`);
+      }
+
       // Format each graph according to the API structure
       const apiFormattedGraphs = graphsWithValidLayout.map((graph, index) => {
-        // Ensure layout properties are numbers before multiplying
-        const x = Number(graph.layout.x) * 10;
-        const y = Number(graph.layout.y) * 10;
-        const w = Number(graph.layout.w) * 10;
-        const h = Number(graph.layout.h) * 10;
-        
+        // Use default layout if graph count changed
+        const layout = graph.layout;
+        const x = Number(layout.x) * 10;
+        const y = Number(layout.y) * 10;
+        const w = Number(layout.w) * 10;
+        const h = Number(layout.h) * 10;
         // Calculate positions based on layout
         const topPos = `${y}:${x}`;
         const bottomPos = `${y + h}:${x + w}`;
@@ -1291,10 +1294,7 @@ function TemplatePageContent() {
         } catch (error) {
           console.error("Error handling default template:", error);
           // Show toast but continue with saving the new template
-          toast.error("Warning: There was an issue updating the previous default template.", {
-            description: "Your template was still saved as default.",
-            dismissible: true
-          });
+          toast.error("Warning", { description: "There was an issue updating the previous default template. Your template was still saved as default." });
         }
       }
 
@@ -1335,17 +1335,11 @@ function TemplatePageContent() {
 
       const savedTemplate = await response.json();
 
-      toast.success(
-        isEditMode
-          ? "Template updated successfully"
-          : SUCCESS_MESSAGES.TEMPLATE_SAVED,
-        {
-          description: isEditMode
-            ? "Your template has been updated successfully"
-            : "Your template has been saved successfully",
-          dismissible: true,
-        }
-      );
+      toast.success(isEditMode ? "Template updated successfully" : SUCCESS_MESSAGES.TEMPLATE_SAVED, {
+        description: isEditMode
+          ? "Your template has been updated successfully"
+          : "Your template has been saved successfully"
+      });
 
       // Reset form or redirect after successful save
       if (!isEditMode) {
@@ -1360,15 +1354,12 @@ function TemplatePageContent() {
     } catch (error) {
       console.error("Save template error:", error);
       toast.error(ERROR_MESSAGES.SAVE_ERROR, {
-        description:
-          error instanceof Error ? error.message : "Please try again",
-        dismissible: true,
+        description: error instanceof Error ? error.message : "Please try again"
       });
     } finally {
       setLoadingState((prev) => ({ ...prev, savingTemplate: false }));
     }
   };
-
 
   // Modify the handleAddGraphToTemplate function to capture descriptions
 
@@ -1672,6 +1663,102 @@ function TemplatePageContent() {
   }, [graphs.length, params]);
 
   const pageTitle = isEditMode ? "Edit Template" : "Create Template";
+
+  // Add this helper function for default layout calculation (copy from DynamicLayout)
+  const getDefaultLayouts = (graphs: Graph[]) => {
+    const numCharts = graphs.length;
+    let layoutConfig: Array<{x: number, y: number, w: number, h: number}> = [];
+    switch (numCharts) {
+      case 1:
+        layoutConfig = [ { x: 0, y: 0, w: 12, h: 12 } ];
+        break;
+      case 2:
+        layoutConfig = [
+          { x: 0, y: 0, w: 12, h: 8 },
+          { x: 0, y: 8, w: 12, h: 8 },
+        ];
+        break;
+      case 3:
+        layoutConfig = [
+          { x: 0, y: 0, w: 12, h: 7 },
+          { x: 0, y: 7, w: 12, h: 7 },
+          { x: 0, y: 14, w: 12, h: 7 },
+        ];
+        break;
+      case 4:
+        layoutConfig = [
+          { x: 0, y: 0, w: 6, h: 8 },
+          { x: 6, y: 0, w: 6, h: 8 },
+          { x: 0, y: 8, w: 6, h: 8 },
+          { x: 6, y: 8, w: 6, h: 8 },
+        ];
+        break;
+      case 5:
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 9 },
+          { x: 4, y: 0, w: 4, h: 9 },
+          { x: 8, y: 0, w: 4, h: 9 },
+          { x: 0, y: 9, w: 6, h: 7 },
+          { x: 6, y: 9, w: 6, h: 7 },
+        ];
+        break;
+      case 6:
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 8 },
+          { x: 4, y: 0, w: 4, h: 8 },
+          { x: 8, y: 0, w: 4, h: 8 },
+          { x: 0, y: 8, w: 4, h: 8 },
+          { x: 4, y: 8, w: 4, h: 8 },
+          { x: 8, y: 8, w: 4, h: 8 },
+        ];
+        break;
+      case 7:
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 6 },
+          { x: 4, y: 0, w: 4, h: 6 },
+          { x: 8, y: 0, w: 4, h: 6 },
+          { x: 0, y: 6, w: 4, h: 6 },
+          { x: 4, y: 6, w: 4, h: 6 },
+          { x: 8, y: 6, w: 4, h: 6 },
+          { x: 0, y: 12, w: 12, h: 7 },
+        ];
+        break;
+      case 8:
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 5 },
+          { x: 4, y: 0, w: 4, h: 5 },
+          { x: 8, y: 0, w: 4, h: 5 },
+          { x: 0, y: 5, w: 4, h: 5 },
+          { x: 4, y: 5, w: 4, h: 5 },
+          { x: 8, y: 5, w: 4, h: 5 },
+          { x: 0, y: 10, w: 6, h: 5 },
+          { x: 6, y: 10, w: 6, h: 5 },
+        ];
+        break;
+      case 9:
+        layoutConfig = [
+          { x: 0, y: 0, w: 4, h: 6 },
+          { x: 4, y: 0, w: 4, h: 6 },
+          { x: 8, y: 0, w: 4, h: 6 },
+          { x: 0, y: 6, w: 4, h: 6 },
+          { x: 4, y: 6, w: 4, h: 6 },
+          { x: 8, y: 6, w: 4, h: 6 },
+          { x: 0, y: 12, w: 4, h: 6 },
+          { x: 4, y: 12, w: 4, h: 6 },
+          { x: 8, y: 12, w: 4, h: 6 },
+        ];
+        break;
+      default:
+        // For more than 9, just stack
+        for (let i = 0; i < numCharts; i++) {
+          layoutConfig.push({ x: (i % 3) * 4, y: Math.floor(i / 3) * 6, w: 4, h: 6 });
+        }
+    }
+    return graphs.map((graph, i) => ({
+      ...graph,
+      layout: layoutConfig[i] || { x: 0, y: 0, w: 4, h: 6 }
+    }));
+  };
 
   // Instead of early return for loading state, we'll use conditional rendering
     return (

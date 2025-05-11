@@ -70,7 +70,7 @@ import {
 import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { useSearchParams } from "next/navigation";
-import { addDays } from "date-fns";
+import { addDays, startOfDay, endOfDay } from "date-fns";
 
 // Helper function to safely access localStorage
 const safeLocalStorage = {
@@ -2026,9 +2026,10 @@ export default function Dashboard() {
         template_desc: currentTemplate.description || `${currentTemplate.name} Template`,
         default: currentTemplate.isDefault || false,
         favorite: currentTemplate.isFavorite || false,
-        frequency: currentTemplate.frequency || "auto",
-        resolution: currentTemplate.resolution || "auto",
-        systems: currentTemplate.systems.map((systemId) => ({ system_id: systemId })) || [],
+        // Use original data for these fields:
+        frequency: currentTemplate.frequency, // always from API/original
+        resolution: currentTemplate.resolution, // always from API/original
+        systems: currentTemplate.systems.map((systemId: string) => ({ system_id: systemId })), // always from API/original
         graphs: allGraphs,
       };
       
@@ -2592,17 +2593,17 @@ export default function Dashboard() {
       label: 'Today',
       value: 'today',
       getDate: () => ({
-        from: new Date(),
-        to: new Date()
+        from: startOfDay(new Date()),
+        to: endOfDay(new Date())
       })
     },
     {
       label: 'Yesterday',
       value: 'yesterday',
-      getDate: () => ({
-        from: addDays(new Date(), -1),
-        to: addDays(new Date(), -1)
-      })
+      getDate: () => {
+        const y = addDays(new Date(), -1);
+        return { from: startOfDay(y), to: endOfDay(y) };
+      }
     },
     {
       label: 'Last 7 days',

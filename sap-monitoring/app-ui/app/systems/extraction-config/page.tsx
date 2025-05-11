@@ -1557,21 +1557,20 @@ export default function ConfigDashboard() {
   
   // Add state for KPI dropdown search in Alert Config
   const [kpiAlertSearchTerm, setKpiAlertSearchTerm] = useState("")
-  const [isKpiDropdownOpen, setIsKpiDropdownOpen] = useState(false)
 
   // Handle KPI selection for Alert
   const handleAlertKpiSelection = (kpiName: string) => {
     const selectedKpi = [...osKpis, ...jobsKpis].find(kpi => kpi.kpi_name === kpiName)
     if (selectedKpi) {
       setNewAlert(prev => ({
-        ...prev,
+                        ...prev,
         kpiName: selectedKpi.kpi_name,
         kpiDesc: selectedKpi.kpi_desc,
         kpiGroup: selectedKpi.kpi_group,
         g2y: selectedKpi.g2y?.toString() || "",
         y2r: selectedKpi.y2r?.toString() || ""
-      }))
-    }
+                      }))
+                    }
   }
 
   // Cancel editing alert
@@ -1802,12 +1801,6 @@ export default function ConfigDashboard() {
                         <Select 
                           value={newAlert.kpiName} 
                           onValueChange={(value) => handleAlertKpiSelection(value)}
-                          onOpenChange={(open) => {
-                            setIsKpiDropdownOpen(open)
-                            if (!open) {
-                              setKpiAlertSearchTerm("")
-                            }
-                          }}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue>
@@ -1821,25 +1814,12 @@ export default function ConfigDashboard() {
                                 className="mb-2"
                                 value={kpiAlertSearchTerm}
                                 onChange={(e) => setKpiAlertSearchTerm(e.target.value)}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  e.preventDefault()
-                                }}
-                                onKeyDown={(e) => {
-                                  e.stopPropagation()
-                                }}
-                                autoComplete="off"
                               />
                             </div>
-                            <div className="max-h-[200px] overflow-y-auto">
                             <SelectGroup>
                               {filteredKpis.length > 0 ? (
                                 filteredKpis.map(kpi => (
-                                  <SelectItem 
-                                    key={kpi.kpi_name} 
-                                    value={kpi.kpi_name}
-                                    className="cursor-pointer"
-                                  >
+                                  <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
                                     {kpi.kpi_desc}
                                   </SelectItem>
                                 ))
@@ -1849,7 +1829,6 @@ export default function ConfigDashboard() {
                                 </SelectItem>
                               )}
                             </SelectGroup>
-                            </div>
                           </SelectContent>
                         </Select>
                       </td>
@@ -1871,16 +1850,16 @@ export default function ConfigDashboard() {
                               : ""
                           }`}
                         />
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                            <Button 
+                      </td>
+                      <td className="p-2 text-center align-middle">
+                        <Button 
                           type="button"
                           variant="ghost"
-                              size="sm" 
+                          size="sm" 
                           className="rounded-full h-8 w-8 p-0 flex items-center justify-center"
                           onClick={() => {
                             setNewAlert(prev => {
-                              const newDirection: "gt" | "lt" = prev.direction === "gt" ? "lt" : "gt"
+                              const newDirection = prev.direction === "gt" ? "lt" : "gt"
                               const updatedAlert = {...prev, direction: newDirection}
                               
                               // Revalidate immediately after direction change
@@ -1908,8 +1887,8 @@ export default function ConfigDashboard() {
                           ) : (
                             <p className="text-lg"> &lt; </p>
                           )}
-                            </Button>
-                          </td>
+                        </Button>
+                      </td>
                       <td className="p-2 text-center align-middle">
                         <Input
                           value={newAlert.y2r}
@@ -2064,25 +2043,25 @@ export default function ConfigDashboard() {
       // Fetch filter names for the selected KPI
       try {
         const response = await axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
-            if (response.status === 200 && response.data.length > 0) {
-              const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
+        if (response.status === 200 && response.data.length > 0) {
+          const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
           
           // If only one filter is available, auto-populate it
           if (filterNames.length === 1) {
-                setNewFilter(prev => ({
-                  ...prev,
+            setNewFilter(prev => ({
+              ...prev,
               filterName: filterNames[0]
-                }))
-              }
+            }))
+          }
           
           // Store available filters for this KPI
           setAvailableFilters(filterNames)
-            }
+        }
       } catch (error) {
-            console.error("Error fetching filter options:", error)
+        console.error("Error fetching filter options:", error)
         toast.error("Failed to load filter options", {
           description: "Please try again"
-          })
+        })
       }
     }
   }
@@ -2146,49 +2125,49 @@ export default function ConfigDashboard() {
         </div>
 
         <div className="space-y-4">
-        <div className="rounded-md border">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="h-10 px-4 text-left font-medium">KPI Name</th>
-                  <th className="h-10 px-2 text-left font-medium">Group</th>
-                  <th className="h-10 px-4 text-left font-medium">Filter Name</th>
+          <div className="rounded-md border">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="h-10 px-4 text-left font-medium">KPI Name</th>
+                    <th className="h-10 px-2 text-left font-medium">Group</th>
+                    <th className="h-10 px-4 text-left font-medium">Filter Name</th>
                     <th className="h-10 px-2 text-center font-medium">Operator</th>
-                  <th className="h-10 px-4 text-left font-medium">Value</th>
-                  <th className="h-10 px-2 text-center font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+                    <th className="h-10 px-4 text-left font-medium">Value</th>
+                    <th className="h-10 px-2 text-center font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {savedFilters.length > 0 ? (
                     savedFilters.map((filter, index) => (
                       <tr key={index} className="border-b hover:bg-muted/30 transition-colors">
                         <td className="p-2 px-4 align-middle">{filter.kpiDesc}</td>
-                      <td className="p-2 align-middle">
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
+                        <td className="p-2 align-middle">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-xs font-medium">
                             {filter.kpiGroup}
-                        </span>
-                      </td>
-                        <td className="p-2 px-4 align-middle font-medium">{filter.filterName.toUpperCase()}</td>
+                          </span>
+                        </td>
+                        <td className="p-2 px-4 align-middle">{filter.filterName}</td>
                         <td className="p-2 text-center align-middle">
                           <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
                             {filter.operator}
                           </span>
-                      </td>
+                        </td>
                         <td className="p-2 px-4 align-middle">{filter.value}</td>
-                      <td className="p-2 text-center align-middle">
+                        <td className="p-2 text-center align-middle">
                           <Button variant="ghost" size="icon" onClick={() => handleEditFilter(filter, index)}>
                             <Pencil className="h-4 w-4" />
-                        </Button>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : !isEditing ? (
+                    <tr>
+                      <td colSpan={6} className="h-24 text-center text-muted-foreground">
+                        No filters configured yet
                       </td>
                     </tr>
-                  ))
-                  ) : !isEditing ? (
-                  <tr>
-                    <td colSpan={6} className="h-24 text-center text-muted-foreground">
-                        No filters configured yet
-                    </td>
-                  </tr>
                   ) : null}
                   
                   {/* New filter row - shown when isEditing is true */}
@@ -2198,11 +2177,6 @@ export default function ConfigDashboard() {
                         <Select
                           value={newFilter.kpiName} 
                           onValueChange={(value) => handleKpiSelection(value)}
-                          onOpenChange={(open) => {
-                            if (!open) {
-                              setKpiFilterSearchTerm("")
-                            }
-                          }}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue>
@@ -2216,17 +2190,12 @@ export default function ConfigDashboard() {
                                 className="mb-2"
                                 value={kpiFilterSearchTerm}
                                 onChange={(e) => setKpiFilterSearchTerm(e.target.value)}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  e.preventDefault()
-                                }}
-                                onKeyDown={(e) => {
-                                  e.stopPropagation()
-                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
                               />
                             </div>
                             <div className="max-h-[200px] overflow-y-auto">
-                            <SelectGroup>
+                              <SelectGroup>
                                 {filteredKpis.length > 0 ? (
                                   filteredKpis.map(kpi => (
                                     <SelectItem 
@@ -2234,15 +2203,15 @@ export default function ConfigDashboard() {
                                       value={kpi.kpi_name}
                                       className="cursor-pointer"
                                     >
-                                  {kpi.kpi_desc}
-                              </SelectItem>
+                                      {kpi.kpi_desc}
+                                    </SelectItem>
                                   ))
                                 ) : (
                                   <SelectItem value="no-kpis" disabled>
                                     {kpiFilterSearchTerm ? "No matching KPIs found" : "No KPIs with filters available"}
                                   </SelectItem>
                                 )}
-                            </SelectGroup>
+                              </SelectGroup>
                             </div>
                           </SelectContent>
                         </Select>
@@ -2266,13 +2235,13 @@ export default function ConfigDashboard() {
                                 ? "Select KPI first" 
                                 : availableFilters.length === 0 
                                   ? "No filters available" 
-                                  : newFilter.filterName ? newFilter.filterName.toUpperCase() : "Select filter"}
+                                  : newFilter.filterName || "Select filter"}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {availableFilters.map((filterName) => (
                               <SelectItem key={filterName} value={filterName}>
-                                {filterName.toUpperCase()}
+                                {filterName}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -2378,7 +2347,19 @@ export default function ConfigDashboard() {
                 <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         ) : (
-          <div></div> // Empty div to maintain flex layout when in step 3
+          <Button
+            type="button"
+            onClick={() => {
+              // Complete the wizard
+              setCurrentStep(1)
+              setSelectedKpi(null)
+              toast.success("Configuration completed", {
+                description: "All settings have been saved successfully",
+              })
+            }}
+          >
+            Complete
+          </Button>
         )}
       </div>
     )
@@ -2386,22 +2367,6 @@ export default function ConfigDashboard() {
 
   // Add state for KPI dropdown search in Filter Settings
   const [kpiFilterSearchTerm, setKpiFilterSearchTerm] = useState("")
-
-  // Handle KPI search input change
-  const handleKpiSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.stopPropagation()
-    setKpiAlertSearchTerm(e.target.value)
-  }
-
-  // Handle KPI search input keydown
-  const handleKpiSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    e.stopPropagation()
-  }
-
-  // Handle KPI search input click
-  const handleKpiSearchClick = (e: React.MouseEvent<HTMLInputElement>) => {
-    e.stopPropagation()
-  }
 
   return (
     <div className="container mx-auto py-8 px-4">

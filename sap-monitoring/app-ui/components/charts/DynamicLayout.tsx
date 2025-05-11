@@ -763,6 +763,47 @@ useEffect(() => {
     const deletionInProgress = localStorage.getItem('graph-deletion-in-progress');
     const isDeletingInThisTemplate = deletionInProgress === templateId;
     
+    // --- DASHBOARD PAGE LOGIC: Robustly reset and save default layout on add/delete ---
+    if (!isTemplatePage && prevChartsLengthRef.current !== null && prevChartsLengthRef.current !== currentChartsLength) {
+      // Only for dashboard, not template page
+      console.log('[Dashboard] Graphs added or deleted, resetting layout and saving default positions');
+      prevChartsLengthRef.current = currentChartsLength;
+
+      // Clear saved layout in localStorage for this templateId
+      if (templateId) {
+        const key = getLocalStorageLayoutKey(templateId);
+        if (key) {
+          localStorage.removeItem(key);
+        }
+      }
+
+      // Always reset to default layout and save it synchronously
+      (async () => {
+        const newLayout = await resetToDynamicLayout();
+        // Build default layouts for all breakpoints
+        const defaultLayouts = {
+          lg: newLayout,
+          md: adjustLayoutForBreakpoint(newLayout, 9, 0.75, "md"),
+          sm: adjustLayoutForBreakpoint(newLayout, 6, 0.5, "sm"),
+          xs: adjustLayoutForBreakpoint(newLayout, 3, 0.33, "xs"),
+          xxs: adjustLayoutForBreakpoint(newLayout, 2, 0.25, "xxs"),
+        };
+        // Save to localStorage
+        if (templateId) {
+          saveLayoutToLocalStorage(templateId, {}); // Save empty positions to force reload
+        }
+        // Save to DB
+        if (onSaveLayout) {
+          await onSaveLayout(defaultLayouts);
+        }
+        // Force a re-render by updating layouts state
+        setLayouts(defaultLayouts);
+        layoutRef.current = newLayout;
+      })();
+      return;
+    }
+    // --- END DASHBOARD PAGE LOGIC ---
+
     // Only trigger reset if charts length has changed and it's not the initial render
     // and we're not in the middle of a deletion operation
     if (mounted && prevChartsLengthRef.current !== null && 
@@ -807,7 +848,7 @@ useEffect(() => {
             }
           }
     
-  }, [charts.length, mounted, resetToDynamicLayout, templateId, onSaveLayout, layouts, useDynamicLayout]);
+  }, [charts.length, mounted, resetToDynamicLayout, templateId, onSaveLayout, layouts, useDynamicLayout, isTemplatePage, getLocalStorageLayoutKey, adjustLayoutForBreakpoint]);
 
   // Define the saveLayoutToAPI function before it's used
   const saveLayoutToAPI = useCallback(async () => {
@@ -823,6 +864,10 @@ useEffect(() => {
         console.warn("No template data available");
         return false;
       }
+
+      // Check if this is a graph count change
+      const graphChangeInfo = localStorage.getItem('template-graph-change');
+      const isGraphCountChange = graphChangeInfo ? JSON.parse(graphChangeInfo).needsReset : false;
 
       // Prepare the graphs data with updated positions
       const updatedGraphs = charts.map((chart) => {
@@ -842,6 +887,17 @@ useEffect(() => {
         if (!currentLayout) {
           console.warn(`No layout found for chart ${chart.id}`);
           return null;
+        }
+
+        // If this is a graph count change, clear the positions
+        if (isGraphCountChange) {
+          return {
+            ...templateGraph,
+            top_xy_pos: "0:0",
+            bottom_xy_pos: "0:0",
+            frequency: templateGraph.frequency || "5m",
+            resolution: templateGraph.resolution || "1d",
+          };
         }
 
         // Calculate the positions (multiply by 10 as per API format)
@@ -888,6 +944,10 @@ useEffect(() => {
 
       if (response.status >= 200 && response.status < 300) {
         console.log("Layout saved successfully:", response.data);
+        // Clear the graph change info after successful save
+        if (isGraphCountChange) {
+          localStorage.removeItem('template-graph-change');
+        }
         return true;
       } else {
         console.error("Failed to save layout:", response.statusText);

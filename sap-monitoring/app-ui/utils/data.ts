@@ -674,7 +674,7 @@ export const fetchTemplateChartData = async (
     // Generate cache key including the graph ID if available
     const graphId = additionalOptions?.graphId || '';
     const cacheKey = graphId ? 
-      `${graphId}-${primaryKpi}-${correlationKpis.join('-')}` : 
+      `${graphId}-${primaryKpi}-${correlationKpis.join('-')}-${from.getTime()}-${to.getTime()}-${resolution}` : 
       createTemplateCacheKey(primaryKpi, correlationKpis, monitoringArea, { from, to }, resolution);
       
     // Check explicitly for a force refresh flag
