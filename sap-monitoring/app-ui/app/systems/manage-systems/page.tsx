@@ -142,10 +142,31 @@ export default function ManageSystemsPage() {
     newStatus: boolean;
   } | null>(null);
 
+  const [userRole, setUserRole] = useState<string>("");
+
   useEffect(() => {
     fetchSystemStats();
     fetchSystems();
+    fetchUserRole();
   }, []);
+
+  const fetchUserRole = async () => {
+    try {
+      const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/um");
+      if (!response.ok) throw new Error("Failed to fetch user data");
+      
+      const users = await response.json();
+      const currentUserId = "USER_TEST_1"; // From config.ts
+      
+      const currentUser = users.find((user: any) => user.user_id === currentUserId);
+      if (currentUser) {
+        setUserRole(currentUser.role.toLowerCase());
+      }
+    } catch (error) {
+      console.error("Error fetching user role:", error);
+      toast.error("Failed to fetch user role");
+    }
+  };
 
   // Update the fetchSystemStats function
   const fetchSystemStats = async () => {
@@ -230,7 +251,7 @@ export default function ManageSystemsPage() {
     try {
       // First validate the system
       const validateResponse = await fetch(
-        "http://localhost:3000/api/system-validation",
+        "https://shwsckbvbt.a.pinggy.link/api/system-validation",
         {
           method: "POST",
           headers: {
@@ -274,7 +295,7 @@ export default function ManageSystemsPage() {
 
   const handleDeleteSystem = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/systems/${id}`, {
+      const response = await fetch(`https://shwsckbvbt.a.pinggy.link/api/systems/${id}`, {
         method: "DELETE",
       });
 
@@ -314,7 +335,7 @@ export default function ManageSystemsPage() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `http://localhost:3000/api/systems/${systemId}/status`,
+        `https://shwsckbvbt.a.pinggy.link/api/systems/${systemId}/status`,
         {
           method: "PATCH",
           headers: {
@@ -400,11 +421,12 @@ export default function ManageSystemsPage() {
             <SystemsTable
               systems={systems}
               onDelete={setSystemToDelete}
-              onEdit={(id) => console.log("Edit:", id)} // TODO: Implement edit
-              onSettings={(id) => console.log("Settings:", id)} // TODO: Implement settings
+              onEdit={(id) => console.log("Edit:", id)}
+              onSettings={(id) => console.log("Settings:", id)}
               onToggleStatus={handleToggleSystemStatus}
-              onUpdateStats={handleUpdateStats} // Add this line
-              onRefreshStats={handleRefreshStats} // Pass refresh stats function
+              onUpdateStats={handleUpdateStats}
+              onRefreshStats={handleRefreshStats}
+              userRole={userRole}
             />
           )}
         </Card>
@@ -475,8 +497,9 @@ interface SystemsTableProps {
   onEdit: (id: number) => void;
   onSettings: (id: number) => void;
   onToggleStatus: (system: System, newStatus: boolean) => void;
-  onUpdateStats: (stats: SystemStats) => void; // Add this prop
-  onRefreshStats?: () => void; // Add this prop
+  onUpdateStats: (stats: SystemStats) => void;
+  onRefreshStats?: () => void;
+  userRole: string;
 }
 
 // Update the useConnectionStatusPolling hook to prevent any stats updates
@@ -547,6 +570,7 @@ const SystemsTable = ({
   onToggleStatus,
   onUpdateStats,
   onRefreshStats,
+  userRole,
 }: SystemsTableProps) => {
   const [selectedSystem, setSelectedSystem] = useState<System | null>(null);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
@@ -668,6 +692,14 @@ const SystemsTable = ({
     systemId: string,
     currentStatus: boolean
   ) => {
+    // Check if user has permission
+    if (userRole !== "super admin") {
+      toast.error("Permission Denied", {
+        description: "Only Super Admin can change Active Status",
+      });
+      return;
+    }
+
     setIsUpdating(`active-${systemId}`);
 
     try {
@@ -848,6 +880,14 @@ const SystemsTable = ({
     currentStatus: boolean,
     pollingStatus: boolean
   ) => {
+    // Check if user has permission
+    if (userRole !== "super admin") {
+      toast.error("Permission Denied", {
+        description: "Only Super Admin can change Active Status",
+      });
+      return;
+    }
+
     // If turning OFF an active system, show deactivation warning
     if (currentStatus) {
       setPendingChange({
@@ -1302,17 +1342,42 @@ const SystemsTable = ({
                   )}
                 </TableCell>
                 <TableCell>
-                  <Switch
-                    checked={system.activeStatus}
-                    // disabled={isUpdating === `active-${system.system_id}`}
-                    onCheckedChange={() =>
-                      handleActiveToggleClick(
-                        system.system_id,
-                        system.activeStatus,
-                        system.pollingStatus // Pass the current polling status
-                      )
-                    }
-                  />
+                  {userRole === "super admin" ? (
+                    <Switch
+                      checked={system.activeStatus}
+                      disabled={
+                        isUpdating === `active-${system.system_id}` || 
+                        userRole !== "super admin" // Only Super Admin can toggle
+                      }
+                      onCheckedChange={() =>
+                        handleActiveToggleClick(
+                          system.system_id,
+                          system.activeStatus,
+                          system.pollingStatus
+                        )
+                      }
+                    />
+                  ) : (
+                    // For non-Super Admin users, show read-only status indicator
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={cn(
+                          "w-3 h-3 rounded-full",
+                          system.activeStatus 
+                            ? "bg-green-500" 
+                            : "bg-gray-300"
+                        )}
+                      />
+                      <span className="text-sm">
+                        {system.activeStatus ? "Active" : "Inactive"}
+                      </span>
+                      {system.activeStatus && (
+                        <div className="ml-2 text-xs text-gray-400 italic">
+                          (Super Admin only)
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end space-x-2">

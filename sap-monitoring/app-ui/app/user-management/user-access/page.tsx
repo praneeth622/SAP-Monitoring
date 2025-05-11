@@ -60,6 +60,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { app_globals } from "@/config/config";
 
 // Define types
 interface User {
@@ -184,6 +185,7 @@ export default function ManageUserPage() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [configTitle, setConfigTitle] = useState("");
   const [isUsersLoading, setIsUsersLoading] = useState(true);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
 
   // Form validation
   const isSystemSelectEnabled = Boolean(userId);
@@ -200,6 +202,29 @@ export default function ManageUserPage() {
   useEffect(() => {
     // Fetch users from the API when component mounts
     fetchAllUsers();
+  }, []);
+
+  // Add useEffect to fetch user role on component mount
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch("https://shwsckbvbt.a.pinggy.link/api/um");
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+        const users: User[] = await response.json();
+        const currentUser = users.find(user => user.user_id === app_globals.default_user_id);
+        if (currentUser) {
+          setCurrentUserRole(currentUser.role);
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+        // Set a default role if fetch fails
+        setCurrentUserRole("user");
+      }
+    };
+
+    fetchUserRole();
   }, []);
 
   // Updated fetchUsers function to handle both multiple users and single user
@@ -1464,6 +1489,7 @@ export default function ManageUserPage() {
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
+                                {currentUserRole.toLowerCase() === "super admin" && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1471,6 +1497,7 @@ export default function ManageUserPage() {
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
+                                )}
                               </div>
                             </TableCell>
                           </>
