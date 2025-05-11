@@ -65,19 +65,19 @@ export function DateRangePicker({
   }, [tempDate, tempTime, onDateChange])
 
   const displayText = React.useMemo(() => {
-    if (!date?.from) return "Select dates"
-    
-    const fromText = dayjs(date.from).format("MMM DD")
-    const toText = date.to ? dayjs(date.to).format("MMM DD") : ""
-    
+    // Use tempDate/tempTime if popover is open, otherwise use date
+    const current = isOpen ? tempDate : date;
+    if (!current?.from) return "Select dates";
+    const fromText = dayjs(current.from).format("MMM DD");
+    const toText = current.to ? dayjs(current.to).format("MMM DD") : "";
     if (showTime) {
-      const fromTime = dayjs(date.from).format("HH:mm")
-      const toTime = date.to ? dayjs(date.to).format("HH:mm") : ""
-      return `${fromText} ${fromTime} - ${toText} ${toTime}`
+      // Use tempTime if popover is open, otherwise use the time from the date prop
+      const fromTime = isOpen ? tempTime.from : dayjs(current.from).format("HH:mm");
+      const toTime = isOpen && current.to ? tempTime.to : (current.to ? dayjs(current.to).format("HH:mm") : "");
+      return `${fromText} ${fromTime} - ${toText} ${toTime}`;
     }
-    
-    return date.to ? `${fromText} - ${toText}` : fromText
-  }, [date, showTime])
+    return current.to ? `${fromText} - ${toText}` : fromText;
+  }, [date, tempDate, tempTime, isOpen, showTime]);
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -106,7 +106,13 @@ export function DateRangePicker({
                 mode="range"
                 defaultMonth={tempDate?.from}
                 selected={tempDate}
-                onSelect={setTempDate}
+                onSelect={(range) => {
+                  setTempDate(range);
+                  if (range?.from && range?.to && !showTime) {
+                    onDateChange(range);
+                    setIsOpen(false);
+                  }
+                }}
                 numberOfMonths={1}
                 disabled={(date) => date > new Date() || date < new Date('2000-01-01')}
               />

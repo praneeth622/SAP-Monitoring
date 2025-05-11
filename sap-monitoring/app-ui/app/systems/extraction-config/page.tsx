@@ -1411,14 +1411,6 @@ export default function ConfigDashboard() {
               value={kpiSearchTerm}
               onChange={(e) => setKpiSearchTerm(e.target.value)}
               className="w-full"
-              onKeyDown={(e) => {
-                // Prevent select events from handling keyboard events
-                e.stopPropagation();
-              }}
-              onClick={(e) => {
-                // Prevent losing focus when clicking inside the input
-                e.stopPropagation();
-              }}
             />
             </div>
           </div>
@@ -1436,11 +1428,10 @@ export default function ConfigDashboard() {
           <div className={tableContainerStyles}>
             {/* Table Header */}
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-              <div className="grid grid-cols-12 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
+              <div className="grid grid-cols-11 gap-4 py-3 px-4 text-sm font-medium text-muted-foreground border-b">
                     <div className="col-span-6">KPI Name</div>
                     <div className="col-span-3">Area</div>
                 <div className="col-span-2">Monitoring Area</div>
-                <div className="col-span-1 text-right">Actions</div>
               </div>
             </div>
 
@@ -1449,7 +1440,7 @@ export default function ConfigDashboard() {
               {parentKpis.map((kpi) => (
                   <div
                       key={kpi.kpi_name}
-                      className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg items-center"
+                      className="grid grid-cols-11 gap-4 py-2 px-4 hover:bg-accent/5 rounded-lg items-center"
                   >
                       <div className="col-span-6 text-sm text-muted-foreground truncate">{kpi.kpi_desc}</div>
                       <div className="col-span-3">
@@ -1461,19 +1452,6 @@ export default function ConfigDashboard() {
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
                         {kpi.kpi_group.startsWith("OS") ? "OS" : "JOBS"}
                       </span>
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleKpiSettings(kpi, e);
-                          }}
-                        >
-                          Configure
-                      </Button>
                     </div>
                     </div>
                   ))}
@@ -1579,20 +1557,21 @@ export default function ConfigDashboard() {
   
   // Add state for KPI dropdown search in Alert Config
   const [kpiAlertSearchTerm, setKpiAlertSearchTerm] = useState("")
+  const [isKpiDropdownOpen, setIsKpiDropdownOpen] = useState(false)
 
   // Handle KPI selection for Alert
   const handleAlertKpiSelection = (kpiName: string) => {
     const selectedKpi = [...osKpis, ...jobsKpis].find(kpi => kpi.kpi_name === kpiName)
     if (selectedKpi) {
       setNewAlert(prev => ({
-                        ...prev,
+        ...prev,
         kpiName: selectedKpi.kpi_name,
         kpiDesc: selectedKpi.kpi_desc,
         kpiGroup: selectedKpi.kpi_group,
         g2y: selectedKpi.g2y?.toString() || "",
         y2r: selectedKpi.y2r?.toString() || ""
-                      }))
-                    }
+      }))
+    }
   }
 
   // Cancel editing alert
@@ -1633,12 +1612,38 @@ export default function ConfigDashboard() {
     }
 
     if (newAlert.direction === "gt") {
-      // For greater than (>), yellow threshold should be less than red threshold
-      return g2y < y2r
-    } else {
-      // For less than (<), yellow threshold should be greater than red threshold
+      // For greater than (>), yellow threshold should be greater than red threshold
       return g2y > y2r
+    } else {
+      // For less than (<), yellow threshold should be less than red threshold
+      return g2y < y2r
     }
+  }
+
+  // Update the handleThresholdChange function to validate immediately
+  const handleThresholdChange = (field: 'g2y' | 'y2r', value: string) => {
+    // Update the alert state
+    setNewAlert(prev => {
+      const updatedAlert = {...prev, [field]: value}
+      
+      // Validate immediately if we have both values
+      const g2y = field === 'g2y' ? Number.parseFloat(value) : Number.parseFloat(prev.g2y)
+      const y2r = field === 'y2r' ? Number.parseFloat(value) : Number.parseFloat(prev.y2r)
+      
+      if (!isNaN(g2y) && !isNaN(y2r)) {
+        const isValid = updatedAlert.direction === "gt" ? g2y > y2r : g2y < y2r
+        
+        if (!isValid) {
+          toast.error("Invalid thresholds", {
+            description: updatedAlert.direction === "gt" 
+              ? `For "greater than" (>), Green to Yellow (${g2y}) must be higher than Yellow to Red (${y2r})`
+              : `For "less than" (<), Green to Yellow (${g2y}) must be lower than Yellow to Red (${y2r})`
+          })
+        }
+      }
+      
+      return updatedAlert
+    })
   }
 
   // Handle saving new alert
@@ -1653,8 +1658,8 @@ export default function ConfigDashboard() {
     if (!validateAlertThresholds()) {
       toast.error("Invalid thresholds", {
         description: newAlert.direction === "gt" 
-          ? "Green to Yellow must be lower than Yellow to Red"
-          : "Green to Yellow must be higher than Yellow to Red"
+          ? `For "greater than" (>), Green to Yellow (${newAlert.g2y}) must be higher than Yellow to Red (${newAlert.y2r})`
+          : `For "less than" (<), Green to Yellow (${newAlert.g2y}) must be lower than Yellow to Red (${newAlert.y2r})`
       })
       return
     }
@@ -1797,9 +1802,15 @@ export default function ConfigDashboard() {
                         <Select 
                           value={newAlert.kpiName} 
                           onValueChange={(value) => handleAlertKpiSelection(value)}
+                          onOpenChange={(open) => {
+                            setIsKpiDropdownOpen(open)
+                            if (!open) {
+                              setKpiAlertSearchTerm("")
+                            }
+                          }}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select KPI">
+                            <SelectValue>
                               {newAlert.kpiName ? newAlert.kpiDesc : "Select KPI"}
                             </SelectValue>
                           </SelectTrigger>
@@ -1810,29 +1821,35 @@ export default function ConfigDashboard() {
                                 className="mb-2"
                                 value={kpiAlertSearchTerm}
                                 onChange={(e) => setKpiAlertSearchTerm(e.target.value)}
-                                onKeyDown={(e) => {
-                                  // Prevent select events from handling keyboard events
-                                  e.stopPropagation();
-                                }}
                                 onClick={(e) => {
-                                  // Prevent losing focus when clicking inside the input
-                                  e.stopPropagation();
+                                  e.stopPropagation()
+                                  e.preventDefault()
                                 }}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation()
+                                }}
+                                autoComplete="off"
                               />
                             </div>
+                            <div className="max-h-[200px] overflow-y-auto">
                             <SelectGroup>
                               {filteredKpis.length > 0 ? (
                                 filteredKpis.map(kpi => (
-                                  <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
+                                  <SelectItem 
+                                    key={kpi.kpi_name} 
+                                    value={kpi.kpi_name}
+                                    className="cursor-pointer"
+                                  >
                                     {kpi.kpi_desc}
                                   </SelectItem>
                                 ))
                               ) : (
                                 <SelectItem value="no-kpis" disabled>
-                                  No KPIs available
+                                  {kpiAlertSearchTerm ? "No matching KPIs found" : "No KPIs available"}
                                 </SelectItem>
                               )}
                             </SelectGroup>
+                            </div>
                           </SelectContent>
                         </Select>
                       </td>
@@ -1846,7 +1863,7 @@ export default function ConfigDashboard() {
                       <td className="p-2 text-center align-middle">
                         <Input
                           value={newAlert.g2y}
-                          onChange={(e) => setNewAlert(prev => ({...prev, g2y: e.target.value}))}
+                          onChange={(e) => handleThresholdChange('g2y', e.target.value)}
                           placeholder="G2Y"
                           className={`text-center max-w-[70px] mx-auto ${
                             !validateAlertThresholds() && newAlert.g2y && newAlert.y2r
@@ -1861,7 +1878,30 @@ export default function ConfigDashboard() {
                           variant="ghost"
                               size="sm" 
                           className="rounded-full h-8 w-8 p-0 flex items-center justify-center"
-                          onClick={() => setNewAlert(prev => ({...prev, direction: prev.direction === "gt" ? "lt" : "gt"}))}
+                          onClick={() => {
+                            setNewAlert(prev => {
+                              const newDirection: "gt" | "lt" = prev.direction === "gt" ? "lt" : "gt"
+                              const updatedAlert = {...prev, direction: newDirection}
+                              
+                              // Revalidate immediately after direction change
+                              if (prev.g2y && prev.y2r) {
+                                const g2y = Number.parseFloat(prev.g2y)
+                                const y2r = Number.parseFloat(prev.y2r)
+                                if (!isNaN(g2y) && !isNaN(y2r)) {
+                                  const isValid = newDirection === "gt" ? g2y > y2r : g2y < y2r
+                                  if (!isValid) {
+                                    toast.error("Invalid thresholds", {
+                                      description: newDirection === "gt" 
+                                        ? `For "greater than" (>), Green to Yellow (${g2y}) must be higher than Yellow to Red (${y2r})`
+                                        : `For "less than" (<), Green to Yellow (${g2y}) must be lower than Yellow to Red (${y2r})`
+                                    })
+                                  }
+                                }
+                              }
+                              
+                              return updatedAlert
+                            })
+                          }}
                         >
                           {newAlert.direction === "gt" ? (
                             <p className="text-lg"> &gt; </p>
@@ -1873,7 +1913,7 @@ export default function ConfigDashboard() {
                       <td className="p-2 text-center align-middle">
                         <Input
                           value={newAlert.y2r}
-                          onChange={(e) => setNewAlert(prev => ({...prev, y2r: e.target.value}))}
+                          onChange={(e) => handleThresholdChange('y2r', e.target.value)}
                           placeholder="Y2R"
                           className={`text-center max-w-[70px] mx-auto ${
                             !validateAlertThresholds() && newAlert.g2y && newAlert.y2r
@@ -2007,35 +2047,41 @@ export default function ConfigDashboard() {
     })
   }
 
-  // Handle KPI selection
-  const handleKpiSelection = (kpiName: string) => {
+  // Update handleKpiSelection to handle filter names
+  const handleKpiSelection = async (kpiName: string) => {
     const selectedKpi = [...osKpis, ...jobsKpis].find(kpi => kpi.kpi_name === kpiName)
     if (selectedKpi) {
       setNewFilter(prev => ({
         ...prev,
         kpiName: selectedKpi.kpi_name,
         kpiDesc: selectedKpi.kpi_desc,
-        kpiGroup: selectedKpi.kpi_group
+        kpiGroup: selectedKpi.kpi_group,
+        filterName: "", // Reset filter name
+        operator: "EQ",
+        value: ""
       }))
       
-      // Fetch filter names and auto-populate the first one
-      if (selectedKpi.filter === true) {
-        axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
-          .then(response => {
+      // Fetch filter names for the selected KPI
+      try {
+        const response = await axios.get(`https://shwsckbvbt.a.pinggy.link/api/filter?kpiName=${kpiName}`)
             if (response.status === 200 && response.data.length > 0) {
               const filterNames = response.data.map((item: { filter_name: string }) => item.filter_name)
-              if (filterNames.length > 0) {
-                // Auto-populate the filter name with the first available filter
+          
+          // If only one filter is available, auto-populate it
+          if (filterNames.length === 1) {
                 setNewFilter(prev => ({
                   ...prev,
-                  filterName: filterNames[0],
-                  operator: "EQ" // Default to EQ operator
+              filterName: filterNames[0]
                 }))
               }
+          
+          // Store available filters for this KPI
+          setAvailableFilters(filterNames)
             }
-          })
-          .catch(error => {
+      } catch (error) {
             console.error("Error fetching filter options:", error)
+        toast.error("Failed to load filter options", {
+          description: "Please try again"
           })
       }
     }
@@ -2073,9 +2119,24 @@ export default function ConfigDashboard() {
     })
   }
 
-  // Render the filter settings step
+  // Add this helper function to get parent KPIs with filters
+  const getParentKpisWithFilters = useCallback(() => {
+    return [...osKpis, ...jobsKpis].filter(kpi => 
+      kpi.parent === true && kpi.filter === true
+    )
+  }, [osKpis, jobsKpis])
+
+  // Update the renderFilterSettings function
   const renderFilterSettings = () => {
-    const parentKpis = getAllParentKpis()
+    const parentKpisWithFilters = getParentKpisWithFilters()
+    
+    // Filter KPIs based on search term
+    const filteredKpis = kpiFilterSearchTerm 
+      ? parentKpisWithFilters.filter(kpi => 
+          kpi.kpi_desc.toLowerCase().includes(kpiFilterSearchTerm.toLowerCase()) ||
+          kpi.kpi_name.toLowerCase().includes(kpiFilterSearchTerm.toLowerCase())
+        )
+      : parentKpisWithFilters
 
     return (
       <Card className="p-6">
@@ -2108,7 +2169,7 @@ export default function ConfigDashboard() {
                             {filter.kpiGroup}
                         </span>
                       </td>
-                        <td className="p-2 px-4 align-middle">{filter.filterName}</td>
+                        <td className="p-2 px-4 align-middle font-medium">{filter.filterName.toUpperCase()}</td>
                         <td className="p-2 text-center align-middle">
                           <span className="inline-flex items-center px-2 py-1 rounded-md bg-accent/50 text-xs font-medium">
                             {filter.operator}
@@ -2116,7 +2177,6 @@ export default function ConfigDashboard() {
                       </td>
                         <td className="p-2 px-4 align-middle">{filter.value}</td>
                       <td className="p-2 text-center align-middle">
-                          {/* Could add edit/delete actions here */}
                           <Button variant="ghost" size="icon" onClick={() => handleEditFilter(filter, index)}>
                             <Pencil className="h-4 w-4" />
                         </Button>
@@ -2134,43 +2194,56 @@ export default function ConfigDashboard() {
                   {/* New filter row - shown when isEditing is true */}
                   {isEditing && (
                     <tr className="border-b bg-accent/5">
-                                  <td className="p-2 px-4 align-middle">
+                      <td className="p-2 px-4 align-middle">
                         <Select
                           value={newFilter.kpiName} 
                           onValueChange={(value) => handleKpiSelection(value)}
+                          onOpenChange={(open) => {
+                            if (!open) {
+                              setKpiFilterSearchTerm("")
+                            }
+                          }}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select KPI">
+                            <SelectValue>
                               {newFilter.kpiName ? newFilter.kpiDesc : "Select KPI"}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            <div className="p-2 sticky top-0 bg-popover z-10">
+                            <div className="p-2 sticky top-0 bg-popover z-10 border-b">
                               <Input 
                                 placeholder="Search KPIs..." 
                                 className="mb-2"
                                 value={kpiFilterSearchTerm}
                                 onChange={(e) => setKpiFilterSearchTerm(e.target.value)}
-                                onKeyDown={(e) => {
-                                  // Prevent select events from handling keyboard events
-                                  e.stopPropagation();
-                                }}
                                 onClick={(e) => {
-                                  // Prevent losing focus when clicking inside the input
-                                  e.stopPropagation();
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                }}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation()
                                 }}
                               />
                             </div>
+                            <div className="max-h-[200px] overflow-y-auto">
                             <SelectGroup>
-                              {parentKpis.filter(kpi => 
-                                kpi.kpi_desc.toLowerCase().includes(kpiFilterSearchTerm.toLowerCase()) ||
-                                kpi.kpi_name.toLowerCase().includes(kpiFilterSearchTerm.toLowerCase())
-                              ).map(kpi => (
-                                <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
+                                {filteredKpis.length > 0 ? (
+                                  filteredKpis.map(kpi => (
+                                    <SelectItem 
+                                      key={kpi.kpi_name} 
+                                      value={kpi.kpi_name}
+                                      className="cursor-pointer"
+                                    >
                                   {kpi.kpi_desc}
                               </SelectItem>
-                            ))}
+                                  ))
+                                ) : (
+                                  <SelectItem value="no-kpis" disabled>
+                                    {kpiFilterSearchTerm ? "No matching KPIs found" : "No KPIs with filters available"}
+                                  </SelectItem>
+                                )}
                             </SelectGroup>
+                            </div>
                           </SelectContent>
                         </Select>
                       </td>
@@ -2180,18 +2253,36 @@ export default function ConfigDashboard() {
                             {newFilter.kpiGroup}
                           </span>
                         )}
-                                  </td>
-                                  <td className="p-2 px-4 align-middle">
-                        <Input
+                      </td>
+                      <td className="p-2 px-4 align-middle">
+                        <Select
                           value={newFilter.filterName}
-                          onChange={(e) => setNewFilter(prev => ({...prev, filterName: e.target.value}))}
-                          placeholder="Enter filter name"
-                        />
+                          onValueChange={(value) => setNewFilter(prev => ({...prev, filterName: value}))}
+                          disabled={!newFilter.kpiName || availableFilters.length === 0}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue>
+                              {!newFilter.kpiName 
+                                ? "Select KPI first" 
+                                : availableFilters.length === 0 
+                                  ? "No filters available" 
+                                  : newFilter.filterName ? newFilter.filterName.toUpperCase() : "Select filter"}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableFilters.map((filterName) => (
+                              <SelectItem key={filterName} value={filterName}>
+                                {filterName.toUpperCase()}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td className="p-2 text-center align-middle">
                         <Select
                           value={newFilter.operator} 
                           onValueChange={(value: "EQ" | "NE" | "CP") => setNewFilter(prev => ({...prev, operator: value}))}
+                          disabled={!newFilter.filterName}
                         >
                           <SelectTrigger className="w-[80px]">
                             <SelectValue />
@@ -2202,19 +2293,20 @@ export default function ConfigDashboard() {
                             <SelectItem value="CP">CP</SelectItem>
                           </SelectContent>
                         </Select>
-                                  </td>
-                                  <td className="p-2 px-4 align-middle">
+                      </td>
+                      <td className="p-2 px-4 align-middle">
                         <Input
                           value={newFilter.value}
                           onChange={(e) => setNewFilter(prev => ({...prev, value: e.target.value}))}
                           placeholder="Enter value"
+                          disabled={!newFilter.filterName}
                         />
-                                  </td>
+                      </td>
                       <td className="p-2 text-center align-middle">
                         <div className="flex space-x-1">
                           <Button variant="ghost" size="icon" onClick={handleCancelEditing}>
-                          <X className="h-4 w-4" />
-                        </Button>
+                            <X className="h-4 w-4" />
+                          </Button>
                           <Button 
                             variant="default" 
                             onClick={handleSaveNewFilter} 
@@ -2224,27 +2316,27 @@ export default function ConfigDashboard() {
                             Save
                           </Button>
                         </div>
-                                  </td>
-                                </tr>
+                      </td>
+                    </tr>
                   )}
-                            </tbody>
-                          </table>
-                        </div>
-                </div>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <div className="flex items-center justify-center py-4">
             {!isEditing && (
-                <Button
+              <Button
                 onClick={() => setIsEditing(true)}
                 className="flex items-center"
-                disabled={isEditing}
-                >
+                disabled={isEditing || parentKpisWithFilters.length === 0}
+              >
                 <Plus className="h-4 w-4 mr-2" />
-                  Add Filter
-                </Button>
+                Add Filter
+              </Button>
             )}
           </div>
-          </div>
+        </div>
       </Card>
     )
   }
@@ -2286,19 +2378,7 @@ export default function ConfigDashboard() {
                 <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         ) : (
-          <Button
-            type="button"
-            onClick={() => {
-              // Complete the wizard
-              setCurrentStep(1)
-              setSelectedKpi(null)
-              toast.success("Configuration completed", {
-                description: "All settings have been saved successfully",
-              })
-            }}
-          >
-            Complete
-          </Button>
+          <div></div> // Empty div to maintain flex layout when in step 3
         )}
       </div>
     )
@@ -2306,6 +2386,22 @@ export default function ConfigDashboard() {
 
   // Add state for KPI dropdown search in Filter Settings
   const [kpiFilterSearchTerm, setKpiFilterSearchTerm] = useState("")
+
+  // Handle KPI search input change
+  const handleKpiSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    setKpiAlertSearchTerm(e.target.value)
+  }
+
+  // Handle KPI search input keydown
+  const handleKpiSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+  }
+
+  // Handle KPI search input click
+  const handleKpiSearchClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -2543,6 +2639,15 @@ const KpiSettingsSheet = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      if (!validateThresholds()) {
+        toast.error("Invalid thresholds", {
+          description: comparisonDirection === "gt" 
+            ? `For "greater than" (>), Green to Yellow (${configuration.thresholds.g2y}) must be higher than Yellow to Red (${configuration.thresholds.y2r})`
+            : `For "less than" (<), Green to Yellow (${configuration.thresholds.g2y}) must be lower than Yellow to Red (${configuration.thresholds.y2r})`
+        })
+        return
+      }
+
       setIsLoading(true)
 
       // Format the filters for the API
@@ -2653,11 +2758,11 @@ const KpiSettingsSheet = ({
     }
 
     if (comparisonDirection === "gt") {
-      // For greater than (>), yellow threshold should be less than red threshold
-      return g2y < y2r
-    } else {
-      // For less than (<), yellow threshold should be greater than red threshold
+      // For greater than (>), yellow threshold should be greater than red threshold
       return g2y > y2r
+    } else {
+      // For less than (<), yellow threshold should be less than red threshold
+      return g2y < y2r
     }
   }
 
