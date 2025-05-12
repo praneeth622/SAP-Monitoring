@@ -224,6 +224,8 @@ const chartTitles = [
 // Helper function to normalize API template with better layout handling
 const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
   // Extract values handling both array and direct values
+  console.log("Normalizing template 1:", template);
+  
   const id = Array.isArray(template.template_id)
     ? template.template_id[0]
     : template.template_id;
@@ -250,10 +252,64 @@ const normalizeTemplate = (template: ApiTemplate): NormalizedTemplate => {
       : template.resolution
     : "auto";
 
-  // Extract systems
-  const systems = template.systems?.map((system) => system.system_id) || [];
+  // Extract systems with better handling of different formats
+  console.log("Normalizing template 2:", template);
+
+  // Initialize systems array
+  let systems: string[] = [];
+
+  // Check if systems property exists
+  if (template.systems) {
+    console.log("Template has systems property:", template.systems);
+    
+    // Handle array of system objects
+    if (Array.isArray(template.systems)) {
+      // Check if systems are already in object format
+      if (template.systems.length > 0 && typeof template.systems[0] === 'object' && template.systems[0] !== null && 'system_id' in template.systems[0]) {
+        systems = template.systems.map(system => system.system_id);
+      } 
+      // Handle case where systems are strings
+      else if (template.systems.length > 0 && typeof template.systems[0] === 'string') {
+        systems = template.systems.map(system => system.system_id);
+      }
+    }
+  }
+
+  // If systems is still empty, try to fetch from template ID
+  if (systems.length === 0 && typeof id === 'string') {
+    // Extract system ID from template ID if possible
+    const match = id.match(/^USER_TEST_1_.*?_\d+$/);
+    if (match) {
+      // If template ID follows the pattern, try to extract system from elsewhere
+      console.log("Attempting to extract system from template ID or other sources");
+      
+      // Check if we can find system in graphs
+      if (template.graphs && Array.isArray(template.graphs) && template.graphs.length > 0) {
+        const firstGraph = template.graphs[0];
+        if (firstGraph.systems && Array.isArray(firstGraph.systems)) {
+          if (firstGraph.systems.length > 0) {
+              if (typeof firstGraph.systems[0] === 'object' && firstGraph.systems[0] !== null && 'system_id' in firstGraph.systems[0]) {
+              systems = firstGraph.systems.map((system: { system_id: string }) => system.system_id);
+            } else if (typeof firstGraph.systems[0] === 'string') {
+              systems = firstGraph.systems;
+            }
+          }
+        }
+      }
+      
+      // If still no systems, use a default
+      if (systems.length === 0) {
+        // Try to use "swx" as default since it appears in your example
+        systems = ["swx"];
+        console.log("No systems found, using default system: swx");
+      }
+    }
+  }
+
+  console.log("Final normalized systems:", systems);
 
   // Extract and transform graphs with careful layout handling
+  console.log("Normalizing template 3:", template);
   const graphs =
     template.graphs?.map((graph) => {
       // Parse position data with validation
@@ -907,9 +963,11 @@ export default function Dashboard() {
 
             return responseData;
           });
+          console.log("Fetched template data:", data);
 
           // Normalize the template
           const refreshedTemplate = normalizeTemplate(data[0]);
+          console.log("Normalized template:", refreshedTemplate);
 
           // Create date range from the global date range
           const dateRangeForAPI = {

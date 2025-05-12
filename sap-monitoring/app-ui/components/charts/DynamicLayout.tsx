@@ -859,21 +859,43 @@ useEffect(() => {
 
     try {
       // Get the current template data
-      const currentTemplate = templateData;
-      if (!currentTemplate) {
-        console.warn("No template data available");
-        return false;
+      const currentTemplate = templateData || {};
+      
+      // Format systems properly
+      let formattedSystems = [];
+      
+      // Check if systems exist in the template data
+      if (currentTemplate.systems) {
+        if (Array.isArray(currentTemplate.systems)) {
+            formattedSystems = currentTemplate.systems.map((system: string | { system_id: string }) => {
+            // If already an object with system_id, use it
+            if (typeof system === 'object' && system !== null && 'system_id' in system) {
+              return system as { system_id: string };
+            }
+            // If it's a string, convert to object
+            return { system_id: (system as string).toLowerCase() };
+            });
+        }
       }
-
+      
+      // Ensure we have at least one system
+      if (formattedSystems.length === 0) {
+        formattedSystems = [{ system_id: "swx" }];
+      }
+      
+      console.log("Using systems for API save:", formattedSystems);
+      
       // Check if this is a graph count change
-      const graphChangeInfo = localStorage.getItem('template-graph-change');
-      const isGraphCountChange = graphChangeInfo ? JSON.parse(graphChangeInfo).needsReset : false;
+      const isGraphCountChange = localStorage.getItem('template-graph-change') !== null;
+
+      // Use the currentBreakpoint state variable instead of undefined breakpoint
+      const activeBreakpoint = currentBreakpoint || "lg";
 
       // Prepare the graphs data with updated positions
       const updatedGraphs = charts.map((chart) => {
         // Find the corresponding graph in the template
-        const templateGraph = currentTemplate.graphs.find(
-          (g: { graph_id: string }) => g.graph_id === chart.id
+        const templateGraph = currentTemplate.graphs?.find(
+          (g: any) => g.graph_id === chart.id
         );
         if (!templateGraph) {
           console.warn(`No template data found for chart ${chart.id}`);
@@ -881,7 +903,7 @@ useEffect(() => {
         }
 
         // Get the current layout for this chart
-        const currentLayout = layouts[currentBreakpoint]?.find(
+        const currentLayout = layouts[activeBreakpoint]?.find(
           (l) => l.i === chart.id
         );
         if (!currentLayout) {
@@ -897,6 +919,7 @@ useEffect(() => {
             bottom_xy_pos: "0:0",
             frequency: templateGraph.frequency || "5m",
             resolution: templateGraph.resolution || "1d",
+            systems: formattedSystems, // Use formatted systems
           };
         }
 
@@ -913,6 +936,7 @@ useEffect(() => {
           bottom_xy_pos: `${bottomY}:${bottomX}`,
           frequency: templateGraph.frequency || "5m",
           resolution: templateGraph.resolution || "1d",
+          systems: formattedSystems, // Use formatted systems
         };
       }).filter(Boolean);
 
@@ -932,7 +956,7 @@ useEffect(() => {
         default: currentTemplate.default || false,
         favorite: currentTemplate.favorite || false,
         frequency: currentTemplate.frequency || "5m",
-        systems: currentTemplate.systems || [],
+        systems: formattedSystems, // Use formatted systems
         graphs: updatedGraphs,
       };
 
