@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ import {
   LayoutTemplate,
   Star,
   StarOff,
+  Check,
+  CheckCircle
 } from "lucide-react";
 import {
   Table,
@@ -35,8 +37,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { app_globals } from "@/config/config";
 
 // Interface definitions
+interface User {
+  user_id: string;
+  name: string;
+  mail_id: string;
+  role: string;
+}
+
 interface Template {
   user_id?: string; // May not be in the response
   template_id: string[] | string;
@@ -82,8 +93,51 @@ interface EmptyStateProps {
   onAdd: () => void;
 }
 
-// Add helper function to normalize template data
+// Helper function to safely fetch complete template data
+const fetchCompleteTemplateData = async (templateId: string, baseUrl: string): Promise<Template | null> => {
+  try {
+    // Fetch the detailed template data to ensure we have all systems and graphs
+    const detailResponse = await fetch(
+      `${baseUrl}/api/ut?templateId=${templateId}`
+    );
+    
+    if (!detailResponse.ok) {
+      console.error(`Failed to fetch detailed template data for template ${templateId}: ${detailResponse.statusText}`);
+      return null;
+    }
+    
+    const detailData = await detailResponse.json();
+    if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+      console.error(`No detailed data returned for template ${templateId}`);
+      return null;
+    }
+    
+    // Normalize and return the complete template
+    return normalizeTemplate(detailData[0]);
+  } catch (error) {
+    console.error(`Error fetching complete template data for ${templateId}:`, error);
+    return null;
+  }
+};
+
+// Update normalizeTemplate function to handle edge cases
 const normalizeTemplate = (template: Template): Template => {
+  // Make sure we have valid systems data
+  let systems = template.systems || [];
+  
+  // Handle case where systems might be an array of arrays
+  if (Array.isArray(systems) && systems.length > 0 && Array.isArray(systems[0])) {
+    systems = systems[0];
+  }
+  
+  // Make sure all systems have a valid system_id
+  // Use type assertion since we know the structure we're expecting
+  systems = (systems as any[]).filter(system => 
+    system && 
+    typeof system === 'object' && 
+    'system_id' in system
+  );
+  
   return {
     template_id: Array.isArray(template.template_id)
       ? template.template_id[0]
@@ -105,7 +159,7 @@ const normalizeTemplate = (template: Template): Template => {
         ? template.frequency[0]
         : template.frequency
       : "5m",
-    systems: template.systems || [],
+    systems: systems,
     graphs: template.graphs || [],
   };
 };
@@ -116,8 +170,32 @@ export default function Mainscreen() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>("");
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "https://shwsckbvbt.a.pinggy.link";
+
+  // Fetch user role on component mount
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch(`${baseUrl}/api/um`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+        const users: User[] = await response.json();
+        const currentUser = users.find(user => user.user_id === app_globals.default_user_id);
+        if (currentUser) {
+          setUserRole(currentUser.role);
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+        // Set a default role if fetch fails
+        setUserRole("user");
+      }
+    };
+
+    fetchUserRole();
+  }, [baseUrl]);
 
   useEffect(() => {
     fetchTemplates();
@@ -164,8 +242,19 @@ export default function Mainscreen() {
             return template; // Return the basic template if no details are returned
           }
 
-          // Normalize and return the detailed template data
-          return normalizeTemplate(detailData[0]);
+          // Make sure to preserve systems data
+          const detailedTemplate = detailData[0];
+          
+          // Log systems data for debugging
+          console.log(`Template ${templateId} systems:`, detailedTemplate.systems);
+          
+          // Explicitly ensure systems data is preserved
+          const normalizedTemplate = normalizeTemplate(detailedTemplate);
+          
+          // Double-check systems data after normalization
+          console.log(`Template ${templateId} normalized systems:`, normalizedTemplate.systems);
+          
+          return normalizedTemplate;
         } catch (error) {
           console.error(
             `Error fetching details for template ${templateId}:`,
@@ -201,6 +290,280 @@ export default function Mainscreen() {
 
   const handleToggleFavorite = async (template: Template) => {
     try {
+      setLoading(true);
+
+      // Get the normalized values for the API request
+      const templateId = Array.isArray(template.template_id)
+        ? template.template_id[0]
+        : template.template_id;
+      const templateName = Array.isArray(template.template_name)
+        ? template.template_name[0]
+        : template.template_name;
+      const templateDesc = Array.isArray(template.template_desc)
+        ? template.template_desc[0]
+        : template.template_desc;
+      const isDefault = Array.isArray(template.default)
+        ? template.default[0]
+        : template.default;
+      const isFavorite = Array.isArray(template.favorite)
+        ? template.favorite[0]
+        : template.favorite;
+      const frequency = template.frequency
+        ? Array.isArray(template.frequency)
+          ? template.frequency[0]
+          : template.frequency
+        : "5m";
+      
+      // Fetch the detailed template data to ensure we have all systems and graphs
+      const detailResponse = await fetch(
+        `${baseUrl}/api/ut?templateId=${templateId}`
+      );
+      
+      if (!detailResponse.ok) {
+        throw new Error("Failed to fetch detailed template data");
+      }
+      
+      const detailData = await detailResponse.json();
+      if (!detailData || !Array.isArray(detailData) || !detailData.length) {
+        throw new Error("No detailed data returned");
+      }
+      
+      // Use the complete data from the API
+      const completeTemplate = detailData[0];
+      
+      // Normalize systems data
+      let systems = completeTemplate.systems || [];
+      if (Array.isArray(systems) && systems.length > 0 && Array.isArray(systems[0])) {
+        systems = systems[0];
+      }
+      systems = systems.filter((system: any) => system && typeof system === 'object' && 'system_id' in system);
+
+      // Prepare the update payload with all necessary data
+      const updatedTemplate = {
+        user_id: "USER_TEST_1",
+        template_id: templateId,
+        template_name: templateName,
+        template_desc: templateDesc,
+        default: isDefault,
+        favorite: !isFavorite, // Toggle the favorite status
+        frequency: frequency,
+        systems: systems,
+        graphs: completeTemplate.graphs || [],
+      };
+
+      // Update the template via API
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedTemplate),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to update favorite status: ${response.statusText}`
+        );
+      }
+
+      // Update local state after successful API call
+      setTemplates((prevTemplates) =>
+        prevTemplates.map((t) => {
+          const tId = Array.isArray(t.template_id)
+            ? t.template_id[0]
+            : t.template_id;
+          if (tId === templateId) {
+            return { ...t, favorite: !isFavorite };
+          }
+          return t;
+        })
+      );
+
+      toast.success(
+        `Template ${!isFavorite ? "added to" : "removed from"} favorites`
+      );
+    } catch (error) {
+      console.error("Error updating favorite status:", error);
+      toast.error("Failed to update favorite status", {
+        description: "Please try again",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      // Show loading state while deleting
+      setLoading(true);
+
+      // Use the correct API endpoint for template deletion
+      const response = await fetch(`${baseUrl}/api/ut?templateId=${id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to delete template: ${errorText}`);
+      }
+
+      // Immediately update local state to remove the deleted template
+      setTemplates((prevTemplates) => 
+        prevTemplates.filter((template) => {
+          const templateId = Array.isArray(template.template_id) 
+            ? template.template_id[0] 
+            : template.template_id;
+          return templateId !== id;
+        })
+      );
+
+      // Clear the confirm delete state
+      setConfirmDelete(null);
+
+      toast.success("Template deleted successfully");
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      toast.error("Failed to delete template", {
+        description: error instanceof Error ? error.message : "Please try again",
+        duration: 5000
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGraphChange = useCallback(async (template: Template) => {
+    try {
+      const templateId = Array.isArray(template.template_id) 
+        ? template.template_id[0] 
+        : template.template_id;
+      
+      const graphCount = template.graphs?.length || 0;
+
+      // Save the graph change info to localStorage for dashboard sync
+      localStorage.setItem('template-graph-change', JSON.stringify({
+        templateId,
+        graphCount,
+        timestamp: new Date().toISOString(),
+        needsReset: true
+      }));
+
+      // Notify the server about the graph change
+      await fetch(`${baseUrl}/api/ut/notify-graph-change`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId,
+          graphCount,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (error) {
+      console.error('Error notifying graph change:', error);
+    }
+  }, [baseUrl]);
+
+  const onDeleteGraph = useCallback(async (template: Template, graphId: string) => {
+    try {
+      // Get the normalized template ID
+      const templateId = Array.isArray(template.template_id) 
+        ? template.template_id[0] 
+        : template.template_id;
+
+      // Filter out the deleted graph
+      const updatedTemplate = {
+        ...template,
+        graphs: template.graphs?.filter(g => g.graph_id !== graphId) || []
+      };
+
+      // Update the template on the server
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTemplate)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete graph');
+      }
+
+      // Update local state
+      setTemplates(prevTemplates => 
+        prevTemplates.map(t => {
+          const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
+          if (tId === templateId) {
+            return updatedTemplate;
+          }
+          return t;
+        })
+      );
+
+      // Notify about the graph change
+      await handleGraphChange(updatedTemplate);
+
+      toast.success('Graph deleted successfully');
+    } catch (error) {
+      console.error('Error deleting graph:', error);
+      toast.error('Failed to delete graph');
+    }
+  }, [baseUrl, handleGraphChange, setTemplates]);
+
+  const onAddGraph = useCallback(async (template: Template, newGraph: Graph) => {
+    try {
+      // Get the normalized template ID
+      const templateId = Array.isArray(template.template_id) 
+        ? template.template_id[0] 
+        : template.template_id;
+
+      // Add the new graph to the template
+      const updatedTemplate = {
+        ...template,
+        graphs: [...(template.graphs || []), newGraph]
+      };
+
+      // Update the template on the server
+      const response = await fetch(`${baseUrl}/api/ut`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTemplate)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add graph');
+      }
+
+      // Update local state
+      setTemplates(prevTemplates => 
+        prevTemplates.map(t => {
+          const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
+          if (tId === templateId) {
+            return updatedTemplate;
+          }
+          return t;
+        })
+      );
+
+      // Notify about the graph change
+      await handleGraphChange(updatedTemplate);
+
+      toast.success('Graph added successfully');
+    } catch (error) {
+      console.error('Error adding graph:', error);
+      toast.error('Failed to add graph');
+    }
+  }, [baseUrl, handleGraphChange, setTemplates]);
+
+  const handleSetDefaultTemplate = async (template: Template) => {
+    try {
       // Get the normalized values for the API request
       const templateId = Array.isArray(template.template_id)
         ? template.template_id[0]
@@ -223,17 +586,83 @@ export default function Mainscreen() {
           : template.frequency
         : "5m";
 
+      // If already default, no need to do anything
+      if (isDefault) {
+        toast.info("This template is already set as default");
+        return;
+      }
+
+      // First, update all other templates to not be default
+      const promises = templates.map(async (t) => {
+        const tId = Array.isArray(t.template_id) ? t.template_id[0] : t.template_id;
+        
+        // Skip the template we're setting as default
+        if (tId === templateId) return;
+        
+        // Only update templates that are currently set as default
+        const tIsDefault = Array.isArray(t.default) ? t.default[0] : t.default;
+        if (!tIsDefault) return;
+
+        // Fetch the complete detailed data of the template
+        const completeTemplate = await fetchCompleteTemplateData(tId, baseUrl);
+
+        if (!completeTemplate) {
+          throw new Error("Failed to fetch complete template data");
+        }
+
+        const updatePayload = {
+          user_id: "USER_TEST_1",
+          template_id: tId,
+          template_name: completeTemplate.template_name,
+          template_desc: completeTemplate.template_desc,
+          default: false,
+          favorite: completeTemplate.favorite,
+          frequency: completeTemplate.frequency,
+          systems: completeTemplate.systems,
+          graphs: completeTemplate.graphs
+        };
+
+        console.log(`Updating template ${tId} with ${updatePayload.graphs?.length || 0} graphs and ${updatePayload.systems?.length || 0} systems`);
+
+        const response = await fetch(`${baseUrl}/api/ut`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatePayload),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Failed to update template ${tId}:`, errorText);
+          throw new Error(`Failed to update template ${tId}: ${errorText}`);
+        }
+      });
+
+      // Wait for all updates to complete
+      await Promise.all(promises.filter(Boolean));
+
+      // Fetch the complete data for the template we're setting as default
+      const completeTemplate = await fetchCompleteTemplateData(templateId, baseUrl);
+
+      if (!completeTemplate) {
+        throw new Error("Failed to fetch complete template data");
+      }
+
+      // Then set the selected template as default with complete data
       const updatedTemplate = {
         user_id: "USER_TEST_1",
         template_id: templateId,
         template_name: templateName,
         template_desc: templateDesc,
-        default: isDefault,
-        favorite: !isFavorite,
+        default: true,
+        favorite: isFavorite,
         frequency: frequency,
-        systems: template.systems || [],
-        graphs: template.graphs || [],
+        systems: completeTemplate.systems,
+        graphs: completeTemplate.graphs,
       };
+      
+      console.log(`Setting template ${templateId} as default with ${updatedTemplate.graphs?.length || 0} graphs and ${updatedTemplate.systems?.length || 0} systems`);
 
       const response = await fetch(`${baseUrl}/api/ut`, {
         method: "POST",
@@ -244,7 +673,7 @@ export default function Mainscreen() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update template");
+        throw new Error("Failed to set template as default");
       }
 
       // Update local state after successful API call
@@ -253,61 +682,30 @@ export default function Mainscreen() {
           const tId = Array.isArray(t.template_id)
             ? t.template_id[0]
             : t.template_id;
+          
           if (tId === templateId) {
-            return { ...t, favorite: !isFavorite };
+            return { ...t, default: true };
+          } else {
+            return { ...t, default: false };
           }
-          return t;
         })
       );
 
-      toast.success(
-        `Template ${isFavorite ? "removed from" : "added to"} favorites`
-      );
+      toast.success(`"${templateName}" is now the default template`);
+      
+      // Refresh the templates list to show updated data
+      fetchTemplates();
     } catch (error) {
-      console.error("Error updating template:", error);
-      toast.error("Failed to update template", {
-        description: "Please try again or contact support",
+      console.error("Error setting default template:", error);
+      toast.error("Failed to set default template", {
+        description: error instanceof Error ? error.message : "Please try again or contact support",
+        duration: 5000,
+        dismissible: true
       });
-    }
-  };
-
-  const handleDeleteTemplate = async (id: string) => {
-    try {
-      // Find the template to delete
-      const templateToDelete = templates.find((t) => {
-        const tId = Array.isArray(t.template_id)
-          ? t.template_id[0]
-          : t.template_id;
-        return tId === id;
-      });
-
-      if (!templateToDelete) return;
-
-      // Send delete request to API
-      const response = await fetch(`${baseUrl}/api/ut/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete template");
-      }
-
-      // Update local state
-      setTemplates(
-        templates.filter((t) => {
-          const tId = Array.isArray(t.template_id)
-            ? t.template_id[0]
-            : t.template_id;
-          return tId !== id;
-        })
-      );
-      setConfirmDelete(null);
-
-      toast.success("Template deleted successfully");
-    } catch (error) {
-      console.error("Error deleting template:", error);
-      toast.error("Failed to delete template", {
-        description: "Please try again or contact support",
+      
+      // Try to refresh templates to avoid inconsistent UI state
+      fetchTemplates().catch(e => {
+        console.error("Failed to refresh templates after error:", e);
       });
     }
   };
@@ -425,15 +823,19 @@ export default function Mainscreen() {
                         <TableCell>{templateDesc}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {(template.systems || []).map((system) => (
-                              <Badge
-                                key={system.system_id}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {system.system_id.toUpperCase()}
-                              </Badge>
-                            ))}
+                            {Array.isArray(template.systems) && template.systems.length > 0 ? (
+                              template.systems.map((system) => (
+                                <Badge
+                                  key={system.system_id}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {system.system_id.toUpperCase()}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground">No systems</span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>{frequency}</TableCell>
@@ -473,10 +875,20 @@ export default function Mainscreen() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => handleSetDefaultTemplate(template)}
+                              title={isDefault ? "Default template" : "Set as default template"}
+                              disabled={isDefault}
+                            >
+                              <CheckCircle className={cn("h-4 w-4", isDefault && "text-green-500 fill-green-500")} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleEditTemplate(templateId)}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            {userRole.toLowerCase() === "super admin" && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -484,6 +896,7 @@ export default function Mainscreen() {
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import type { PluginAPI } from 'tailwindcss/types/config';
 
 export default {
   darkMode: ["class"],
@@ -66,7 +67,9 @@ export default {
   plugins: [
     require("tailwindcss-animate"),
     require('@tailwindcss/typography'),
-    function({ addUtilities }) {
+
+    function({ addUtilities }: { addUtilities: (utilities: Record<string, any>) => void }) {
+
       addUtilities({
         '.scrollbar-hide': {
           /* Firefox */

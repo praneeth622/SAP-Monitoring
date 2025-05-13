@@ -16,14 +16,20 @@ import {
   Lasso,
   Trash2,
   Download,
-  Image as ImageIcon, // Rename to avoid conflict with HTML Image element
+  Image as ImageIcon,
   File,
   FileSpreadsheet,
   FileJson,
   ChevronLeft,
   ChevronRight,
   BarChart3,
-  Edit, // Add this import
+  Edit,
+  Box,
+  X,
+  RotateCcw,
+  Clock,
+  Check,
+  Zap,
 } from "lucide-react";
 import ChartContainer from "./ChartContainer";
 import { DataPoint, ChartType } from "@/types";
@@ -40,6 +46,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
+import styles from "./TemplateChartStyles.module.css";
+import { fetchTemplateChartData } from "@/utils/data";
+import isEqual from "lodash/isEqual";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { addDays, subDays, startOfDay, endOfDay } from "date-fns";
 
 // Add onEditGraph to the props interface
 interface DraggableChartProps {
@@ -64,7 +75,39 @@ interface DraggableChartProps {
   onEditGraph?: (id: string) => void; // Add this new prop
   resolution?: string; // Add resolution as a prop
   isLoading?: boolean; // Add this line
+  isTemplatePage?: boolean; // Add this new prop for templates page detection
 }
+
+// Add resolution options
+const RESOLUTION_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "1m", label: "1 min" },
+  { value: "5m", label: "5 min" },
+  { value: "15m", label: "15 min" },
+  { value: "1h", label: "1 hour" },
+  { value: "1d", label: "1 day" },
+];
+
+// Add quick date options (same as dashboard header)
+const QUICK_DATE_OPTIONS = [
+  { label: "Today", getRange: () => ({ from: startOfDay(new Date()), to: endOfDay(new Date()) }) },
+  { label: "Yesterday", getRange: () => {
+    const y = subDays(new Date(), 1);
+    return { from: startOfDay(y), to: endOfDay(y) };
+  } },
+  { label: "Last 7 Days", getRange: () => ({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) }) },
+  { label: "Last 30 Days", getRange: () => ({ from: startOfDay(subDays(new Date(), 29)), to: endOfDay(new Date()) }) },
+  { label: "This Month", getRange: () => {
+    const now = new Date();
+    return { from: startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: endOfDay(new Date()) };
+  } },
+  { label: "Last Month", getRange: () => {
+    const now = new Date();
+    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayLastMonth = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+    return { from: startOfDay(firstDayLastMonth), to: lastDayLastMonth };
+  } },
+];
 
 // Then update the component parameters with default values
 export const DraggableChart: React.FC<DraggableChartProps> = ({
@@ -84,6 +127,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
   onEditGraph, // Add this new prop
   resolution = "auto",
   isLoading = false, // Add this with default
+  isTemplatePage = false, // Default to false
 }) => {
   const [chartType, setChartType] = useState<ChartType>(type);
   const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(() => {
@@ -107,18 +151,26 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     HTMLDivElement & {
       zoomIn: () => void;
       zoomOut: () => void;
+      resetZoom: () => void;
       boxSelect: () => void;
       lassoSelect: () => void;
       clearSelection: () => void;
       download: (format: "png" | "svg" | "pdf" | "csv" | "json") => void;
       dispatchAction?: (action: any) => void;
       isValid?: () => boolean;
+      toggleFullscreen: () => void;
     }
   >(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const transitionTimeoutRef = useRef<NodeJS.Timeout>();
   const prevThemeRef = useRef(theme);
+  const [localData, setLocalData] = useState<DataPoint[] | null>(null);
+  const [localLoading, setLocalLoading] = useState(false);
+  const prevLocalRangeRef = useRef<DateRange | undefined>();
+  const [showLocalDatePicker, setShowLocalDatePicker] = useState(false);
+  // Add local state for per-chart resolution
+  const [localResolution, setLocalResolution] = useState<string>(resolution);
 
   const {
     attributes,
@@ -154,7 +206,9 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
         to: globalDateRange.to ? new Date(globalDateRange.to) : undefined,
       });
     }
-  }, [globalDateRange, localDateRange, useGlobalDate]);
+    // Sync prop change
+    setLocalResolution(resolution);
+  }, [globalDateRange, localDateRange, useGlobalDate, resolution]);
 
   // Sync with parent's fullscreen state
   useEffect(() => {
@@ -333,6 +387,16 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     // Zooming doesn't change the selected tool
   }, []);
 
+  const handleResetZoom = useCallback(() => {
+    if (!chartRef.current || !chartRef.current.isValid?.()) return;
+    try {
+      chartRef.current.resetZoom();
+    } catch (error) {
+      console.error("Error resetting zoom:", error);
+    }
+    // Resetting zoom doesn't change the selected tool
+  }, []);
+
   const handleBoxSelect = useCallback(() => {
     if (!chartRef.current || !chartRef.current.isValid?.()) return;
     try {
@@ -383,6 +447,127 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
     [data, title]
   );
 
+  // Add state for dynamic font size
+  const [titleFontSize, setTitleFontSize] = useState(7);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // Add effect to calculate and update font size based on container width
+  useEffect(() => {
+    const updateFontSize = () => {
+      if (!titleRef.current || !containerRef.current) return;
+      
+      const containerWidth = containerRef.current.offsetWidth;
+      const titleWidth = titleRef.current.scrollWidth;
+      const containerHeight = containerRef.current.offsetHeight;
+      
+      // Increase base font size and scaling factors
+      let newFontSize = Math.min(
+        Math.max(11, containerWidth * 0.04), // Increased base size and width scaling
+        containerHeight * 0.06  // Increased height scaling
+      );
+      
+      // Adjust if title is too long, but maintain minimum readable size
+      if (titleWidth > containerWidth * 0.9) {
+        const scaleFactor = (containerWidth * 0.9) / titleWidth;
+        newFontSize = Math.max(11, newFontSize * scaleFactor); // Never go below 11px
+      }
+      
+      // Ensure font size stays within readable bounds
+      newFontSize = Math.max(11, Math.min(newFontSize, isFullscreen ? 14 : 13));
+      
+      setTitleFontSize(Math.floor(newFontSize));
+    };
+
+    // Create resize observer
+    const resizeObserver = new ResizeObserver(updateFontSize);
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Initial calculation
+    updateFontSize();
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isFullscreen]);
+
+  // Helper to check if local range is outside global range
+  function isOutsideGlobal(local: DateRange | undefined, global: DateRange | undefined) {
+    if (!local?.from || !local?.to || !global?.from || !global?.to) return false;
+    return local.from < global.from || local.to > global.to;
+  }
+
+  useEffect(() => {
+    if (!useGlobalDate && localDateRange && globalDateRange) {
+      if (isOutsideGlobal(localDateRange, globalDateRange)) {
+        if (isEqual(prevLocalRangeRef.current, localDateRange)) return;
+        prevLocalRangeRef.current = localDateRange;
+        // Only call fetchTemplateChartData if both from and to are defined
+        if (localDateRange.from && localDateRange.to) {
+        setLocalLoading(true);
+        const kpiList = Array.isArray(activeKPIs)
+          ? activeKPIs
+          : Array.from(localActiveKPIs);
+        fetchTemplateChartData(
+          kpiList[0] || title,
+          kpiList.slice(1),
+          "OS",
+          { from: localDateRange.from, to: localDateRange.to },
+          localResolution,
+          { graphId: id }
+        ).then((result) => {
+          setLocalData(result);
+          setLocalLoading(false);
+        }).catch(() => {
+          setLocalData([]);
+          setLocalLoading(false);
+        });
+        }
+      } else {
+        setLocalData(null);
+      }
+    } else {
+      setLocalData(null);
+    }
+  }, [localDateRange, useGlobalDate, globalDateRange, localResolution, id, title, activeKPIs, localActiveKPIs]);
+
+  // Add effect to fetch data when localResolution changes (and on mount)
+  useEffect(() => {
+    // Only fetch if not in template page (dashboard only)
+    if (!isTemplatePage) {
+      const kpiList = Array.isArray(activeKPIs)
+        ? activeKPIs
+        : Array.from(localActiveKPIs);
+      // Use global or local date range
+      const dateRange = useGlobalDate && globalDateRange
+        ? globalDateRange
+        : localDateRange;
+      if (!kpiList.length || !dateRange?.from || !dateRange?.to) return;
+      setLocalData(null); // Always reset data before fetching
+      setLocalLoading(true);
+      console.log(`[DraggableChart] Fetching data for resolution:`, localResolution);
+      fetchTemplateChartData(
+        kpiList[0] || title,
+        kpiList.slice(1),
+        "OS",
+        { from: dateRange.from, to: dateRange.to },
+        localResolution.trim(),
+        { graphId: id }
+      )
+        .then((result) => {
+          setLocalData(result);
+          setLocalLoading(false);
+        })
+        .catch(() => {
+          setLocalData([]);
+          setLocalLoading(false);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localResolution, id, title, activeKPIs, localActiveKPIs, globalDateRange, localDateRange, useGlobalDate, isTemplatePage]);
+
   return (
     <>
       {isFullscreen && (
@@ -397,22 +582,30 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
         className={cn(
           "relative group touch-none",
           isFullscreen &&
-            "fixed inset-0 z-50 flex items-center justify-center p-8"
+            "fixed inset-0 z-50 flex items-center justify-center p-8",
+          isTemplatePage && styles.templateChart,
+          !isTemplatePage && styles.resizePrevention,
+          styles.globalStyles
         )}
       >
         <div
           ref={containerRef}
           className={cn(
             "relative w-full h-full transition-all duration-300",
-            isFullscreen && "w-[90vw] h-[85vh] max-w-[1600px] max-h-[900px]"
+            isFullscreen && "w-[90vw] h-[85vh] max-w-[1600px] max-h-[900px]",
+            isTemplatePage && styles.templateChart
           )}
+          style={isTemplatePage ? { resize: 'none' } : undefined}
         >
           <Card
             ref={cardRef}
             className={cn(
               "w-full h-full overflow-hidden bg-card/90 backdrop-blur-sm border-border/40 shadow-xl hover:shadow-2xl transition-all duration-300",
-              isFullscreen && "rounded-xl flex flex-col shadow-2xl"
+              isFullscreen && "rounded-xl flex flex-col shadow-2xl",
+              isTemplatePage && styles.templateChart,
+              styles.chartControls
             )}
+            style={isTemplatePage ? { resize: 'none' } : undefined}
           >
             {isTransitioning && (
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -427,248 +620,332 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
               </div>
             )}
 
-            <div className="flex h-5 items-center justify-between border-b border-border bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-6 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
               <div className="flex items-center gap-2">
-                {!isFullscreen && (
+                {!isFullscreen && !isTemplatePage && (
                   <div
-                    className="p-0.5 rounded-lg cursor-grab hover:bg-accent/40 transition-all duration-300"
+                    className="p-0.5 rounded-lg cursor-grab hover:bg-accent/40 transition-all duration-300 chart-drag-handle"
                     {...attributes}
                     {...listeners}
                   >
                     <GripHorizontal className="w-2.5 h-2.5 text-muted-foreground" />
                   </div>
                 )}
-                {selectedTool && (
-                  <div className="flex items-center gap-1 text-primary">
-                    {selectedTool === "box" ? (
-                      <Square className="h-2.5 w-2.5" />
-                    ) : (
-                      <Lasso className="h-2.5 w-2.5" />
-                    )}
-                  </div>
-                )}
                 <h3
+                  ref={titleRef}
                   className={cn(
-                    "font-medium truncate",
-                    isFullscreen ? "text-sm" : "text-xs"
+                    "font-medium chart-title text-muted-foreground",
+                    "transition-all duration-200",
+                    isFullscreen ? "py-1.5" : "py-1"
                   )}
+                  style={{ 
+                    userSelect: 'none',
+                    fontSize: `${titleFontSize}px`,
+                    width: '100%',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    lineHeight: '1.3',
+                    padding: '0 8px',
+                    textAlign: 'center',
+                    fontWeight: 630,
+                    letterSpacing: '-0.01em',
+                    color: '#4B5563', // Darker color for better readability
+                    textShadow: '0 0 1px rgba(0,0,0,0.05)' // Subtle text shadow for better contrast
+                  }}
+                  title={title.replace(/\./g, '')} // Show full title on hover
                 >
-                  {title}
+                  {title.replace(/\./g, '')}
+                  {selectedTool && (
+                    <span className="ml-2 align-middle text-primary">
+                      {selectedTool === "box" ? (
+                        <Square className="inline h-2.5 w-2.5" />
+                      ) : (
+                        <Lasso className="inline h-2.5 w-2.5" />
+                      )}
+                    </span>
+                  )}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 {!hideControls ? (
                   <>
-                    <DropdownMenu
-                      open={!useGlobalDate}
-                      onOpenChange={(open) => !open && setUseGlobalDate(true)}
-                    >
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className={cn(
-                            isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5",
-                            !useGlobalDate && "bg-accent/20"
-                          )}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setUseGlobalDate(!useGlobalDate);
-                            if (!localDateRange && globalDateRange) {
-                              setLocalDateRange(globalDateRange);
+                    <div className="flex items-center gap-2">
+                      <Popover open={showLocalDatePicker} onOpenChange={setShowLocalDatePicker}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={cn(
+                              isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5",
+                              !useGlobalDate && "bg-accent/20"
+                            )}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (useGlobalDate) {
+                                setUseGlobalDate(false);
+                                setShowLocalDatePicker(true);
+                              } else {
+                                setShowLocalDatePicker((prev) => !prev);
+                              }
+                            }}
+                            title={
+                              useGlobalDate
+                                ? "Use Local Date Range"
+                                : "Use Global Date Range"
                             }
-                          }}
-                          title={
-                            useGlobalDate
-                              ? "Use Local Date Range"
-                              : "Use Global Date Range"
-                          }
-                        >
-                          <Calendar
+                          >
+                            <Calendar
+                              className={
+                                isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                              }
+                            />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" side="bottom" className="p-0 w-auto">
+                          <DateRangePicker
+                            date={localDateRange}
+                            onDateChange={(range) => {
+                              setLocalDateRange(range);
+                              if (range?.from && range?.to) {
+                                setUseGlobalDate(false); // Stay in local mode after apply
+                                setShowLocalDatePicker(false); // Close popover after apply
+                              }
+                            }}
+                            align="end"
+                            showTime={true}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      {/* Quick Dates Dropdown Icon */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                            title="Quick Dates"
+                          >
+                            <Zap className={isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="bottom" className="w-36">
+                          {QUICK_DATE_OPTIONS.map((option) => (
+                            <DropdownMenuItem
+                              key={option.label}
+                              onClick={() => {
+                                setLocalDateRange(option.getRange());
+                                setUseGlobalDate(false);
+                              }}
+                            >
+                              {option.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {/* Resolution Dropdown Icon */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                            title={`Resolution: ${RESOLUTION_OPTIONS.find(opt => opt.value === localResolution)?.label || localResolution}`}
+                          >
+                            <Clock className={isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="bottom" className="w-32">
+                          {RESOLUTION_OPTIONS.map((option) => (
+                            <DropdownMenuItem
+                              key={option.value}
+                              onClick={() => setLocalResolution(prev => prev !== option.value ? option.value : option.value + " ")}
+                              className={localResolution === option.value ? "font-semibold text-primary flex items-center" : "flex items-center"}
+                            >
+                              {option.label}
+                              {localResolution === option.value && (
+                                <Check className="ml-auto h-4 w-4 text-primary" />
+                              )}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                        onClick={() =>
+                          setChartType(chartType === "line" ? "bar" : "line")
+                        }
+                        title={`Switch to ${
+                          chartType === "line" ? "Bar" : "Line"
+                        } Chart`}
+                      >
+                        {chartType === "line" ? (
+                          <BarChart3
                             className={
                               isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
                             }
                           />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        side="bottom"
-                        className="p-0 w-auto"
-                      >
-                        <DateRangePicker
-                          date={localDateRange}
-                          onDateChange={setLocalDateRange}
+                        ) : (
+                          <LineChart
+                            className={
+                              isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                            }
+                          />
+                        )}
+                      </Button>
+
+                      {/* Tools Button with Dropdown */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                          >
+                            <Settings2
+                              className={
+                                isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                              }
+                            />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
                           align="end"
-                          showTime={true}
-                        />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
-                      onClick={() =>
-                        setChartType(chartType === "line" ? "bar" : "line")
-                      }
-                      title={`Switch to ${
-                        chartType === "line" ? "Bar" : "Line"
-                      } Chart`}
-                    >
-                      {chartType === "line" ? (
-                        <BarChart3
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      ) : (
-                        <LineChart
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      )}
-                    </Button>
-
-                    {/* Tools Button with Dropdown */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                          side="bottom"
+                          className="w-auto"
                         >
-                          <Settings2
-                            className={
-                              isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                            }
-                          />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        side="bottom"
-                        className="w-auto"
+                          <div className="flex items-center gap-1 p-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleZoomIn}
+                              title="Zoom In"
+                            >
+                              <ZoomIn className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleZoomOut}
+                              title="Zoom Out"
+                            >
+                              <ZoomOut className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleResetZoom}
+                              title="Reset Zoom"
+                            >
+                              <RotateCcw className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <div className="h-4 w-[1px] bg-border" />
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleBoxSelect}
+                              title="Box Selection"
+                            >
+                              <Square className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleLassoSelect}
+                              title="Lasso Selection"
+                            >
+                              <Lasso className="h-2.5 w-2.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4"
+                              onClick={handleClearSelection}
+                              title="Clear Selection"
+                            >
+                              <Trash2 className="h-2.5 w-2.5" />
+                            </Button>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      {/* Download Button */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                          >
+                            <Download
+                              className={
+                                isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                              }
+                            />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => handleDownload("png")}>
+                            <ImageIcon className="mr-2 h-3.5 w-3.5" />
+                            <span>Download PNG</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload("pdf")}>
+                            <File className="mr-2 h-3.5 w-3.5" />
+                            <span>Download PDF</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload("csv")}>
+                            <FileSpreadsheet className="mr-2 h-3.5 w-3.5" />
+                            <span>Download CSV</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDownload("json")}
+                          >
+                            <FileJson className="mr-2 h-3.5 w-3.5" />
+                            <span>Download JSON</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
+                        onClick={toggleFullscreen}
+                        title={
+                          isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
+                        }
+                        aria-label={
+                          isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
+                        }
                       >
-                        <div className="flex items-center gap-1 p-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleZoomIn}
-                            title="Zoom In"
-                          >
-                            <ZoomIn className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleZoomOut}
-                            title="Zoom Out"
-                          >
-                            <ZoomOut className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <div className="h-4 w-[1px] bg-border" />
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleBoxSelect}
-                            title="Box Selection"
-                          >
-                            <Square className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleLassoSelect}
-                            title="Lasso Selection"
-                          >
-                            <Lasso className="h-2.5 w-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-4 w-4"
-                            onClick={handleClearSelection}
-                            title="Clear Selection"
-                          >
-                            <Trash2 className="h-2.5 w-2.5" />
-                          </Button>
-                        </div>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Download Button */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
-                        >
-                          <Download
+                        {isFullscreen ? (
+                          <Minimize2
                             className={
                               isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
                             }
                           />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => handleDownload("png")}>
-                          <ImageIcon className="mr-2 h-3.5 w-3.5" />
-                          <span>Download PNG</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDownload("pdf")}>
-                          <File className="mr-2 h-3.5 w-3.5" />
-                          <span>Download PDF</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDownload("csv")}>
-                          <FileSpreadsheet className="mr-2 h-3.5 w-3.5" />
-                          <span>Download CSV</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDownload("json")}
-                        >
-                          <FileJson className="mr-2 h-3.5 w-3.5" />
-                          <span>Download JSON</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={isFullscreen ? "h-5 w-5" : "h-3.5 w-3.5"}
-                      onClick={toggleFullscreen}
-                      title={
-                        isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
-                      }
-                      aria-label={
-                        isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"
-                      }
-                    >
-                      {isFullscreen ? (
-                        <Minimize2
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      ) : (
-                        <Maximize2
-                          className={
-                            isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
-                          }
-                        />
-                      )}
-                    </Button>
+                        ) : (
+                          <Maximize2
+                            className={
+                              isFullscreen ? "h-3.5 w-3.5" : "h-2.5 w-2.5"
+                            }
+                          />
+                        )}
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   // Show only chart type toggle and delete button in template editor mode
@@ -747,25 +1024,30 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
             >
               <ChartContainer
                 ref={chartRef as any}
-                data={data}
+                data={localData !== null ? localData : data}
                 type={chartType}
-                title={title}
+                title=""
                 activeKPIs={localActiveKPIs}
                 kpiColors={kpiColors}
                 dateRange={effectiveDateRange}
                 theme={theme}
-                resolution={resolution}
+                resolution={localResolution}
                 className={cn(
                   "p-0",
                   isFullscreen ? "h-[calc(100vh-10rem)]" : "h-full"
                 )}
               />
+              {localLoading && (
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              )}
             </motion.div>
 
             {/* KPI Parameters */}
             {kpiColors && Object.keys(kpiColors).length > 0 && (
-              <div className="absolute bottom-0 left-0 right-0 bg-muted/10 border-t border-border/20">
-                <div className="flex items-center justify-evenly px-2 py-1">
+              <div className="absolute bottom-0 left-0 right-0 bg-muted/10 border-t border-border/20" style={{ userSelect: 'none' }}>
+                <div className="flex items-center justify-evenly px-2 py-1" style={{ userSelect: 'none' }}>
                   {Object.entries(kpiColors).map(([kpiId, kpi]) => {
                     if (!kpi || !kpi.color) return null;
                     
@@ -800,6 +1082,7 @@ export const DraggableChart: React.FC<DraggableChartProps> = ({
                             isFullscreen ? "max-w-32" : maxWidthClass,
                             "text-foreground/70"
                           )}
+                          style={{ userSelect: 'none' }}
                         >
                           {kpi.name}
                         </span>

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { CalendarIcon } from "lucide-react"
-import { addDays, format } from "date-fns"
+import { format } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import dayjs from "dayjs"
 
 interface DateRangePickerProps {
@@ -22,41 +21,6 @@ interface DateRangePickerProps {
   showTime?: boolean
   align?: "start" | "center" | "end"
 }
-
-const presets = [
-  {
-    label: 'Today',
-    value: 'today',
-    getDate: () => ({
-      from: new Date(),
-      to: new Date()
-    })
-  },
-  {
-    label: 'Yesterday',
-    value: 'yesterday',
-    getDate: () => ({
-      from: addDays(new Date(), -1),
-      to: addDays(new Date(), -1)
-    })
-  },
-  {
-    label: 'Last 7 days',
-    value: 'last7days',
-    getDate: () => ({
-      from: addDays(new Date(), -7),
-      to: new Date()
-    })
-  },
-  {
-    label: 'Last 30 days',
-    value: 'last30days',
-    getDate: () => ({
-      from: addDays(new Date(), -30),
-      to: new Date()
-    })
-  }
-]
 
 export function DateRangePicker({
   date,
@@ -100,34 +64,20 @@ export function DateRangePicker({
     setIsOpen(false)
   }, [tempDate, tempTime, onDateChange])
 
-  const handlePresetChange = React.useCallback((value: string) => {
-    const preset = presets.find(p => p.value === value)
-    if (preset) {
-      const newDate = preset.getDate()
-      setTempDate(newDate)
-      setTempTime({
-        from: '00:00',
-        to: '23:59'
-      })
-      onDateChange(newDate)
-      setIsOpen(false)
-    }
-  }, [onDateChange])
-
   const displayText = React.useMemo(() => {
-    if (!date?.from) return "Select dates"
-    
-    const fromText = dayjs(date.from).format("MMM DD")
-    const toText = date.to ? dayjs(date.to).format("MMM DD") : ""
-    
+    // Use tempDate/tempTime if popover is open, otherwise use date
+    const current = isOpen ? tempDate : date;
+    if (!current?.from) return "Select dates";
+    const fromText = dayjs(current.from).format("MMM DD");
+    const toText = current.to ? dayjs(current.to).format("MMM DD") : "";
     if (showTime) {
-      const fromTime = dayjs(date.from).format("HH:mm")
-      const toTime = date.to ? dayjs(date.to).format("HH:mm") : ""
-      return `${fromText} ${fromTime} - ${toText} ${toTime}`
+      // Use tempTime if popover is open, otherwise use the time from the date prop
+      const fromTime = isOpen ? tempTime.from : dayjs(current.from).format("HH:mm");
+      const toTime = isOpen && current.to ? tempTime.to : (current.to ? dayjs(current.to).format("HH:mm") : "");
+      return `${fromText} ${fromTime} - ${toText} ${toTime}`;
     }
-    
-    return date.to ? `${fromText} - ${toText}` : fromText
-  }, [date, showTime])
+    return current.to ? `${fromText} - ${toText}` : fromText;
+  }, [date, tempDate, tempTime, isOpen, showTime]);
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -156,24 +106,17 @@ export function DateRangePicker({
                 mode="range"
                 defaultMonth={tempDate?.from}
                 selected={tempDate}
-                onSelect={setTempDate}
+                onSelect={(range) => {
+                  setTempDate(range);
+                  if (range?.from && range?.to && !showTime) {
+                    onDateChange(range);
+                    setIsOpen(false);
+                  }
+                }}
                 numberOfMonths={1}
                 disabled={(date) => date > new Date() || date < new Date('2000-01-01')}
               />
               <div className="space-y-2 min-w-[120px]">
-                <Select onValueChange={handlePresetChange}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Quick select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {presets.map((preset) => (
-                      <SelectItem key={preset.value} value={preset.value} className="text-xs">
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
                 {showTime && tempDate?.from && tempDate?.to && (
                   <>
                     <div className="space-y-1">
