@@ -1,0 +1,1 @@
+web: cd sap-monitoring/app-ui && npm start
