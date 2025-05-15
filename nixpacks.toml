@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs", "nodejs.pkgs.npm"]
+
+[phases.install]
+cmds = ["cd sap-monitoring/app-ui && npm install"]
+
+[phases.build]
+cmds = ["cd sap-monitoring/app-ui && npm run build"]
+
+[start]
+cmd = "cd sap-monitoring/app-ui && npm start"

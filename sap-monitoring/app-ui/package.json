@@ -1,7 +1,10 @@
 {
-  "name": "app-ui",
-  "version": "0.1.0",
+  "name": "sap-monitoring",
+  "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "sap-monitoring/app-ui"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
