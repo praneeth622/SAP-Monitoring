@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Mainscreen from './_components/mainScreen'
 
 export default function TemplatesPage() {

@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { app_globals } from "@/config/config";
 
 interface Template {
   id: string;
@@ -42,45 +43,58 @@ interface MonitoringArea {
 }
 
 interface KpiGroup {
-  system_name: string;
   kpi_grp_name: string;
-  kpi_grp_desc: string;
-  mon_area: string;
-  instance: boolean;
-  is_active: boolean;
-  sapfrequency: string;
-  sysfrequency: string;
-  created_at: string;
-  created_by: string;
-  modified_at: string;
-  modified_by: string;
+  kpi_grp_desc?: string;
 }
 
 interface Kpi {
-  system_name: string;
   kpi_name: string;
-  kpi_desc: string;
-  kpi_group: string;
+  kpi_desc?: string;
   parent: boolean;
-  unit: string;
-  drilldown: boolean;
-  filter: boolean;
-  g2y: number | null;
-  y2r: number | null;
-  direction: string;
-  criticality: string;
+}
+
+interface UserAccess {
+  kpi_id: string;
+  kpi_group: string;
+  mon_area: string;
+  system_name: string;
 }
 
 interface AddGraphSheetProps {
   template: Template;
   onClose: () => void;
+  editingGraph?: {
+    id: string;
+    name: string;
+    type: "line" | "bar";
+    monitoringArea: string;
+    monitoringAreaDesc?: string;
+    kpiGroup: string;
+    kpiGroupDesc?: string;
+    primaryKpi: string;
+    primaryKpiDesc?: string;
+    correlationKpis: string[];
+    correlationKpisDesc?: string[];
+    layout: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    };
+    activeKPIs?: Set<string> | string[];
+    kpiColors?: Record<string, { color: string; name: string }>;
+  } | null;
   onAddGraph: (graphData: {
     name: string;
     type: "line" | "bar";
     monitoringArea: string;
+    monitoringAreaDesc?: string;
     kpiGroup: string;
+    kpiGroupDesc?: string;
     primaryKpi: string;
+    primaryKpiDesc?: string;
     correlationKpis: string[];
+    correlationKpisDesc?: string[];
     layout: {
       x: number;
       y: number;
@@ -114,10 +128,12 @@ interface CorrelationKpiField {
 const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   template,
   onClose,
+  editingGraph = null,
   onAddGraph,
 }) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
+  const [userAccess, setUserAccess] = useState<UserAccess[]>([]);
 
   // API data states
   const [monitoringAreas, setMonitoringAreas] = useState<MonitoringArea[]>([]);
@@ -134,16 +150,63 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
 
   const baseUrl = "https://shwsckbvbt.a.pinggy.link";
 
-  const [formData, setFormData] = useState<FormData>({
-    monitoringArea: "",
-    kpiGroup: "",
-    kpi: "",
-    correlationKpis: [] as CorrelationKpiField[],
-    graphType: "line",
-    timeInterval: template.timeRange,
-    resolution: template.resolution,
-    graphName: "",
+  const [formData, setFormData] = useState<FormData>(() => {
+    if (editingGraph) {
+      // Initialize correlation KPIs as objects with required structure
+      const correlationKpis = editingGraph.correlationKpis.map((kpi, index) => ({
+        id: `corr-${Date.now()}-${index}`,
+        monitoringArea: editingGraph.monitoringArea, // Assuming same monitoring area and KPI group
+        kpiGroup: editingGraph.kpiGroup,
+        kpi,
+      }));
+
+      return {
+        monitoringArea: editingGraph.monitoringArea,
+        kpiGroup: editingGraph.kpiGroup,
+        kpi: editingGraph.primaryKpi,
+        correlationKpis,
+        graphType: editingGraph.type,
+        timeInterval: template.timeRange,
+        resolution: template.resolution,
+        graphName: editingGraph.name,
+      };
+    }
+
+    // Default values for new graph
+    return {
+      monitoringArea: "",
+      kpiGroup: "",
+      kpi: "",
+      correlationKpis: [] as CorrelationKpiField[],
+      graphType: "line",
+      timeInterval: template.timeRange,
+      resolution: template.resolution,
+      graphName: "",
+    };
   });
+
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+
+  // Fetch user access data
+  useEffect(() => {
+    const fetchUserAccess = async () => {
+      try {
+        const response = await axios.get(
+          `${baseUrl}/api/ua?userId=${app_globals.default_user_id}`
+        );
+        setUserAccess(response.data || []);
+      } catch (error) {
+        console.error("Error fetching user access:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch user access data",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchUserAccess();
+  }, []);
 
   // Step 1: Fetch monitoring areas on component mount
   useEffect(() => {
@@ -151,7 +214,12 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       try {
         setIsLoading(true);
         const response = await axios.get(`${baseUrl}/api/ma`);
-        setMonitoringAreas(response.data || []);
+        // Filter monitoring areas based on user access
+        const uniqueMonitoringAreas = [...new Set(userAccess.map(ua => ua.mon_area))];
+        const filteredAreas = (response.data || []).filter((area: MonitoringArea) => 
+          uniqueMonitoringAreas.includes(area.mon_area_name)
+        );
+        setMonitoringAreas(filteredAreas);
       } catch (error) {
         toast({
           title: "Error",
@@ -164,9 +232,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     };
 
     fetchMonitoringAreas();
-  }, [baseUrl, toast]);
+  }, [userAccess]);
 
-  // Step 2: Fetch KPI groups when monitoring area changes
+  // Step 2: Fetch KPI groups when monitoring area is selected
   useEffect(() => {
     const fetchKpiGroups = async () => {
       if (!formData.monitoringArea) {
@@ -179,7 +247,16 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         const response = await axios.get(
           `${baseUrl}/api/kpigrp?mon_area=${formData.monitoringArea}`
         );
-        setKpiGroups(response.data || []);
+        // Filter KPI groups based on user access
+        const uniqueKpiGroups = [...new Set(
+          userAccess
+            .filter(ua => ua.mon_area === formData.monitoringArea)
+            .map(ua => ua.kpi_group)
+        )];
+        const filteredGroups = (response.data || []).filter((group: KpiGroup) => 
+          uniqueKpiGroups.includes(group.kpi_grp_name)
+        );
+        setKpiGroups(filteredGroups);
       } catch (error) {
         toast({
           title: "Error",
@@ -192,9 +269,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     };
 
     fetchKpiGroups();
-  }, [formData.monitoringArea, baseUrl, toast]);
+  }, [formData.monitoringArea, userAccess]);
 
-  // Step 3: Fetch KPIs when KPI group changes
+  // Step 3: Fetch KPIs when KPI group is selected
   useEffect(() => {
     const fetchKpis = async () => {
       if (!formData.kpiGroup) {
@@ -207,7 +284,21 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         const response = await axios.get(
           `${baseUrl}/api/kpi?kpi_grp=${formData.kpiGroup}`
         );
-        setKpis(response.data || []);
+        
+        // Get all KPIs the user has access to for this monitoring area and KPI group
+        const userAccessKpis = userAccess
+          .filter(ua => 
+            ua.mon_area === formData.monitoringArea && 
+            ua.kpi_group === formData.kpiGroup
+          )
+          .map(ua => ua.kpi_id);
+
+        // Only show KPIs that are in the user's access list
+        const filteredKpis = (response.data || []).filter((kpi: Kpi) => 
+          userAccessKpis.includes(kpi.kpi_name)
+        );
+
+        setKpis(filteredKpis);
       } catch (error) {
         toast({
           title: "Error",
@@ -220,7 +311,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     };
 
     fetchKpis();
-  }, [formData.kpiGroup, baseUrl, toast]);
+  }, [formData.kpiGroup, formData.monitoringArea, userAccess]);
 
   // Fetch data for correlation KPIs when needed
   const fetchCorrelationKpiGroups = async (monitoringArea: string) => {
@@ -230,9 +321,18 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       const response = await axios.get(
         `${baseUrl}/api/kpigrp?mon_area=${monitoringArea}`
       );
+      // Filter KPI groups based on user access
+      const uniqueKpiGroups = [...new Set(
+        userAccess
+          .filter(ua => ua.mon_area === monitoringArea)
+          .map(ua => ua.kpi_group)
+      )];
+      const filteredGroups = (response.data || []).filter((group: KpiGroup) => 
+        uniqueKpiGroups.includes(group.kpi_grp_name)
+      );
       setCorrelationKpiGroups((prev) => ({
         ...prev,
-        [monitoringArea]: response.data || [],
+        [monitoringArea]: filteredGroups,
       }));
     } catch (error) {
       toast({
@@ -250,9 +350,23 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
       const response = await axios.get(
         `${baseUrl}/api/kpi?kpi_grp=${kpiGroup}`
       );
+      
+      // Get all KPIs the user has access to for this monitoring area and KPI group
+      const userAccessKpis = userAccess
+        .filter(ua => 
+          ua.mon_area === formData.monitoringArea && 
+          ua.kpi_group === kpiGroup
+        )
+        .map(ua => ua.kpi_id);
+
+      // Only show KPIs that are in the user's access list
+      const filteredKpis = (response.data || []).filter((kpi: Kpi) =>
+          userAccessKpis.includes(kpi.kpi_name)
+        );
+
       setCorrelationKpis((prev) => ({
         ...prev,
-        [kpiGroup]: response.data || [],
+        [kpiGroup]: filteredKpis,
       }));
     } catch (error) {
       toast({
@@ -282,14 +396,55 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  // Update the isKpiSelected function to check for duplicates across all selections
+  const isKpiSelected = (kpiName: string, monitoringArea: string, kpiGroup: string) => {
+    // Check if this KPI is selected as primary KPI
+    if (formData.kpi === kpiName) {
+      return true;
+    }
+
+    // Check if this KPI is selected in any correlation KPI
+    return formData.correlationKpis.some(
+      (corrKpi) => corrKpi.kpi === kpiName
+    );
+  };
+
+  // Update the handleKPIChange function to prevent duplicates
   const handleKPIChange = (value: string) => {
+    if (isKpiSelected(value, formData.monitoringArea, formData.kpiGroup)) {
+      toast({
+        title: "Error",
+        description: "This KPI is already selected either as primary KPI or in correlation KPIs",
+        variant: "destructive",
+      });
+      return;
+    }
     setFormData((prev) => ({
       ...prev,
       kpi: value,
+      // Set the graph name to the KPI description when a KPI is selected
+      graphName: kpis.find(k => k.kpi_name === value)?.kpi_desc || prev.graphName
     }));
   };
 
+  const canAddMoreCorrelationKpis = () => {
+    if (formData.correlationKpis.length === 0) return true;
+
+    const lastCorrelationKpi = formData.correlationKpis[formData.correlationKpis.length - 1];
+    return lastCorrelationKpi.monitoringArea && lastCorrelationKpi.kpiGroup && lastCorrelationKpi.kpi;
+  };
+
   const addCorrelationKpi = () => {
+    // Check if already has maximum allowed correlation KPIs (4)
+    if (formData.correlationKpis.length >= 4) {
+      toast({
+        title: "Error",
+        description: "Maximum 4 correlation KPIs allowed",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       correlationKpis: [
@@ -304,6 +459,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
+  // Update the handleCorrelationKpiChange function to prevent duplicates
   const handleCorrelationKpiChange = async (
     index: number,
     field: keyof CorrelationKpiField,
@@ -330,6 +486,20 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
         };
         // Fetch KPIs for this KPI group
         fetchCorrelationKpis(value);
+      } else if (field === "kpi") {
+        // Check for duplicate KPIs across all selections
+        if (isKpiSelected(value, newCorrelationKpis[index].monitoringArea, newCorrelationKpis[index].kpiGroup)) {
+          toast({
+            title: "Error",
+            description: "This KPI is already selected either as primary KPI or in correlation KPIs",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        newCorrelationKpis[index] = {
+          ...newCorrelationKpis[index],
+          [field]: value,
+        };
       } else {
         newCorrelationKpis[index] = {
           ...newCorrelationKpis[index],
@@ -351,50 +521,132 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     }));
   };
 
-  const isKpiSelected = (kpiName: string) => {
-    if (formData.kpi === kpiName) return true;
-    return formData.correlationKpis.some((corrKpi) => corrKpi.kpi === kpiName);
-  };
-
+  // Update the handleSubmit function to include description fields
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Prevent multiple submissions
+    if (isLoading) {
+      return;
+    }
+    setIsLoading(true);
+
+    // Check if any required field is empty
     if (
-      !formData.graphName ||
+      !formData.graphName.trim() ||
       !formData.monitoringArea ||
       !formData.kpiGroup ||
       !formData.kpi
     ) {
+      setShowValidationErrors(true);
       toast({
         title: "Error",
         description: "Please fill in all required fields",
         variant: "destructive",
       });
+      setIsLoading(false);
       return;
     }
 
-    // Pass the graph data back to parent
-    onAddGraph({
+    // Check if any visible correlation KPI fields are empty
+    const hasEmptyCorrelationFields = formData.correlationKpis.some(
+      corrKpi => !corrKpi.monitoringArea || !corrKpi.kpiGroup || !corrKpi.kpi
+    );
+
+    if (hasEmptyCorrelationFields) {
+      setShowValidationErrors(true);
+      toast({
+        title: "Error",
+        description: "Please fill in all correlation KPI fields",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Get descriptions for monitoring area, KPI group, and primary KPI
+    const monitoringAreaObj = monitoringAreas.find(
+      area => area.mon_area_name === formData.monitoringArea
+    );
+    const kpiGroupObj = kpiGroups.find(
+      group => group.kpi_grp_name === formData.kpiGroup
+    );
+    const kpiObj = kpis.find(k => k.kpi_name === formData.kpi);
+
+    // Get descriptions for correlation KPIs
+    const correlationKpisDesc = formData.correlationKpis
+      .filter(kpi => kpi.kpi)
+      .map(kpi => {
+        // Find the KPI in the correlationKpis object
+        const kpiList = correlationKpis[kpi.kpiGroup] || [];
+        const kpiObj = kpiList.find(k => k.kpi_name === kpi.kpi);
+        return kpiObj?.kpi_desc || "";
+      });
+
+    // For edit mode, we only need to validate that the name is provided
+    if (editingGraph) {
+      // Create the graph data with updated fields and descriptions
+      const graphData = {
+        name: formData.graphName,
+        type: formData.graphType as "line" | "bar",
+        monitoringArea: formData.monitoringArea,
+        monitoringAreaDesc: monitoringAreaObj?.mon_area_desc || editingGraph.monitoringAreaDesc || "",
+        kpiGroup: formData.kpiGroup,
+        kpiGroupDesc: kpiGroupObj?.kpi_grp_desc || editingGraph.kpiGroupDesc || "",
+        primaryKpi: formData.kpi,
+        primaryKpiDesc: kpiObj?.kpi_desc || editingGraph.primaryKpiDesc || "",
+        correlationKpis: formData.correlationKpis
+          .filter((kpi) => kpi.kpi)
+          .map((kpi) => kpi.kpi),
+        correlationKpisDesc: correlationKpisDesc,
+        layout: editingGraph.layout || { x: 0, y: 0, w: 4, h: 4 },
+        id: editingGraph.id,
+        activeKPIs: editingGraph.activeKPIs || new Set(),
+        kpiColors: editingGraph.kpiColors || {},
+      };
+
+      // Pass the data back to the parent component
+      onAddGraph(graphData);
+
+      // Close the sheet
+      onClose();
+
+      // Show success message
+      toast({
+        title: "Graph Updated",
+        description: "Graph has been updated successfully",
+      });
+      return;
+    }
+
+    // Create the graph data to pass back to the parent component with descriptions
+    const graphData = {
       name: formData.graphName,
       type: formData.graphType as "line" | "bar",
       monitoringArea: formData.monitoringArea,
+      monitoringAreaDesc: monitoringAreaObj?.mon_area_desc || "",
       kpiGroup: formData.kpiGroup,
+      kpiGroupDesc: kpiGroupObj?.kpi_grp_desc || "",
       primaryKpi: formData.kpi,
+      primaryKpiDesc: kpiObj?.kpi_desc || "",
       correlationKpis: formData.correlationKpis
         .filter((kpi) => kpi.kpi)
         .map((kpi) => kpi.kpi),
-      layout: {
-        x: 0,
-        y: 0,
-        w: 4,
-        h: 4,
-      },
-      id: undefined,
-      activeKPIs: undefined,
-      kpiColors: undefined,
-    });
+      correlationKpisDesc: correlationKpisDesc,
+      layout: { x: 0, y: 0, w: 4, h: 4 },
+    };
 
+    // Pass the data back to the parent component
+    onAddGraph(graphData);
+
+    // Close the sheet
     onClose();
+
+    // Show success message
+    toast({
+      title: "Graph Added",
+      description: "Graph has been added successfully",
+    });
   };
 
   const handleChange = (
@@ -402,6 +654,8 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // Reset validation errors when user starts typing
+    setShowValidationErrors(false);
   };
 
   const formVariants = {
@@ -421,6 +675,100 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
     visible: { opacity: 1, y: 0 },
   };
 
+  // Update the submit button text based on whether editing or adding
+  const submitButtonText = editingGraph ? "Update Graph" : "Add Graph";
+
+  // Make sure this useEffect runs when editingGraph changes
+  useEffect(() => {
+    if (editingGraph) {
+      const loadEditData = async () => {
+        try {
+          setIsLoading(true);
+
+          // Step 1: Fetch monitoring areas first
+          const monAreasResponse = await axios.get(`${baseUrl}/api/ma`);
+          const monAreas = monAreasResponse.data || [];
+          setMonitoringAreas(monAreas);
+
+          // Step 2: Fetch KPI groups for the editing graph's monitoring area
+          if (editingGraph.monitoringArea) {
+            const kpiGroupsResponse = await axios.get(
+              `${baseUrl}/api/kpigrp?mon_area=${editingGraph.monitoringArea}`
+            );
+            const groups = kpiGroupsResponse.data || [];
+            setKpiGroups(groups);
+
+            // Step 3: Fetch KPIs for the editing graph's KPI group
+            if (editingGraph.kpiGroup) {
+              const kpiResponse = await axios.get(
+                `${baseUrl}/api/kpi?kpi_grp=${editingGraph.kpiGroup}`
+              );
+              const kpis = kpiResponse.data || [];
+              setKpis(kpis);
+            }
+          }
+
+          // Step 4: Load data for correlation KPIs
+          if (editingGraph.correlationKpis && editingGraph.correlationKpis.length > 0) {
+            // Initialize correlation KPIs with proper structure
+            const correlationKpis = editingGraph.correlationKpis.map((kpi, index) => ({
+              id: `corr-${Date.now()}-${index}`,
+              monitoringArea: editingGraph.monitoringArea,
+              kpiGroup: editingGraph.kpiGroup,
+              kpi: kpi
+            }));
+
+            // Update form data with correlation KPIs
+            setFormData(prev => ({
+              ...prev,
+              correlationKpis
+            }));
+
+            // Fetch KPI groups and KPIs for correlation KPIs
+            for (const corrKpi of correlationKpis) {
+              if (corrKpi.monitoringArea) {
+                await fetchCorrelationKpiGroups(corrKpi.monitoringArea);
+                if (corrKpi.kpiGroup) {
+                  await fetchCorrelationKpis(corrKpi.kpiGroup);
+                }
+              }
+            }
+          }
+
+          // Update form data with editing graph values and descriptions
+          setFormData(prev => ({
+            ...prev,
+            monitoringArea: editingGraph.monitoringArea,
+            kpiGroup: editingGraph.kpiGroup,
+            kpi: editingGraph.primaryKpi,
+            graphType: editingGraph.type,
+            graphName: editingGraph.name
+          }));
+
+          // Log the descriptions we're working with
+          console.log("Editing graph with descriptions:", {
+            monitoringAreaDesc: editingGraph.monitoringAreaDesc,
+            kpiGroupDesc: editingGraph.kpiGroupDesc,
+            primaryKpiDesc: editingGraph.primaryKpiDesc,
+            correlationKpisDesc: editingGraph.correlationKpisDesc
+          });
+
+        } catch (error) {
+          console.error("Error loading data for edit graph:", error);
+          toast({
+            title: "Error",
+            description: "Failed to load data for editing graph",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      loadEditData();
+    }
+  }, [editingGraph, baseUrl]);
+
   return (
     <TooltipProvider>
       <motion.form
@@ -438,11 +786,16 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             </label>
             <Select
               value={formData.monitoringArea}
-              onValueChange={handleMonitoringAreaChange}
+              onValueChange={(value) => {
+                handleMonitoringAreaChange(value);
+                setShowValidationErrors(false);
+              }}
               disabled={isLoading || monitoringAreas.length === 0}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select monitoring area" />
+              <SelectTrigger className={`${showValidationErrors && !formData.monitoringArea ? "border-destructive focus:ring-destructive" : ""}`}>
+                <SelectValue placeholder="Select monitoring area">
+                  {formData.monitoringArea || "Select Monitoring Area"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {monitoringAreas.map((area) => (
@@ -455,6 +808,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 ))}
               </SelectContent>
             </Select>
+            {showValidationErrors && !formData.monitoringArea && (
+              <p className="text-sm text-destructive mt-1">Please select a monitoring area</p>
+            )}
           </div>
 
           <div>
@@ -463,13 +819,18 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             </label>
             <Select
               value={formData.kpiGroup}
-              onValueChange={handleKPIGroupChange}
+              onValueChange={(value) => {
+                handleKPIGroupChange(value);
+                setShowValidationErrors(false);
+              }}
               disabled={
                 !formData.monitoringArea || isLoading || kpiGroups.length === 0
               }
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select KPI group" />
+              <SelectTrigger className={`${showValidationErrors && !formData.kpiGroup ? "border-destructive focus:ring-destructive" : ""}`}>
+                <SelectValue placeholder="Select KPI group">
+                  {formData.kpiGroup || "Select KPI Group"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {kpiGroups.map((group) => (
@@ -482,6 +843,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 ))}
               </SelectContent>
             </Select>
+            {showValidationErrors && !formData.kpiGroup && (
+              <p className="text-sm text-destructive mt-1">Please select a KPI group</p>
+            )}
           </div>
 
           <div>
@@ -490,29 +854,43 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
             </label>
             <Select
               value={formData.kpi}
-              onValueChange={handleKPIChange}
+              onValueChange={(value) => {
+                handleKPIChange(value);
+                setShowValidationErrors(false);
+              }}
               disabled={!formData.kpiGroup || isLoading || kpis.length === 0}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select KPI" />
+              <SelectTrigger className={`${showValidationErrors && !formData.kpi ? "border-destructive focus:ring-destructive" : ""}`}>
+                <SelectValue placeholder="Select KPI">
+                  {formData.kpi ? (() => {
+                    const selectedKpi = kpis.find(k => k.kpi_name === formData.kpi);
+                    return selectedKpi ? `${selectedKpi.kpi_name} - ${selectedKpi.kpi_desc}` : formData.kpi;
+                  })() : "Select KPI"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {kpis.map((kpi) => (
-                  <Tooltip key={kpi.kpi_name}>
-                    <TooltipTrigger asChild>
-                      <SelectItem value={kpi.kpi_name}>
-                        {kpi.kpi_name}
-                      </SelectItem>
-                    </TooltipTrigger>
-                    {kpi.kpi_desc && (
-                      <TooltipContent>
-                        <p>{kpi.kpi_desc}</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                ))}
+                {kpis
+                  // Filter out KPIs that are already selected in correlation KPIs
+                  .filter(kpi => !formData.correlationKpis.some(corrKpi => corrKpi.kpi === kpi.kpi_name))
+                  .map((kpi) => (
+                    <Tooltip key={kpi.kpi_desc}>
+                      <TooltipTrigger asChild>
+                        <SelectItem value={kpi.kpi_name}>
+                          {kpi.kpi_desc}
+                        </SelectItem>
+                      </TooltipTrigger>
+                      {kpi.kpi_desc && (
+                        <TooltipContent>
+                          <p>{kpi.kpi_desc}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  ))}
               </SelectContent>
             </Select>
+            {showValidationErrors && !formData.kpi && (
+              <p className="text-sm text-destructive mt-1">Please select a primary KPI</p>
+            )}
           </div>
 
           <div>
@@ -560,112 +938,167 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Time Interval
               </label>
-              <input
-                type="text"
-                name="timeInterval"
+              <Select
                 value={formData.timeInterval}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background/50 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-              />
+                onValueChange={(value) => {
+                  setFormData((prev) => ({ ...prev, timeInterval: value }));
+                  setShowValidationErrors(false);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select time interval" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["auto", "last 1 hour", "today", "yesterday", "last 7 days", "last 30 days", "last 90 days", "custom"].map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Individual graph time interval
+              </p>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Resolution
               </label>
-              <input
-                type="text"
-                name="resolution"
+              <Select
                 value={formData.resolution}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background/50 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-              />
+                onValueChange={(value) => {
+                  setFormData((prev) => ({ ...prev, resolution: value }));
+                  setShowValidationErrors(false);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select resolution" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    { value: "auto", label: "Auto" },
+                    { value: "1m", label: "1 Minute" },
+                    { value: "5m", label: "5 Minutes" },
+                    { value: "15m", label: "15 Minutes" },
+                    { value: "1h", label: "1 Hour" },
+                    { value: "1d", label: "1 Day" }
+                  ].map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Individual graph resolution
+              </p>
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-foreground/90">
-                Correlation KPIs
+                Correlation KPIs <span className="text-xs text-muted-foreground">(max 4)</span>
               </label>
             </div>
             <div className="space-y-3">
               {formData.correlationKpis.map((corrKpi, index) => (
                 <div key={corrKpi.id} className="flex items-center gap-2">
                   <div className="grid grid-cols-3 gap-2 flex-grow">
-                    <Select
-                      value={corrKpi.monitoringArea}
-                      onValueChange={(value) =>
-                        handleCorrelationKpiChange(
-                          index,
-                          "monitoringArea",
-                          value
-                        )
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select area" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {monitoringAreas.map((area) => (
-                          <SelectItem
-                            key={`${corrKpi.id}-area-${area.mon_area_name}`}
-                            value={area.mon_area_name}
-                          >
-                            {area.mon_area_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-1">
+                      <Select
+                        value={corrKpi.monitoringArea}
+                        onValueChange={(value) => {
+                          handleCorrelationKpiChange(index, "monitoringArea", value);
+                          // Reset KPI group and KPI when monitoring area changes
+                          handleCorrelationKpiChange(index, "kpiGroup", "");
+                          handleCorrelationKpiChange(index, "kpi", "");
+                          // Fetch KPI groups for this monitoring area
+                          fetchCorrelationKpiGroups(value);
+                        }}
+                      >
+                        <SelectTrigger className={`${showValidationErrors && !corrKpi.monitoringArea ? "border-destructive focus:ring-destructive" : ""}`}>
+                          <SelectValue placeholder="Monitoring Area">
+                            <span className="text-xs">{corrKpi.monitoringArea || "Monitoring Area"}</span>
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {monitoringAreas.map((ma) => (
+                            <SelectItem key={ma.mon_area_name} value={ma.mon_area_name}>
+                              <span className="text-xs">{ma.mon_area_name} - {ma.mon_area_desc}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {showValidationErrors && !corrKpi.monitoringArea && (
+                        <p className="text-xs text-destructive">Please select a monitoring area</p>
+                      )}
+                    </div>
 
-                    <Select
-                      value={corrKpi.kpiGroup}
-                      onValueChange={(value) =>
-                        handleCorrelationKpiChange(index, "kpiGroup", value)
-                      }
-                      disabled={!corrKpi.monitoringArea}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select group" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {corrKpi.monitoringArea &&
-                          correlationKpiGroups[corrKpi.monitoringArea]?.map(
-                            (group) => (
-                              <SelectItem
-                                key={`${corrKpi.id}-group-${group.kpi_grp_name}`}
-                                value={group.kpi_grp_name}
-                              >
-                                {group.kpi_grp_name}
-                              </SelectItem>
-                            )
-                          )}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-1">
+                      <Select
+                        value={corrKpi.kpiGroup}
+                        onValueChange={(value) => {
+                          handleCorrelationKpiChange(index, "kpiGroup", value);
+                          // Reset KPI when KPI group changes
+                          handleCorrelationKpiChange(index, "kpi", "");
+                          // Fetch KPIs for this KPI group
+                          fetchCorrelationKpis(value);
+                        }}
+                        disabled={!corrKpi.monitoringArea}
+                      >
+                        <SelectTrigger className={`${showValidationErrors && !corrKpi.kpiGroup ? "border-destructive focus:ring-destructive" : ""}`}>
+                          <SelectValue placeholder="KPI Group">
+                            {corrKpi.kpiGroup ? (correlationKpiGroups[corrKpi.monitoringArea]?.find(g => g.kpi_grp_name === corrKpi.kpiGroup)?.kpi_grp_desc || corrKpi.kpiGroup) : "KPI Group"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(correlationKpiGroups[corrKpi.monitoringArea] || []).map((group) => (
+                            <SelectItem key={group.kpi_grp_name} value={group.kpi_grp_name}>
+                              {group.kpi_grp_name} - {group.kpi_grp_desc}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {showValidationErrors && !corrKpi.kpiGroup && (
+                        <p className="text-xs text-destructive">Please select a KPI group</p>
+                      )}
+                    </div>
 
-                    <Select
-                      value={corrKpi.kpi}
-                      onValueChange={(value) =>
-                        handleCorrelationKpiChange(index, "kpi", value)
-                      }
-                      disabled={!corrKpi.kpiGroup}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select KPI" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {corrKpi.kpiGroup &&
-                          correlationKpis[corrKpi.kpiGroup]
-                            ?.filter((kpi) => !isKpiSelected(kpi.kpi_name))
+                    <div className="space-y-1">
+                      <Select
+                        value={corrKpi.kpi}
+                        onValueChange={(value) =>
+                          handleCorrelationKpiChange(index, "kpi", value)
+                        }
+                        disabled={!corrKpi.kpiGroup}
+                      >
+                        <SelectTrigger className={`${showValidationErrors && !corrKpi.kpi ? "border-destructive focus:ring-destructive" : ""}`}>
+                          <SelectValue placeholder="Select KPI">
+                            {corrKpi.kpi && correlationKpis[corrKpi.kpiGroup] 
+                              ? (() => {
+                                  const selectedKpi = correlationKpis[corrKpi.kpiGroup].find(k => k.kpi_name === corrKpi.kpi);
+                                  return selectedKpi ? `${selectedKpi.kpi_name} - ${selectedKpi.kpi_desc}` : corrKpi.kpi;
+                                })() 
+                              : "Select KPI"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(correlationKpis[corrKpi.kpiGroup] || [])
+                            // Filter out KPIs that are already selected anywhere
+                            .filter(kpi => !isKpiSelected(kpi.kpi_name, corrKpi.monitoringArea, corrKpi.kpiGroup))
                             .map((kpi) => (
-                              <SelectItem
-                                key={`${corrKpi.id}-kpi-${kpi.kpi_name}`}
-                                value={kpi.kpi_name}
-                              >
-                                {kpi.kpi_name}
+                              <SelectItem key={kpi.kpi_name} value={kpi.kpi_name}>
+                                {kpi.kpi_name} - {kpi.kpi_desc}
                               </SelectItem>
                             ))}
-                      </SelectContent>
-                    </Select>
+                        </SelectContent>
+                      </Select>
+                      {showValidationErrors && !corrKpi.kpi && (
+                        <p className="text-xs text-destructive">Please select a KPI</p>
+                      )}
+                    </div>
                   </div>
 
                   <Button
@@ -685,7 +1118,9 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
                 size="sm"
                 onClick={addCorrelationKpi}
                 disabled={
-                  formData.correlationKpis.length >= 5 || !formData.kpiGroup
+                  formData.correlationKpis.length >= 4 ||
+                  !formData.kpiGroup ||
+                  !canAddMoreCorrelationKpis()
                 }
               >
                 <Plus className="w-4 h-4 mr-1" />
@@ -704,8 +1139,18 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
               value={formData.graphName}
               onChange={handleChange}
               placeholder="Enter graph name"
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background/50 focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+              className={`w-full px-4 py-2 rounded-lg border transition-all duration-200 ${
+                showValidationErrors && !formData.graphName.trim()
+                  ? "border-destructive focus:ring-destructive"
+                  : "border-border focus:ring-ring"
+              } focus:ring-2 focus:border-transparent bg-background/50`}
             />
+            {showValidationErrors && !formData.graphName.trim() && (
+              <p className="text-sm text-destructive mt-1">Please enter a graph name</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Default name is the primary KPI description. You can edit it as needed.
+            </p>
           </div>
         </motion.div>
 
@@ -716,7 +1161,7 @@ const AddGraphSheet: React.FC<AddGraphSheetProps> = ({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit">Add Graph</Button>
+          <Button type="submit">{submitButtonText}</Button>
         </motion.div>
       </motion.form>
     </TooltipProvider>
